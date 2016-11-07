@@ -2141,6 +2141,20 @@ isl_memcpy_tiled_to_linear(uint32_t xt1, uint32_t xt2,
                            enum isl_tiling tiling,
                            isl_memcpy_type copy_type);
 
+/*
+ * @brief Save the isl_surf information out to files for debug purposes.
+ *
+ */
+void
+isl_surf_dump(const struct isl_device *dev,
+              const struct isl_surf *surf,
+              const void *map_addr,
+              unsigned int map_size,
+              const struct isl_surf *aux_surf,
+              const void *aux_map_addr,
+              unsigned int aux_map_size,
+              const char *basename);
+
 #ifdef __cplusplus
 }
 #endif

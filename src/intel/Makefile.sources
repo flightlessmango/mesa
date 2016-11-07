@@ -172,6 +172,7 @@ ISL_FILES = \
 	isl/isl.c \
 	isl/isl.h \
 	isl/isl_drm.c \
+	isl/isl_dump.c \
 	isl/isl_format.c \
 	isl/isl_genX_priv.h \
 	isl/isl_priv.h \

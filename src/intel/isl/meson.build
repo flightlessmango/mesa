@@ -112,6 +112,7 @@ libisl_files = files(
   'isl.c',
   'isl.h',
   'isl_drm.c',
+  'isl_dump.c',
   'isl_genX_priv.h',
   'isl_format.c',
   'isl_priv.h',

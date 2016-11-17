@@ -45,6 +45,8 @@
 
 #define FILE_DEBUG_FLAG DEBUG_BLORP
 
+static const bool isl_hiz_debug_dump = false;
+
 static void
 brw_blorp_map(const struct blorp_context *blorp,
               const struct blorp_address *blorp_addr,
@@ -1606,6 +1608,17 @@ brw_blorp_mcs_partial_resolve(struct brw_context *brw,
    blorp_batch_finish(&batch);
 }
 
+static void
+hiz_dump_blorp_surf(const struct blorp_context *blorp,
+                    const struct blorp_surf *surf,
+                    const char *opname, const char *when)
+{
+   char *basename = ralloc_asprintf(NULL, "%s-%s", opname, when);
+   assert(basename);
+   blorp_surf_dump(blorp, surf, basename);
+   ralloc_free(basename);
+}
+
 /**
  * Perform a HiZ or depth resolve operation.
  *
@@ -1627,13 +1640,13 @@ intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
 
    switch (op) {
    case ISL_AUX_OP_FULL_RESOLVE:
-      opname = "depth resolve";
+      opname = "depth-resolve";
       break;
    case ISL_AUX_OP_AMBIGUATE:
-      opname = "hiz ambiguate";
+      opname = "hiz-ambiguate";
       break;
    case ISL_AUX_OP_FAST_CLEAR:
-      opname = "depth clear";
+      opname = "depth-clear";
       break;
    case ISL_AUX_OP_PARTIAL_RESOLVE:
    case ISL_AUX_OP_NONE:
@@ -1694,6 +1707,9 @@ intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
    blorp_surf_for_miptree(brw, &surf, mt, ISL_AUX_USAGE_HIZ, true,
                           &level, start_layer, num_layers);
 
+   if (isl_hiz_debug_dump)
+      hiz_dump_blorp_surf(&brw->blorp, &surf, opname, "before");
+
    struct blorp_batch batch;
    blorp_batch_init(&brw->blorp, &batch, brw,
                     BLORP_BATCH_NO_UPDATE_CLEAR_COLOR);
@@ -1736,4 +1752,7 @@ intel_hiz_exec(struct brw_context *brw, struct intel_mipmap_tree *mt,
                                   PIPE_CONTROL_DEPTH_STALL);
 
    }
+
+   if (isl_hiz_debug_dump)
+      hiz_dump_blorp_surf(&brw->blorp, &surf, opname, "after");
 }

@@ -458,3 +458,35 @@ blorp_hiz_op(struct blorp_batch *batch, struct blorp_surf *surf,
       batch->blorp->exec(batch, &params);
    }
 }
+
+void
+blorp_surf_dump(const struct blorp_context *blorp,
+                const struct blorp_surf *surf,
+                const char *basename)
+{
+   void *map, *aux_map;
+   unsigned int size, aux_size;
+
+   blorp->map(blorp, &surf->addr, &map, &size);
+   if (map == NULL)
+      return;
+
+   if (surf->aux_addr.buffer) {
+      blorp->map(blorp, &surf->aux_addr, &aux_map, &aux_size);
+      if (aux_map == NULL) {
+         blorp->unmap(blorp, &surf->addr);
+         return;
+      }
+   } else {
+      aux_map = NULL;
+      aux_size = 0;
+   }
+
+   isl_surf_dump(blorp->isl_dev, surf->surf, map, size,
+                 aux_map ? surf->aux_surf : NULL, aux_map, aux_size,
+                 basename);
+
+   blorp->unmap(blorp, &surf->addr);
+   if (surf->aux_addr.buffer)
+      blorp->unmap(blorp, &surf->aux_addr);
+}

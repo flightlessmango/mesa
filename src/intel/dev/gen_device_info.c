@@ -66,6 +66,7 @@ gen_device_name_to_pci_device_id(const char *name)
       { "cml", 0x9b41 },
       { "cnl", 0x5a52 },
       { "icl", 0x8a52 },
+      { "tgl", 0xff20 },
    };
 
    for (unsigned i = 0; i < ARRAY_SIZE(name_map); i++) {
@@ -1008,6 +1009,62 @@ static const struct gen_device_info gen_device_info_ehl_2x4 = {
    .simulator_id = 28,
 };
 
+#define GEN12_HW_INFO                               \
+   .gen = 12,                                       \
+   .has_pln = false,                                \
+   .has_sample_with_hiz = false,                    \
+   .max_vs_threads = 364,                           \
+   .max_gs_threads = 224,                           \
+   .max_tcs_threads = 224,                          \
+   .max_tes_threads = 364,                          \
+   .max_cs_threads = 56,                            \
+   .urb = {                                         \
+      .size = 1024,                                 \
+      .min_entries = {                              \
+         [MESA_SHADER_VERTEX]    = 64,              \
+         [MESA_SHADER_TESS_EVAL] = 34,              \
+      },                                            \
+      .max_entries = {                              \
+         [MESA_SHADER_VERTEX]    = 2384,            \
+         [MESA_SHADER_TESS_CTRL] = 896,             \
+         [MESA_SHADER_TESS_EVAL] = 2064,            \
+         [MESA_SHADER_GEOMETRY]  = 832,             \
+      },                                            \
+   }
+
+#define GEN12_FEATURES(_gt, _slices, _subslices, _l3)   \
+   GEN8_FEATURES,                                       \
+   GEN12_HW_INFO,                                       \
+   .has_64bit_types = false,                            \
+   .has_integer_dword_mul = false,                      \
+   .gt = _gt, .num_slices = _slices, .l3_banks = _l3,   \
+   .num_subslices = _subslices
+
+static const struct gen_device_info gen_device_info_tgl_6x16 = {
+   GEN12_FEATURES(2, 1, subslices(6), 8),
+   .simulator_id = 22,
+};
+
+static const struct gen_device_info gen_device_info_tgl_5x16 = {
+   GEN12_FEATURES(2, 1, subslices(5), 8),
+   .simulator_id = 22,
+};
+
+static const struct gen_device_info gen_device_info_tgl_4x16 = {
+   GEN12_FEATURES(2, 1, subslices(4), 8),
+   .simulator_id = 22,
+};
+
+static const struct gen_device_info gen_device_info_tgl_3x16 = {
+   GEN12_FEATURES(2, 1, subslices(3), 8),
+   .simulator_id = 22,
+};
+
+static const struct gen_device_info gen_device_info_tgl_2x16 = {
+   GEN12_FEATURES(1, 1, subslices(2), 8),
+   .simulator_id = 22,
+};
+
 static void
 gen_device_info_set_eu_mask(struct gen_device_info *devinfo,
                             unsigned slice,
@@ -1255,11 +1312,13 @@ gen_get_device_info_from_pci_id(int pci_id,
                               * 4; /* effective subslices per slice */
       break;
    case 11:
+   case 12:
       devinfo->max_wm_threads = 128 /* threads-per-PSD */
                               * devinfo->num_slices
                               * 8; /* subslices per slice */
       break;
    default:
+      assert(devinfo->gen < 9);
       break;
    }
 

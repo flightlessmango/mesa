@@ -1574,13 +1574,15 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Surface Pitch" start="32" end="49" type="uint"/>
-    <field name="Surface Format" start="50" end="52" type="uint">
+    <field name="Depth Buffer Compression Enable" start="53" end="53" type="bool"/>
+    <field name="Hierarchical Depth Buffer Enable" start="54" end="54" type="bool"/>
+    <field name="Corner texel mode" start="55" end="55" type="bool"/>
+    <field name="Surface Format" start="56" end="58" type="uint">
       <value name="D32_FLOAT" value="1"/>
       <value name="D24_UNORM_X8_UINT" value="3"/>
       <value name="D16_UNORM" value="5"/>
     </field>
-    <field name="Hierarchical Depth Buffer Enable" start="54" end="54" type="bool"/>
-    <field name="Stencil Write Enable" start="59" end="59" type="bool"/>
+    <field name="Null Page Coherency Enable" start="59" end="59" type="bool"/>
     <field name="Depth Write Enable" start="60" end="60" type="bool"/>
     <field name="Surface Type" start="61" end="63" type="uint">
       <value name="SURFTYPE_2D" value="1"/>
@@ -1588,12 +1590,11 @@
       <value name="SURFTYPE_NULL" value="7"/>
     </field>
     <field name="Surface Base Address" start="64" end="127" type="address"/>
-    <field name="LOD" start="128" end="131" type="uint"/>
-    <field name="Width" start="132" end="145" type="uint"/>
-    <field name="Height" start="146" end="159" type="uint"/>
+    <field name="Width" start="129" end="142" type="uint"/>
+    <field name="Height" start="145" end="158" type="uint"/>
     <field name="MOCS" start="160" end="166" type="uint"/>
-    <field name="Minimum Array Element" start="170" end="180" type="uint"/>
-    <field name="Depth" start="181" end="191" type="uint"/>
+    <field name="Minimum Array Element" start="168" end="178" type="uint"/>
+    <field name="Depth" start="180" end="190" type="uint"/>
     <field name="Mip Tail Start LOD" start="218" end="221" type="uint"/>
     <field name="Tiled Resource Mode" start="222" end="223" type="uint">
       <value name="NONE" value="0"/>
@@ -1601,6 +1602,7 @@
       <value name="TILEYS" value="2"/>
     </field>
     <field name="Surface QPitch" start="224" end="238" type="uint"/>
+    <field name="LOD" start="240" end="243" type="uint"/>
     <field name="Render Target View Extent" start="245" end="255" type="uint"/>
   </instruction>
 
@@ -1880,12 +1882,13 @@
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Surface Pitch" start="32" end="48" type="uint"/>
-    <field name="Tiled Resource Mode" start="55" end="56" type="uint">
+    <field name="Tiled Resource Mode" start="54" end="55" type="uint">
       <value name="NONE" value="0"/>
       <value name="TILEYF" value="1"/>
       <value name="TILEYS" value="2"/>
     </field>
     <field name="MOCS" start="57" end="63" type="uint"/>
+    <field name="Hierarchical Depth Buffer MOCS" start="57" end="63" type="uint"/>
     <field name="Surface Base Address" start="64" end="127" type="address"/>
     <field name="Surface QPitch" start="128" end="142" type="uint"/>
   </instruction>
@@ -2969,6 +2972,7 @@
 
   <instruction name="3DSTATE_WM_DEPTH_STENCIL" bias="2" length="4" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
+    <field name="Depth State Modify Disable" start="12" end="12" type="bool"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="78"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
@@ -2995,12 +2999,17 @@
     <field name="Stencil Reference Value" start="104" end="111" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_WM_HZ_OP" bias="2" length="5" engine="render">
-    <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
+  <instruction name="3DSTATE_WM_HZ_OP" bias="2" length="6" engine="render">
+    <field name="DWord Length" start="0" end="7" type="uint" default="4"/>
+    <field name="Predicate Enable" start="8" end="8" type="bool"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="82"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Depth Buffer Partial Resolve Enable" start="41" end="41" type="bool"/>
+    <field name="Clear Value Write Enable" start="42" end="42" type="bool"/>
+    <field name="Force Slow Clear Enable" start="43" end="43" type="bool"/>
+    <field name="Clear Value Test Enable" start="44" end="44" type="bool"/>
     <field name="Number of Multisamples" start="45" end="47" type="uint"/>
     <field name="Stencil Clear Value" start="48" end="55" type="uint"/>
     <field name="Full Surface Depth and Stencil Clear" start="57" end="57" type="bool"/>
@@ -3015,6 +3024,7 @@
     <field name="Clear Rectangle X Max" start="96" end="111" type="uint"/>
     <field name="Clear Rectangle Y Max" start="112" end="127" type="uint"/>
     <field name="Sample Mask" start="128" end="143" type="uint"/>
+    <field name="Depth Clear Value" start="160" end="191" type="uint"/>
   </instruction>
 
   <instruction name="GPGPU_WALKER" bias="2" length="15" engine="render">

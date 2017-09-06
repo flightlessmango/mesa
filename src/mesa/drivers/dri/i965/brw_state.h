@@ -419,6 +419,12 @@ void gen11_init_atoms(struct brw_context *brw);
 /* TC=LLC/eLLC, LeCC=PTE, LRUM=3, L3CC=WB */
 #define ICL_MOCS_PTE (1 << 1)
 
+/* TODO: Verify Tigerake uses same MOCS settings as Icelake */
+/* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */
+#define TGL_MOCS_WB  (2 << 1)
+/* TC=LLC/eLLC, LeCC=PTE, LRUM=3, L3CC=WB */
+#define TGL_MOCS_PTE (1 << 1)
+
 uint32_t brw_get_bo_mocs(const struct gen_device_info *devinfo,
                          struct brw_bo *bo);
 

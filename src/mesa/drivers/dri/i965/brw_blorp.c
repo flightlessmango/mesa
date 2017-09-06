@@ -146,6 +146,9 @@ brw_blorp_init(struct brw_context *brw)
    case 11:
       brw->blorp.exec = gen11_blorp_exec;
       break;
+   case 12:
+      brw->blorp.exec = gen12_blorp_exec;
+      break;
 
    default:
       unreachable("Invalid gen");

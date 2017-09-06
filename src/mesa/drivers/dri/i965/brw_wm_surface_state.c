@@ -61,6 +61,7 @@ uint32_t wb_mocs[] = {
    [9] = SKL_MOCS_WB,
    [10] = CNL_MOCS_WB,
    [11] = ICL_MOCS_WB,
+   [12] = TGL_MOCS_WB,
 };
 
 uint32_t pte_mocs[] = {
@@ -69,6 +70,7 @@ uint32_t pte_mocs[] = {
    [9] = SKL_MOCS_PTE,
    [10] = CNL_MOCS_PTE,
    [11] = ICL_MOCS_PTE,
+   [12] = TGL_MOCS_PTE,
 };
 
 uint32_t

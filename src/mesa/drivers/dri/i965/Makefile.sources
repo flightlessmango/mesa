@@ -171,3 +171,9 @@ i965_gen11_FILES = \
 	genX_boilerplate.h \
 	genX_pipe_control.c \
 	genX_state_upload.c
+
+i965_gen12_FILES = \
+	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
+	genX_state_upload.c

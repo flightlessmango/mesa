@@ -372,6 +372,9 @@ brw_init_pipe_control(struct brw_context *brw,
                       const struct gen_device_info *devinfo)
 {
    switch (devinfo->gen) {
+   case 12:
+      brw->vtbl.emit_raw_pipe_control = gen12_emit_raw_pipe_control;
+      break;
    case 11:
       brw->vtbl.emit_raw_pipe_control = gen11_emit_raw_pipe_control;
       break;

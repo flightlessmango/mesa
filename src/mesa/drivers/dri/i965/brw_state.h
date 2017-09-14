@@ -125,6 +125,9 @@ void gen10_emit_raw_pipe_control(struct brw_context *brw, uint32_t flags,
 void gen11_emit_raw_pipe_control(struct brw_context *brw, uint32_t flags,
                                  struct brw_bo *bo, uint32_t offset,
                                  uint64_t imm);
+void gen12_emit_raw_pipe_control(struct brw_context *brw, uint32_t flags,
+                                 struct brw_bo *bo, uint32_t offset,
+                                 uint64_t imm);
 
 static inline bool
 brw_state_dirty(const struct brw_context *brw,
@@ -362,6 +365,7 @@ void gen8_init_atoms(struct brw_context *brw);
 void gen9_init_atoms(struct brw_context *brw);
 void gen10_init_atoms(struct brw_context *brw);
 void gen11_init_atoms(struct brw_context *brw);
+void gen12_init_atoms(struct brw_context *brw);
 
 /* Memory Object Control State:
  * Specifying zero for L3 means "uncached in L3", at least on Haswell

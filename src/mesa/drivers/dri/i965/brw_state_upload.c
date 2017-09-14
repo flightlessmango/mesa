@@ -307,7 +307,9 @@ void brw_init_state( struct brw_context *brw )
 
    brw_init_caches(brw);
 
-   if (devinfo->gen >= 11)
+   if (devinfo->gen >= 12)
+      gen12_init_atoms(brw);
+   else if (devinfo->gen >= 11)
       gen11_init_atoms(brw);
    else if (devinfo->gen >= 10)
       gen10_init_atoms(brw);

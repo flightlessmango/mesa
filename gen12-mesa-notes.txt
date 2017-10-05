@@ -1,0 +1,3 @@
+i965 does not support gen12. iris is required.
+
+If the meson -Dgallium-drivers switch is used, then it must include iris.

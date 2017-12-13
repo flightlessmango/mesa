@@ -1647,6 +1647,17 @@ enum brw_pixel_shader_coverage_mask_mode {
 # define GEN8_L3CNTLREG_EDBC_NO_HANG       (1 << 9)
 # define GEN11_L3CNTLREG_USE_FULL_WAYS     (1 << 10)
 
+#define GEN12_L3ALLOC                      0xB134
+# define GEN12_L3ALLOC_ALLOC_ERROR         (1 << 0)
+# define GEN12_L3ALLOC_URB_ALLOC_SHIFT     1
+# define GEN12_L3ALLOC_URB_ALLOC_MASK      INTEL_MASK(7, 1)
+# define GEN12_L3ALLOC_RO_ALLOC_SHIFT      11
+# define GEN12_L3ALLOC_RO_ALLOC_MASK       INTEL_MASK(17, 11)
+# define GEN12_L3ALLOC_DC_ALLOC_SHIFT      18
+# define GEN12_L3ALLOC_DC_ALLOC_MASK       INTEL_MASK(24, 18)
+# define GEN12_L3ALLOC_ALL_ALLOC_SHIFT     25
+# define GEN12_L3ALLOC_ALL_ALLOC_MASK      INTEL_MASK(31, 25)
+
 #define GEN10_CACHE_MODE_SS            0x0e420
 #define GEN10_FLOAT_BLEND_OPTIMIZATION_ENABLE (1 << 4)
 

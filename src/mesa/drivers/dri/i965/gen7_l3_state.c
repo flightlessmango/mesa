@@ -115,7 +115,22 @@ setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
                                PIPE_CONTROL_DATA_CACHE_FLUSH |
                                PIPE_CONTROL_CS_STALL);
 
-   if (devinfo->gen >= 8) {
+   if (devinfo->gen >= 12) {
+      assert(!cfg->n[GEN_L3P_IS] && !cfg->n[GEN_L3P_C] && !cfg->n[GEN_L3P_T]);
+
+      BEGIN_BATCH(3);
+      OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
+
+      /* Set up the L3 partitioning. */
+      OUT_BATCH(GEN12_L3ALLOC);
+      OUT_BATCH(SET_FIELD(cfg->n[GEN_L3P_URB], GEN12_L3ALLOC_URB_ALLOC) |
+                SET_FIELD(cfg->n[GEN_L3P_RO], GEN12_L3ALLOC_RO_ALLOC) |
+                SET_FIELD(cfg->n[GEN_L3P_DC], GEN12_L3ALLOC_DC_ALLOC) |
+                SET_FIELD(cfg->n[GEN_L3P_ALL], GEN12_L3ALLOC_ALL_ALLOC));
+
+      ADVANCE_BATCH();
+
+   } else if (devinfo->gen >= 8) {
       assert(!cfg->n[GEN_L3P_IS] && !cfg->n[GEN_L3P_C] && !cfg->n[GEN_L3P_T]);
 
       const unsigned imm_data = ((has_slm ? GEN8_L3CNTLREG_SLM_ENABLE : 0) |

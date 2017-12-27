@@ -129,6 +129,14 @@ const struct brw_tracked_state brw_vs_binding_table = {
 static void
 brw_upload_wm_binding_table(struct brw_context *brw)
 {
+   /**
+    * For gen10+, when a binding table entry that was used by a Render Target
+    * Message is changed to point to a different RENDER_SURFACE_STATE, a
+    * "Render Target Cache Flush" pipe control must be used.
+    */
+   if (brw->screen->devinfo.gen >= 10)
+      brw_emit_pipe_control_flush(brw, PIPE_CONTROL_RENDER_TARGET_FLUSH);
+
    /* BRW_NEW_FS_PROG_DATA */
    const struct brw_stage_prog_data *prog_data = brw->wm.base.prog_data;
    brw_upload_binding_table(brw,

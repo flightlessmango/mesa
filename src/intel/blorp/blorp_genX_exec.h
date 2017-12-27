@@ -1521,18 +1521,28 @@ blorp_alloc_surface_states(struct blorp_batch *batch,
    }
 
 #if GEN_GEN >= 7
-   if (has_indirect_clear_color) {
-      /* Updating a surface state object may require that the state cache be
-       * invalidated. From the SKL PRM, Shared Functions -> State -> State
-       * Caching:
-       *
-       *    Whenever the RENDER_SURFACE_STATE object in memory pointed to by
-       *    the Binding Table Pointer (BTP) and Binding Table Index (BTI) is
-       *    modified [...], the L1 state cache must be invalidated to ensure
-       *    the new surface or sampler state is fetched from system memory.
-       */
+   if (has_indirect_clear_color || GEN_GEN >= 10) {
       blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
-         pipe.StateCacheInvalidationEnable = true;
+         /* Updating a surface state object may require that the state cache
+          * be invalidated. From the SKL PRM, Shared Functions -> State ->
+          * State Caching:
+          *
+          *    Whenever the RENDER_SURFACE_STATE object in memory pointed to
+          *    by the Binding Table Pointer (BTP) and Binding Table Index
+          *    (BTI) is modified [...], the L1 state cache must be invalidated
+          *    to ensure the new surface or sampler state is fetched from
+          *    system memory.
+          */
+         pipe.StateCacheInvalidationEnable = has_indirect_clear_color;
+#if GEN_GEN >= 10
+         /**
+          * For gen10+, when a binding table entry that was used by a Render
+          * Target Message is changed to point to a different
+          * RENDER_SURFACE_STATE, a "Render Target Cache Flush" pipe control
+          * must be used.
+          */
+         pipe.RenderTargetCacheFlushEnable = true;
+#endif
       }
    }
 #endif

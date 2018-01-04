@@ -339,6 +339,10 @@ genX(emit_raw_pipe_control)(struct brw_context *brw, uint32_t flags,
       flags |= PIPE_CONTROL_CS_STALL;
    }
 
+   if (GEN_GEN >= 11 && (flags & PIPE_CONTROL_RENDER_TARGET_FLUSH)) {
+      flags |= PIPE_CONTROL_STALL_AT_SCOREBOARD;
+   }
+
    if (GEN_GEN == 9 && devinfo->gt == 4) {
       /* TODO: The big Skylake GT4 post sync op workaround */
    }

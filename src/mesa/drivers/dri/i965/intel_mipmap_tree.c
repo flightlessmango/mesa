@@ -3531,7 +3531,7 @@ intel_miptree_map(struct brw_context *brw,
       return;
    }
 
-   if (mt->format == MESA_FORMAT_S_UINT8) {
+   if (mt->surf.tiling == ISL_TILING_W) {
       intel_miptree_map_s8(brw, mt, map, level, slice);
    } else if (mt->stencil_mt && !(mode & BRW_MAP_DIRECT_BIT)) {
       intel_miptree_map_depthstencil(brw, mt, map, level, slice);

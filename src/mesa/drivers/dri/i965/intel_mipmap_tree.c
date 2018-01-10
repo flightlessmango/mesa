@@ -3543,7 +3543,8 @@ intel_miptree_map(struct brw_context *brw,
 #if defined(USE_SSE41)
    } else if (!(mode & GL_MAP_WRITE_BIT) &&
               !mt->compressed && cpu_has_sse4_1 &&
-              (mt->surf.row_pitch_B % 16 == 0)) {
+              (mt->surf.row_pitch_B % 16 == 0) &&
+              (mt->surf.tiling == ISL_TILING_LINEAR)) {
       intel_miptree_map_movntdqa(brw, mt, map, level, slice);
 #endif
    } else {

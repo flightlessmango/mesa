@@ -1255,34 +1255,13 @@ can_map_cpu(struct brw_bo *bo, unsigned flags)
 void *
 brw_bo_map(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
 {
-   if (bo->tiling_mode != I915_TILING_NONE && !(flags & MAP_RAW))
-      return brw_bo_map_gtt(brw, bo, flags);
-
    void *map;
+   assert(bo->tiling_mode == I915_TILING_NONE || (flags & MAP_RAW));
 
    if (can_map_cpu(bo, flags))
       map = brw_bo_map_cpu(brw, bo, flags);
    else
       map = brw_bo_map_wc(brw, bo, flags);
-
-   /* Allow the attempt to fail by falling back to the GTT where necessary.
-    *
-    * Not every buffer can be mmaped directly using the CPU (or WC), for
-    * example buffers that wrap stolen memory or are imported from other
-    * devices. For those, we have little choice but to use a GTT mmapping.
-    * However, if we use a slow GTT mmapping for reads where we expected fast
-    * access, that order of magnitude difference in throughput will be clearly
-    * expressed by angry users.
-    *
-    * We skip MAP_RAW because we want to avoid map_gtt's fence detiling.
-    */
-   if (!map && !(flags & MAP_RAW)) {
-      if (brw) {
-         perf_debug("Fallback GTT mapping for %s with access flags %x\n",
-                    bo->name, flags);
-      }
-      map = brw_bo_map_gtt(brw, bo, flags);
-   }
 
    return map;
 }

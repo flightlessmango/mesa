@@ -519,7 +519,8 @@ miptree_create(struct brw_context *brw,
       mt->stencil_mt =
          make_surface(brw, target, MESA_FORMAT_S_UINT8, first_level, last_level,
                       width0, height0, depth0, num_samples,
-                      ISL_TILING_W_BIT, mt_surf_usage(MESA_FORMAT_S_UINT8),
+                      ISL_TILING_ANY_MASK,
+                      mt_surf_usage(MESA_FORMAT_S_UINT8),
                       0, NULL);
       if (mt->stencil_mt == NULL) {
          intel_miptree_release(&mt);
@@ -607,7 +608,7 @@ intel_miptree_create_for_bo(struct brw_context *brw,
    } else if (format == MESA_FORMAT_S_UINT8) {
       mt = make_surface(brw, target, MESA_FORMAT_S_UINT8,
                         0, 0, width, height, depth, 1,
-                        ISL_TILING_W_BIT,
+                        ISL_TILING_ANY_MASK,
                         mt_surf_usage(MESA_FORMAT_S_UINT8),
                         pitch, bo);
       if (!mt)

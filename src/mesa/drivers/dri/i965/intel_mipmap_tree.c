@@ -3289,13 +3289,20 @@ intel_miptree_unmap_depthstencil(struct brw_context *brw,
          .mode = map->mode | GL_MAP_INVALIDATE_RANGE_BIT, .x = map->x,
          .y = map->y, .w = map->w, .h = map->h,
       };
+      struct intel_miptree_map s_mt_map = z_mt_map;
       if (z_mt->surf.tiling == ISL_TILING_LINEAR)
          intel_miptree_map_map(brw, z_mt, &z_mt_map, level, slice);
       else
          intel_miptree_map_tiled_memcpy(brw, z_mt, &z_mt_map, level, slice);
       uint32_t *z_map = z_mt_map.ptr;
       uint32_t *packed_map = map->ptr;
-      uint8_t *s_map = intel_miptree_map_raw(brw, s_mt, GL_MAP_WRITE_BIT);
+      uint8_t *s_map;
+      if (s_mt->surf.tiling != ISL_TILING_W) {
+         intel_miptree_map_tiled_memcpy(brw, s_mt, &s_mt_map, level, slice);
+         s_map = s_mt_map.ptr;
+      } else {
+         s_map = intel_miptree_map_raw(brw, s_mt, GL_MAP_READ_BIT);
+      }
       unsigned int s_image_x, s_image_y;
 
       intel_miptree_get_image_offset(s_mt, level, slice,
@@ -3303,10 +3310,14 @@ intel_miptree_unmap_depthstencil(struct brw_context *brw,
 
       for (uint32_t y = 0; y < map->h; y++) {
 	 for (uint32_t x = 0; x < map->w; x++) {
-	    ptrdiff_t s_offset = intel_offset_S8(s_mt->surf.row_pitch_B,
-						 x + s_image_x + map->x,
-						 y + s_image_y + map->y,
-						 brw->has_swizzling);
+	    int map_x = map->x + x, map_y = map->y + y;
+            ptrdiff_t s_offset =
+               s_mt->surf.tiling != ISL_TILING_W ?
+               y * s_mt_map.stride + x :
+               intel_offset_S8(s_mt->surf.row_pitch_B,
+                               map_x + s_image_x,
+                               map_y + s_image_y,
+                               brw->has_swizzling);
 	    ptrdiff_t z_offset = y * (z_mt_map.stride / 4) + x;
 
 	    if (map_z32f_x24s8) {
@@ -3320,11 +3331,15 @@ intel_miptree_unmap_depthstencil(struct brw_context *brw,
 	 }
       }
 
-      intel_miptree_unmap_raw(s_mt);
       if (z_mt->surf.tiling == ISL_TILING_LINEAR)
          intel_miptree_unmap_map(brw, z_mt, &z_mt_map, level, slice);
       else
          intel_miptree_unmap_tiled_memcpy(brw, z_mt, &z_mt_map, level, slice);
+
+      if (s_mt->surf.tiling != ISL_TILING_W)
+         intel_miptree_unmap_tiled_memcpy(brw, s_mt, &s_mt_map, level, slice);
+      else
+         intel_miptree_unmap_raw(s_mt);
 
       DBG("%s: %d,%d %dx%d from z mt %p (%s) %d,%d, s mt %p %d,%d = %p/%d\n",
 	  __func__,
@@ -3369,13 +3384,20 @@ intel_miptree_map_depthstencil(struct brw_context *brw,
          .mode = map->mode & ~GL_MAP_WRITE_BIT, .x = map->x, .y = map->y,
          .w = map->w, .h = map->h,
       };
+      struct intel_miptree_map s_mt_map = z_mt_map;
       if (z_mt->surf.tiling == ISL_TILING_LINEAR)
          intel_miptree_map_map(brw, z_mt, &z_mt_map, level, slice);
       else
          intel_miptree_map_tiled_memcpy(brw, z_mt, &z_mt_map, level, slice);
       uint32_t *z_map = z_mt_map.ptr;
       uint32_t *packed_map = map->ptr;
-      uint8_t *s_map = intel_miptree_map_raw(brw, s_mt, GL_MAP_READ_BIT);
+      uint8_t *s_map;
+      if (s_mt->surf.tiling != ISL_TILING_W) {
+         intel_miptree_map_tiled_memcpy(brw, s_mt, &s_mt_map, level, slice);
+         s_map = s_mt_map.ptr;
+      } else {
+         s_map = intel_miptree_map_raw(brw, s_mt, GL_MAP_READ_BIT);
+      }
       unsigned int s_image_x, s_image_y;
 
       intel_miptree_get_image_offset(s_mt, level, slice,
@@ -3384,10 +3406,13 @@ intel_miptree_map_depthstencil(struct brw_context *brw,
       for (uint32_t y = 0; y < map->h; y++) {
 	 for (uint32_t x = 0; x < map->w; x++) {
 	    int map_x = map->x + x, map_y = map->y + y;
-	    ptrdiff_t s_offset = intel_offset_S8(s_mt->surf.row_pitch_B,
-						 map_x + s_image_x,
-						 map_y + s_image_y,
-						 brw->has_swizzling);
+            ptrdiff_t s_offset =
+               s_mt->surf.tiling != ISL_TILING_W ?
+               y * s_mt_map.stride + x :
+               intel_offset_S8(s_mt->surf.row_pitch_B,
+                               map_x + s_image_x,
+                               map_y + s_image_y,
+                               brw->has_swizzling);
 	    ptrdiff_t z_offset = y * (z_mt_map.stride / 4) + x;
 	    uint8_t s = s_map[s_offset];
 	    uint32_t z = z_map[z_offset];
@@ -3401,11 +3426,15 @@ intel_miptree_map_depthstencil(struct brw_context *brw,
 	 }
       }
 
-      intel_miptree_unmap_raw(s_mt);
       if (z_mt->surf.tiling == ISL_TILING_LINEAR)
          intel_miptree_unmap_map(brw, z_mt, &z_mt_map, level, slice);
       else
          intel_miptree_unmap_tiled_memcpy(brw, z_mt, &z_mt_map, level, slice);
+
+      if (s_mt->surf.tiling != ISL_TILING_W)
+         intel_miptree_unmap_tiled_memcpy(brw, s_mt, &s_mt_map, level, slice);
+      else
+         intel_miptree_unmap_raw(s_mt);
 
       DBG("%s: %d,%d %dx%d from z mt %p %d,%d, s mt %p %d,%d = %p/%d\n",
 	  __func__,

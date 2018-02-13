@@ -595,6 +595,9 @@ anv_gem_syncobj_wait(struct anv_device *device,
       .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT,
    };
 
+   if (unlikely(device->no_hw))
+      return 0;
+
    if (wait_all)
       args.flags |= DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL;
 

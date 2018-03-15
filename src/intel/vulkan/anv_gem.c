@@ -176,6 +176,12 @@ int
 anv_gem_execbuffer(struct anv_device *device,
                    struct drm_i915_gem_execbuffer2 *execbuf)
 {
+   struct drm_i915_gem_exec_object2 *i = execbuf->buffers_ptr, *end = i + execbuf->buffer_count;
+
+   for (; i < end; i++)
+      if (!(i->flags & EXEC_OBJECT_PINNED))
+         abort();
+
    if (execbuf->flags & I915_EXEC_FENCE_OUT)
       return gen_ioctl(device->fd, DRM_IOCTL_I915_GEM_EXECBUFFER2_WR, execbuf);
    else

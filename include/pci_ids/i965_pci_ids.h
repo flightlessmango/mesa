@@ -259,4 +259,5 @@ CHIPSET(0x9A60, tgl_1x2x16, "Intel(R) HD Graphics (Tigerlake 1x2x16 GT1)")
 CHIPSET(0x9A68, tgl_1x2x16, "Intel(R) HD Graphics (Tigerlake 1x2x16 GT1)")
 CHIPSET(0x9A70, tgl_1x2x16, "Intel(R) HD Graphics (Tigerlake 1x2x16 GT1)")
 CHIPSET(0x9A78, tgl_1x2x16, "Intel(R) HD Graphics (Tigerlake 1x2x16 GT1)")
+CHIPSET(0xFF20, tgl_1x6x16, "Intel(R) HD Graphics (Tigerlake GT2 Simulation)")
 #endif

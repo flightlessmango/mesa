@@ -29,6 +29,7 @@
 #include "vk_util.h"
 #include "util/fast_idiv_by_const.h"
 
+#include "common/gen_aux_map.h"
 #include "common/gen_l3_config.h"
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
@@ -2661,6 +2662,24 @@ cmd_buffer_flush_push_constants(struct anv_cmd_buffer *cmd_buffer,
 }
 
 void
+genX(setup_aux_map)(struct anv_cmd_buffer *cmd_buffer)
+{
+#if GEN_GEN >= 12
+   assert(cmd_buffer->device->aux_map_ctx);
+   uint64_t base_addr = gen_aux_map_get_base(cmd_buffer->device->aux_map_ctx);
+   assert(base_addr != 0 && align_u64(base_addr, 32 * 1024) == base_addr);
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
+      lri.RegisterOffset = GENX(GFX_AUX_TABLE_BASE_ADDR_num);
+      lri.DataDWord = base_addr & 0xffffffff;
+   }
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
+      lri.RegisterOffset = GENX(GFX_AUX_TABLE_BASE_ADDR_num) + 4;
+      lri.DataDWord = base_addr >> 32;
+   }
+#endif
+}
+
+void
 genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_pipeline *pipeline = cmd_buffer->state.gfx.base.pipeline;
@@ -2677,6 +2696,8 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
    genX(cmd_buffer_emit_hashing_mode)(cmd_buffer, UINT_MAX, UINT_MAX, 1);
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
+
+   genX(setup_aux_map)(cmd_buffer);
 
    if (vb_emit) {
       const uint32_t num_buffers = __builtin_popcount(vb_emit);

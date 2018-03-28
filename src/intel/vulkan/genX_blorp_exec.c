@@ -255,6 +255,8 @@ genX(blorp_exec)(struct blorp_batch *batch,
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
+   genX(setup_aux_map)(cmd_buffer);
+
    genX(cmd_buffer_emit_gen7_depth_flush)(cmd_buffer);
 
    /* BLORP doesn't do anything fancy with depth such as discards, so we want

@@ -73,6 +73,7 @@ struct anv_buffer_view;
 struct anv_image_view;
 struct anv_instance;
 
+struct gen_aux_map_context;
 struct gen_l3_config;
 
 #include <vulkan/vulkan.h>
@@ -1163,6 +1164,8 @@ struct anv_device {
      * the cmd_buffer's list.
      */
     struct anv_cmd_buffer                      *cmd_buffer_being_decoded;
+
+    struct gen_aux_map_context                  *aux_map_ctx;
 };
 
 static inline struct anv_state_pool *

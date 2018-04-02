@@ -2504,6 +2504,15 @@ cmd_buffer_emit_descriptor_pointers(struct anv_cmd_buffer *cmd_buffer,
          btp._3DCommandSubOpcode = binding_table_opcodes[s];
          btp.PointertoVSBindingTable = cmd_buffer->state.binding_tables[s].offset;
       }
+
+#if GEN_GEN >= 11
+      if (s == MESA_SHADER_FRAGMENT) {
+         anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+            pc.RenderTargetCacheFlushEnable  = true;
+            pc.StallAtPixelScoreboard = true;
+         }
+      }
+#endif
    }
 }
 

@@ -22,6 +22,7 @@
  */
 
 #include "anv_private.h"
+#include "common/gen_aux_map.h"
 
 static bool
 lookup_blorp_shader(struct blorp_batch *batch,
@@ -191,6 +192,15 @@ anv_to_blorp_address(struct anv_address addr)
 {
    return (struct blorp_address) {
       .buffer = addr.bo,
+      .offset = addr.offset,
+   };
+}
+
+static struct anv_address
+blorp_address_to_anv(struct blorp_address addr)
+{
+   return (struct anv_address) {
+      .bo = addr.buffer,
       .offset = addr.offset,
    };
 }
@@ -491,6 +501,16 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
             get_blorp_surf_for_anv_shadow_image(cmd_buffer->device,
                                                 anv_image, aspect,
                                                 &dst_shadow_surf);
+      }
+
+      if (cmd_buffer->device->info.gen >= 12 &&
+          image.surf.aux_usage != ISL_AUX_USAGE_NONE) {
+         uint64_t paddr =
+            anv_address_physical(blorp_address_to_anv(image.surf.addr));
+         uint64_t aux_paddr =
+            anv_address_physical(blorp_address_to_anv(image.surf.aux_addr));
+         gen_aux_map_add_image(cmd_buffer->device->aux_map_ctx, image.surf.surf,
+                               paddr, aux_paddr);
       }
 
       for (unsigned z = 0; z < extent.depth; z++) {

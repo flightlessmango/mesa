@@ -34,6 +34,8 @@
 #include "vk_util.h"
 #include "util/u_math.h"
 
+#include "common/gen_aux_map.h"
+
 #include "vk_format_info.h"
 
 static isl_surf_usage_flags_t
@@ -1455,6 +1457,12 @@ anv_image_fill_surface_state(struct anv_device *device,
                                    device->isl_dev.ss.clear_color_state_offset;
          assert((clear_address.offset & 0x3f) == 0);
          state_inout->clear_address.offset |= *clear_addr_dw & 0x3f;
+      }
+
+      if (device->info.gen >= 12 && aux_usage != ISL_AUX_USAGE_NONE) {
+         gen_aux_map_add_image(device->aux_map_ctx, isl_surf,
+                               anv_address_physical(state_inout->address),
+                               anv_address_physical(aux_address));
       }
    }
 

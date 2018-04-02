@@ -1564,6 +1564,13 @@ blorp_emit_surface_states(struct blorp_batch *batch,
       bt.PointertoPSBindingTable = bind_offset;
    }
 #endif
+
+#if GEN_GEN >= 11
+   blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
+      pipe.RenderTargetCacheFlushEnable  = true;
+      pipe.StallAtPixelScoreboard = true;
+   }
+#endif
 }
 
 static void

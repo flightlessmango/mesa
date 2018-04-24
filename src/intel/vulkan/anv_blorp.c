@@ -24,6 +24,40 @@
 #include "anv_private.h"
 #include "common/gen_aux_map.h"
 
+static void
+anv_blorp_map(const struct blorp_context *blorp,
+              const struct blorp_address *blorp_addr,
+              void **addr,
+              unsigned int *size)
+{
+   struct anv_device *device = blorp->driver_ctx;
+   struct anv_bo *bo = blorp_addr->buffer;
+   uint64_t bo_offset = /*bo->offset +*/ blorp_addr->offset;
+   uint64_t map_size = bo->size;
+   fprintf(stderr, "bo(%p) bo->offset=0x%lx blorp_addr->offset=0x%x "
+           "map_size=0x%lx\n", bo, bo->offset, blorp_addr->offset, map_size);
+
+   if (bo->map == NULL) {
+      void *map = anv_gem_mmap(device, bo->gem_handle, 0, map_size, 0);
+      bo->map = map;
+   }
+
+   *addr = bo->map + bo_offset;
+   *size = map_size - bo_offset;
+}
+
+static void
+anv_blorp_unmap(const struct blorp_context *blorp,
+                const struct blorp_address *blorp_addr)
+{
+   struct anv_bo *bo = blorp_addr->buffer;
+
+   if (bo->map) {
+      anv_gem_munmap(bo->map, bo->size);
+      bo->map = NULL;
+   }
+}
+
 static bool
 lookup_blorp_shader(struct blorp_batch *batch,
                     const void *key, uint32_t key_size,
@@ -96,6 +130,8 @@ anv_device_init_blorp(struct anv_device *device)
 {
    blorp_init(&device->blorp, device, &device->isl_dev);
    device->blorp.compiler = device->instance->physicalDevice.compiler;
+   device->blorp.map = anv_blorp_map;
+   device->blorp.unmap = anv_blorp_unmap;
    device->blorp.lookup_shader = lookup_blorp_shader;
    device->blorp.upload_shader = upload_blorp_shader;
    switch (device->info.gen) {

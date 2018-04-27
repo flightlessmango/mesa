@@ -359,6 +359,10 @@ retry:
       }
    }
 
+#if GEN_GEN >= 12
+   brw_upload_aux_map_state(brw);
+#endif
+
    blorp_exec(batch, params);
 
    brw->batch.no_wrap = false;

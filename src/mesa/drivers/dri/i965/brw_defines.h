@@ -1658,6 +1658,8 @@ enum brw_pixel_shader_coverage_mask_mode {
 # define GEN12_L3ALLOC_ALL_ALLOC_SHIFT     25
 # define GEN12_L3ALLOC_ALL_ALLOC_MASK      INTEL_MASK(31, 25)
 
+#define GEN12_GFX_AUX_TABLE_BASE_ADDR       0x4200
+
 #define GEN10_CACHE_MODE_SS            0x0e420
 #define GEN10_FLOAT_BLEND_OPTIMIZATION_ENABLE (1 << 4)
 

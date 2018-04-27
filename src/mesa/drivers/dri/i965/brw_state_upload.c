@@ -45,6 +45,7 @@
 #include "brw_cs.h"
 #include "genxml/genX_bits.h"
 #include "main/framebuffer.h"
+#include "common/gen_aux_map.h"
 
 void
 brw_enable_obj_preemption(struct brw_context *brw, bool enable)
@@ -736,6 +737,8 @@ brw_upload_pipeline_state(struct brw_context *brw,
 	 fprintf(stderr, "\n");
       }
    }
+
+   brw_upload_aux_map_state(brw);
 }
 
 /***********************************************************************
@@ -788,4 +791,21 @@ void
 brw_compute_state_finished(struct brw_context *brw)
 {
    brw_pipeline_state_finished(brw, BRW_COMPUTE_PIPELINE);
+}
+
+void
+brw_upload_aux_map_state(struct brw_context *brw)
+{
+   void *aux_map_ctx = brw_bufmgr_get_aux_map_context(brw->bufmgr);
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   assert(aux_map_ctx || devinfo->gen < 12);
+   if (!aux_map_ctx)
+      return;
+   uint64_t aux_map_state_num = gen_aux_map_get_state_num(aux_map_ctx);
+   if (brw->last_aux_map_state < aux_map_state_num) {
+      uint64_t base_addr = gen_aux_map_get_base(aux_map_ctx);
+      assert(base_addr != 0 && ALIGN(base_addr, 32 * 1024) == base_addr);
+      brw_load_register_imm64(brw, GEN12_GFX_AUX_TABLE_BASE_ADDR, base_addr);
+      brw->last_aux_map_state = aux_map_state_num;
+   }
 }

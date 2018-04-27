@@ -1893,3 +1893,9 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
 
    return bufmgr;
 }
+
+void*
+brw_bufmgr_get_aux_map_context(struct brw_bufmgr *bufmgr)
+{
+   return bufmgr->aux_map_ctx;
+}

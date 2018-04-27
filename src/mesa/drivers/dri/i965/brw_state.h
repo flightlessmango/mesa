@@ -172,7 +172,10 @@ void brw_init_state(struct brw_context *brw);
 void brw_destroy_state(struct brw_context *brw);
 void brw_emit_select_pipeline(struct brw_context *brw,
                               enum brw_pipeline pipeline);
+
 void brw_enable_obj_preemption(struct brw_context *brw, bool enable);
+
+void brw_upload_aux_map_state(struct brw_context *brw);
 
 static inline void
 brw_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)

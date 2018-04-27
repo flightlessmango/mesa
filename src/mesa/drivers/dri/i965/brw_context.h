@@ -1222,6 +1222,8 @@ struct brw_context
    /** Last rendering scale argument provided to brw_emit_hashing_mode(). */
    unsigned current_hash_scale;
 
+   uint64_t last_aux_map_state;
+
    __DRIcontext *driContext;
    struct intel_screen *screen;
 };

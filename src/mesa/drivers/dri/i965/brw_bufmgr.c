@@ -512,6 +512,7 @@ bo_alloc_internal(struct brw_bufmgr *bufmgr,
       zeroed = true;
 
    /* Round the allocated size up to a power of two number of pages. */
+   size = ALIGN(size, 64 * 1024);
    bucket = bucket_for_size(bufmgr, size);
 
    /* If we don't have caching at this size, don't actually round the
@@ -629,7 +630,7 @@ retry:
    bo->kflags = bufmgr->initial_kflags;
 
    if ((bo->kflags & EXEC_OBJECT_PINNED) && bo->gtt_offset == 0ull) {
-      bo->gtt_offset = vma_alloc(bufmgr, memzone, bo->size, 1);
+      bo->gtt_offset = vma_alloc(bufmgr, memzone, bo->size, 64 * 1024);
 
       if (bo->gtt_offset == 0ull)
          goto err_free;

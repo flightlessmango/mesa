@@ -820,6 +820,10 @@ void iris_border_color_pool_reserve(struct iris_context *ice, unsigned count);
 uint32_t iris_upload_border_color(struct iris_context *ice,
                                   union pipe_color_union *color);
 
+/* iris_state.c */
+void gen12_iris_upload_aux_map_state(struct iris_context *iris,
+                                     struct iris_batch *batch);
+
 /* iris_program.c */
 void iris_upload_ubo_ssbo_surf_state(struct iris_context *ice,
                                      struct pipe_shader_buffer *buf,

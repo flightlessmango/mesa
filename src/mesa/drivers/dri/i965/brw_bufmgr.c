@@ -49,6 +49,7 @@
 #include <stdbool.h>
 
 #include "errno.h"
+#include "common/gen_aux_map.h"
 #include "common/gen_clflush.h"
 #include "dev/gen_debug.h"
 #include "common/gen_gem.h"
@@ -162,6 +163,9 @@ struct brw_bufmgr {
     * See also brw_bufmgr_collect()
     */
    struct list_head unref_requests;
+
+   struct gen_aux_map_context *aux_map_ctx;
+   struct brw_bo *aux_map_bo;
 };
 
 static int bo_set_tiling_internal(struct brw_bo *bo, uint32_t tiling_mode,
@@ -1758,6 +1762,44 @@ brw_using_softpin(struct brw_bufmgr *bufmgr)
    return bufmgr->initial_kflags & EXEC_OBJECT_PINNED;
 }
 
+struct gen_aux_map_buffer {
+   struct gen_buffer base;
+   struct brw_bo *bo;
+};
+
+static struct gen_buffer *
+gen_aux_map_buffer_alloc(void *driver_ctx, uint32_t size)
+{
+   struct gen_aux_map_buffer *buf = malloc(sizeof(struct gen_aux_map_buffer));
+   if (!buf)
+      return NULL;
+
+   struct brw_bufmgr *bufmgr = (struct brw_bufmgr *)driver_ctx;
+   assert(brw_using_softpin(bufmgr));
+
+   /* TODO: Align to 32kb */
+   buf->bo = brw_bo_alloc(bufmgr, "aux-map", size, BRW_MEMZONE_OTHER);
+
+   buf->base.gpu = buf->bo->gtt_offset;
+   buf->base.gpu_end = buf->base.gpu + buf->bo->size;
+   buf->base.map = brw_bo_map(NULL, buf->bo, MAP_WRITE | MAP_RAW);;
+   assert(bufmgr->aux_map_bo == NULL);
+   bufmgr->aux_map_bo = buf->bo;
+   return &buf->base;
+}
+
+static void
+gen_aux_map_buffer_free(void *driver_ctx, struct gen_buffer *buffer)
+{
+   struct gen_aux_map_buffer *buf = (struct gen_aux_map_buffer *)buffer;
+   brw_bo_unreference(buf->bo);
+}
+
+static struct gen_mapped_pinned_buffer_alloc aux_map_allocator = {
+   .alloc = gen_aux_map_buffer_alloc,
+   .free = gen_aux_map_buffer_free,
+};
+
 /**
  * Initializes the GEM buffer manager, which uses the kernel to allocate, map,
  * and manage map buffer objections.
@@ -1842,6 +1884,12 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
       _mesa_hash_table_create(NULL, key_hash_uint, key_uint_equal);
 
    list_inithead(&bufmgr->unref_requests);
+
+   if (devinfo->gen >= 12) {
+      bufmgr->aux_map_ctx = gen_aux_map_init(bufmgr, &aux_map_allocator,
+                                             devinfo);
+      assert(bufmgr->aux_map_ctx);
+   }
 
    return bufmgr;
 }

@@ -396,6 +396,13 @@ alloc_bo_from_cache(struct iris_bufmgr *bufmgr,
    if (!bo)
       return NULL;
 
+   if (bo->aux_map_address) {
+      void *aux_map_ctx = iris_bufmgr_get_aux_map_context(bo->bufmgr);
+      assert(aux_map_ctx);
+      gen_aux_map_unmap_range(aux_map_ctx, bo->gtt_offset, bo->size);
+      bo->aux_map_address = 0;
+   }
+
    /* If the cached BO isn't in the right memory zone, or the alignment
     * isn't sufficient, free the old memory and assign it a new address.
     */
@@ -731,6 +738,12 @@ bo_close(struct iris_bo *bo)
    if (ret != 0) {
       DBG("DRM_IOCTL_GEM_CLOSE %d failed (%s): %s\n",
           bo->gem_handle, bo->name, strerror(errno));
+   }
+
+   if (bo->aux_map_address) {
+      void *aux_map_ctx = iris_bufmgr_get_aux_map_context(bo->bufmgr);
+      assert(aux_map_ctx);
+      gen_aux_map_unmap_range(aux_map_ctx, bo->gtt_offset, bo->size);
    }
 
    /* Return the VMA for reuse */

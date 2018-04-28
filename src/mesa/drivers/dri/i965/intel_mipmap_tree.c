@@ -38,6 +38,8 @@
 #include "brw_context.h"
 #include "brw_state.h"
 
+#include "common/gen_aux_map.h"
+
 #include "main/enums.h"
 #include "main/fbobject.h"
 #include "main/formats.h"
@@ -771,6 +773,19 @@ create_ccs_buf_for_image(struct brw_context *brw,
    return true;
 }
 
+static void
+map_miptree_aux_addresses(struct brw_context *brw, struct intel_mipmap_tree *mt)
+{
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   if (devinfo->gen >= 12 && isl_aux_usage_has_ccs(mt->aux_usage)) {
+      void *aux_map_ctx = brw_bufmgr_get_aux_map_context(brw->bufmgr);
+      assert(aux_map_ctx);
+      assert(mt->aux_buf);
+      gen_aux_map_add_image(aux_map_ctx, &mt->surf, mt->bo->gtt_offset,
+                            mt->aux_buf->bo->gtt_offset);
+   }
+}
+
 struct intel_mipmap_tree *
 intel_miptree_create_for_dri_image(struct brw_context *brw,
                                    __DRIimage *image, GLenum target,
@@ -889,6 +904,8 @@ intel_miptree_create_for_dri_image(struct brw_context *brw,
     * external clients are going to do with it.  They may scan it out.
     */
    image->bo->cache_coherent = false;
+
+   map_miptree_aux_addresses(brw, mt);
 
    return mt;
 }
@@ -1648,6 +1665,8 @@ intel_miptree_alloc_aux(struct brw_context *brw,
       free_aux_state_map(mt->aux_state);
       mt->aux_state = NULL;
       return false;
+   } else {
+      map_miptree_aux_addresses(brw, mt);
    }
 
    /* Perform aux_usage-specific initialization. */

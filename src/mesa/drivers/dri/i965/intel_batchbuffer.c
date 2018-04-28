@@ -272,6 +272,10 @@ intel_batchbuffer_reset(struct brw_context *brw)
 
    if (batch->state_batch_sizes)
       _mesa_hash_table_u64_clear(batch->state_batch_sizes, NULL);
+
+   struct brw_bo *aux_map_bo = brw_bufmgr_get_aux_map_bo(brw->bufmgr);
+   if (aux_map_bo)
+      brw_use_pinned_bo(batch, aux_map_bo, 0);
 }
 
 static void

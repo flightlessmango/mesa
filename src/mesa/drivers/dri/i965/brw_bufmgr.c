@@ -1899,3 +1899,9 @@ brw_bufmgr_get_aux_map_context(struct brw_bufmgr *bufmgr)
 {
    return bufmgr->aux_map_ctx;
 }
+
+struct brw_bo *
+brw_bufmgr_get_aux_map_bo(struct brw_bufmgr *bufmgr)
+{
+   return bufmgr->aux_map_bo;
+}

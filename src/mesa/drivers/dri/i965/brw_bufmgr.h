@@ -366,6 +366,7 @@ struct brw_bo *brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
                                            unsigned int handle);
 
 void* brw_bufmgr_get_aux_map_context(struct brw_bufmgr *bufmgr);
+struct brw_bo * brw_bufmgr_get_aux_map_bo(struct brw_bufmgr *bufmgr);
 
 int brw_bo_wait(struct brw_bo *bo, int64_t timeout_ns);
 

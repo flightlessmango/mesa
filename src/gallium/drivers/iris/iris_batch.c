@@ -465,6 +465,8 @@ iris_chain_to_new_batch(struct iris_batch *batch)
 static void
 iris_finish_batch(struct iris_batch *batch)
 {
+   iris_bufmgr_add_aux_map_bos_to_batch(batch);
+
    /* Emit MI_BATCH_BUFFER_END to finish our batch. */
    uint32_t *map = batch->map_next;
 

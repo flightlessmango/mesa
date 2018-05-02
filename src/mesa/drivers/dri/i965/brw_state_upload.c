@@ -259,6 +259,17 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
 
    if (devinfo->gen == 11)
       brw_upload_gen11_slice_hashing_state(brw);
+
+   if (devinfo->gen == 12) {
+      BEGIN_BATCH(6);
+      OUT_BATCH(_3DSTATE_PRIMITIVE_REPLICATION << 16 | (6 - 2));
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      ADVANCE_BATCH();
+   }
 }
 
 static inline const struct brw_tracked_state *

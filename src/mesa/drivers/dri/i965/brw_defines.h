@@ -1688,4 +1688,6 @@ enum brw_pixel_shader_coverage_mask_mode {
 # define GEN9_REPLAY_MODE_MIDOBJECT             (1 << 0)
 # define GEN9_REPLAY_MODE_MASK                  REG_MASK(1 << 0)
 
+#define _3DSTATE_PRIMITIVE_REPLICATION     0x786c /* Gen12 */
+
 #endif

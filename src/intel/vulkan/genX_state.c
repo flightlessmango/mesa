@@ -240,6 +240,10 @@ genX(init_device_state)(struct anv_device *device)
    anv_batch_emit(&batch, GENX(3DSTATE_WM_HZ_OP), hzp);
 #endif
 
+#if GEN_GEN == 12
+   anv_batch_emit(&batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
+#endif
+
 #if GEN_GEN == 10
    gen10_emit_wa_lri_to_cache_mode_zero(&batch);
 #endif

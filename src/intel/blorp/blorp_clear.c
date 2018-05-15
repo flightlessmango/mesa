@@ -357,6 +357,7 @@ blorp_params_get_layer_offset_vs(struct blorp_batch *batch,
  */
 static void
 get_fast_clear_rect(const struct isl_device *dev,
+                    const struct isl_surf *surf,
                     const struct isl_surf *aux_surf,
                     unsigned *x0, unsigned *y0,
                     unsigned *x1, unsigned *y1)
@@ -408,7 +409,12 @@ get_fast_clear_rect(const struct isl_device *dev,
       x_scaledown = x_align / 2;
       y_scaledown = y_align / 2;
 
-      if (ISL_DEV_IS_HASWELL(dev)) {
+      if (ISL_DEV_GEN(dev) >= 12) {
+         const struct isl_format_layout *fmtl =
+            isl_format_get_layout(surf->format);
+         x_align = x_scaledown = 256 / (fmtl->bpb / 8);
+         y_align = y_scaledown = 16;
+      } else if (ISL_DEV_IS_HASWELL(dev)) {
          /* From BSpec: 3D-Media-GPGPU Engine > 3D Pipeline > Pixel > Pixel
           * Backend > MCS Buffer for Render Target(s) [DevIVB+] > Table "Color
           * Clear of Non-MultiSampled Render Target Restrictions":
@@ -502,7 +508,7 @@ blorp_fast_clear(struct blorp_batch *batch,
    memset(&params.wm_inputs.clear_color, 0xff, 4*sizeof(float));
    params.fast_clear_op = ISL_AUX_OP_FAST_CLEAR;
 
-   get_fast_clear_rect(batch->blorp->isl_dev, surf->aux_surf,
+   get_fast_clear_rect(batch->blorp->isl_dev, surf->surf, surf->aux_surf,
                        &params.x0, &params.y0, &params.x1, &params.y1);
 
    if (!blorp_params_get_clear_kernel(batch, &params, true, false))
@@ -1177,29 +1183,39 @@ blorp_ccs_resolve(struct blorp_batch *batch,
    brw_blorp_surface_info_init(batch->blorp, &params.dst, surf,
                                level, start_layer, format, true);
 
-   /* From the Ivy Bridge PRM, Vol2 Part1 11.9 "Render Target Resolve":
-    *
-    *     A rectangle primitive must be scaled down by the following factors
-    *     with respect to render target being resolved.
-    *
-    * The scaledown factors in the table that follows are related to the block
-    * size of the CCS format.  For IVB and HSW, we divide by two, for BDW we
-    * multiply by 8 and 16. On Sky Lake, we multiply by 8.
-    */
-   const struct isl_format_layout *aux_fmtl =
-      isl_format_get_layout(params.dst.aux_surf.format);
-   assert(aux_fmtl->txc == ISL_TXC_CCS);
-
    unsigned x_scaledown, y_scaledown;
-   if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 9) {
-      x_scaledown = aux_fmtl->bw * 8;
-      y_scaledown = aux_fmtl->bh * 8;
-   } else if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 8) {
-      x_scaledown = aux_fmtl->bw * 8;
-      y_scaledown = aux_fmtl->bh * 16;
+   if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 12) {
+      /* This only works for Y tiling at the moment */
+      assert(params.dst.surf.tiling == ISL_TILING_Y0);
+
+      const struct isl_format_layout *fmtl =
+         isl_format_get_layout(params.dst.surf.format);
+      x_scaledown = 256 / (fmtl->bpb / 8);
+      y_scaledown = 16;
    } else {
-      x_scaledown = aux_fmtl->bw / 2;
-      y_scaledown = aux_fmtl->bh / 2;
+      /* From the Ivy Bridge PRM, Vol2 Part1 11.9 "Render Target Resolve":
+       *
+       *     A rectangle primitive must be scaled down by the following factors
+       *     with respect to render target being resolved.
+       *
+       * The scaledown factors in the table that follows are related to the block
+       * size of the CCS format.  For IVB and HSW, we divide by two, for BDW we
+       * multiply by 8 and 16. On Sky Lake, we multiply by 8.
+       */
+      const struct isl_format_layout *aux_fmtl =
+         isl_format_get_layout(params.dst.aux_surf.format);
+      assert(aux_fmtl->txc == ISL_TXC_CCS);
+
+      if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 9) {
+         x_scaledown = aux_fmtl->bw * 8;
+         y_scaledown = aux_fmtl->bh * 8;
+      } else if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 8) {
+         x_scaledown = aux_fmtl->bw * 8;
+         y_scaledown = aux_fmtl->bh * 16;
+      } else {
+         x_scaledown = aux_fmtl->bw / 2;
+         y_scaledown = aux_fmtl->bh / 2;
+      }
    }
    params.x0 = params.y0 = 0;
    params.x1 = minify(params.dst.surf.logical_level0_px.width, level);

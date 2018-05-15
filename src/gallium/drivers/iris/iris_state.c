@@ -1891,9 +1891,11 @@ fill_surface_state(struct isl_device *isl_dev,
    assert(!iris_resource_unfinished_aux_import(res));
 
    if (aux_usage != ISL_AUX_USAGE_NONE) {
-      f.aux_surf = &res->aux.surf;
+      if (isl_dev->info->gen < 12 || aux_usage != ISL_AUX_USAGE_CCS_E) {
+         f.aux_surf = &res->aux.surf;
+         f.aux_address = res->aux.bo->gtt_offset + res->aux.offset;
+      }
       f.aux_usage = aux_usage;
-      f.aux_address = res->aux.bo->gtt_offset + res->aux.offset;
 
       struct iris_bo *clear_bo = NULL;
       uint64_t clear_offset = 0;

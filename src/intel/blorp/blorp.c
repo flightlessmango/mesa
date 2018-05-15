@@ -80,7 +80,7 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
    info->addr = surf->addr;
 
    info->aux_usage = surf->aux_usage;
-   if (info->aux_usage != ISL_AUX_USAGE_NONE) {
+   if (surf->aux_surf) {
       info->aux_surf = *surf->aux_surf;
       info->aux_addr = surf->aux_addr;
       assert(level < info->aux_surf.levels);

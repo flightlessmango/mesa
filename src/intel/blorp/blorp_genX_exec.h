@@ -1384,12 +1384,15 @@ blorp_emit_surface_state(struct blorp_batch *batch,
          write_disable_mask |= ISL_CHANNEL_ALPHA_BIT;
    }
 
+   const struct isl_surf *aux_surf =
+      surface->aux_addr.buffer ? &surface->aux_surf : NULL;
+
    const bool use_clear_address =
       GEN_GEN >= 10 && (surface->clear_color_addr.buffer != NULL);
 
    isl_surf_fill_state(batch->blorp->isl_dev, state,
                        .surf = &surf, .view = &surface->view,
-                       .aux_surf = &surface->aux_surf, .aux_usage = aux_usage,
+                       .aux_surf = aux_surf, .aux_usage = aux_usage,
                        .address =
                           blorp_get_surface_address(batch, surface->addr),
                        .aux_address = aux_usage == ISL_AUX_USAGE_NONE ? 0 :
@@ -1405,7 +1408,7 @@ blorp_emit_surface_state(struct blorp_batch *batch,
    blorp_surface_reloc(batch, state_offset + isl_dev->ss.addr_offset,
                        surface->addr, 0);
 
-   if (aux_usage != ISL_AUX_USAGE_NONE) {
+   if (aux_usage != ISL_AUX_USAGE_NONE && surface->aux_addr.buffer) {
       /* On gen7 and prior, the bottom 12 bits of the MCS base address are
        * used to store other information.  This should be ok, however, because
        * surface buffer addresses are always 4K page alinged.

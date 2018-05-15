@@ -159,9 +159,11 @@ brw_emit_surface_state(struct brw_context *brw,
    uint64_t clear_offset = 0;
 
    if (aux_usage != ISL_AUX_USAGE_NONE) {
-      aux_surf = &mt->aux_buf->surf;
-      aux_bo = mt->aux_buf->bo;
-      aux_offset = mt->aux_buf->offset;
+      if (devinfo->gen < 12 || aux_usage != ISL_AUX_USAGE_CCS_E) {
+         aux_surf = &mt->aux_buf->surf;
+         aux_bo = mt->aux_buf->bo;
+         aux_offset = mt->aux_buf->offset;
+      }
 
       /* We only really need a clear color if we also have an auxiliary
        * surface.  Without one, it does nothing.
@@ -188,7 +190,7 @@ brw_emit_surface_state(struct brw_context *brw,
                        .use_clear_address = clear_bo != NULL,
                        .clear_address = clear_offset,
                        .x_offset_sa = tile_x, .y_offset_sa = tile_y);
-   if (aux_surf) {
+   if (aux_bo) {
       /* On gen7 and prior, the upper 20 bits of surface state DWORD 6 are the
        * upper 20 bits of the GPU address of the MCS buffer; the lower 12 bits
        * contain other control information.  Since buffer addresses are always

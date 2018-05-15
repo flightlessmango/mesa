@@ -208,22 +208,22 @@ blorp_surf_for_miptree(struct brw_context *brw,
                                        &surf->clear_color_addr.buffer,
                                        &surf->clear_color_addr.offset);
 
-      surf->aux_surf = &mt->aux_buf->surf;
-      surf->aux_addr = (struct blorp_address) {
-         .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
-         .mocs = surf->addr.mocs,
-      };
+      if (devinfo->gen < 12 || aux_usage != ISL_AUX_USAGE_CCS_E) {
+         surf->aux_surf = &mt->aux_buf->surf;
+         surf->aux_addr = (struct blorp_address) {
+            .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
+            .mocs = surf->addr.mocs,
+         };
 
-      surf->aux_addr.buffer = mt->aux_buf->bo;
-      surf->aux_addr.offset = mt->aux_buf->offset;
+         surf->aux_addr.buffer = mt->aux_buf->bo;
+         surf->aux_addr.offset = mt->aux_buf->offset;
+      }
    } else {
       surf->aux_addr = (struct blorp_address) {
          .buffer = NULL,
       };
       memset(&surf->clear_color, 0, sizeof(surf->clear_color));
    }
-   assert((surf->aux_usage == ISL_AUX_USAGE_NONE) ==
-          (surf->aux_addr.buffer == NULL));
 
    if (!is_render_target && brw->screen->devinfo.gen == 9)
       gen9_apply_single_tex_astc5x5_wa(brw, mt->format, surf->aux_usage);

@@ -1640,6 +1640,13 @@ blorp_emit_depth_stencil_config(struct blorp_batch *batch,
                              hiz_address, 0);
 
          info.depth_clear_value = params->depth.clear_color.f32[0];
+#if GEN_GEN == 12
+         assert(params->depth.clear_color_addr.buffer != NULL);
+         /* TODO: Need an actual offset variable instead of just "8" */
+         info.depth_clear_address =
+            blorp_emit_reloc(batch, dw + 8,
+                             params->depth.clear_color_addr, 0);
+#endif
       }
    }
 

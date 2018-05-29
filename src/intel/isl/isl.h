@@ -1432,6 +1432,7 @@ struct isl_depth_stencil_hiz_emit_info {
     * The depth clear value
     */
    float depth_clear_value;
+   uint64_t depth_clear_address;
 };
 
 extern const struct isl_format_layout isl_format_layouts[];

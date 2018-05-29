@@ -411,6 +411,18 @@ brw_emit_depthbuffer(struct brw_context *brw)
                             depth_mt->aux_buf->bo,
                             depth_mt->aux_buf->offset + hiz_offset,
                             RELOC_WRITE);
+
+         if (devinfo->gen >= 12) {
+            struct brw_bo *clear_bo = NULL;
+            uint64_t clear_offset = 0;
+            intel_miptree_get_clear_color(devinfo, depth_mt, view.format,
+                                          view.usage & ISL_SURF_USAGE_TEXTURE_BIT,
+                                          &clear_bo, &clear_offset);
+            /* TODO: Need an actual offset variable instead of just "8" */
+            info.depth_clear_address =
+               brw_batch_reloc(&brw->batch, ds_offset + 8,
+                               clear_bo, clear_offset, RELOC_WRITE);
+         }
       }
 
       info.depth_clear_value = depth_mt->fast_clear_color.f32[0];

@@ -1013,22 +1013,22 @@ static const struct gen_device_info gen_device_info_ehl_2x4 = {
    .gen = 12,                                       \
    .has_pln = false,                                \
    .has_sample_with_hiz = false,                    \
-   .max_vs_threads = 364,                           \
-   .max_gs_threads = 224,                           \
-   .max_tcs_threads = 224,                          \
-   .max_tes_threads = 364,                          \
+   .max_vs_threads = 546,                           \
+   .max_gs_threads = 336,                           \
+   .max_tcs_threads = 336,                          \
+   .max_tes_threads = 546,                          \
    .max_cs_threads = 56,                            \
    .urb = {                                         \
-      .size = 1024,                                 \
+      .size = 1536,                                 \
       .min_entries = {                              \
          [MESA_SHADER_VERTEX]    = 64,              \
          [MESA_SHADER_TESS_EVAL] = 34,              \
       },                                            \
       .max_entries = {                              \
-         [MESA_SHADER_VERTEX]    = 2384,            \
-         [MESA_SHADER_TESS_CTRL] = 896,             \
-         [MESA_SHADER_TESS_EVAL] = 2064,            \
-         [MESA_SHADER_GEOMETRY]  = 832,             \
+         [MESA_SHADER_VERTEX]    = 3576,            \
+         [MESA_SHADER_TESS_CTRL] = 1548,            \
+         [MESA_SHADER_TESS_EVAL] = 3576,            \
+         [MESA_SHADER_GEOMETRY]  = 1548,            \
       },                                            \
    }
 

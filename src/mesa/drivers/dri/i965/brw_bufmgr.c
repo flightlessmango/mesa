@@ -447,6 +447,11 @@ int
 brw_bo_busy(struct brw_bo *bo)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
+
+   /* If we know it's idle, don't bother with the kernel round trip */
+   if (bo->idle && !bo->external)
+      return false;
+
    struct drm_i915_gem_busy busy = { .handle = bo->gem_handle };
 
    int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_BUSY, &busy);

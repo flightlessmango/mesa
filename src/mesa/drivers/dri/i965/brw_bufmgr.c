@@ -447,11 +447,6 @@ int
 brw_bo_busy(struct brw_bo *bo)
 {
    struct brw_bufmgr *bufmgr = bo->bufmgr;
-
-   /* If we know it's idle, don't bother with the kernel round trip */
-   if (bo->idle && !bo->external)
-      return false;
-
    struct drm_i915_gem_busy busy = { .handle = bo->gem_handle };
 
    int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_BUSY, &busy);
@@ -504,19 +499,10 @@ bo_alloc_internal(struct brw_bufmgr *bufmgr,
    struct bo_cache_bucket *bucket;
    bool alloc_from_cache;
    uint64_t bo_size;
-   bool busy = false;
    bool zeroed = false;
-
-   if (flags & BO_ALLOC_BUSY)
-      busy = true;
 
    if (flags & BO_ALLOC_ZEROED)
       zeroed = true;
-
-   /* BUSY does doesn't really jive with ZEROED as we have to wait for it to
-    * be idle before we can memset.  Just disallow that combination.
-    */
-   assert(!(busy && zeroed));
 
    /* Round the allocated size up to a power of two number of pages. */
    bucket = bucket_for_size(bufmgr, size);
@@ -537,29 +523,17 @@ bo_alloc_internal(struct brw_bufmgr *bufmgr,
 retry:
    alloc_from_cache = false;
    if (bucket != NULL && !list_empty(&bucket->head)) {
-      if (busy && !zeroed) {
-         /* Allocate new render-target BOs from the tail (MRU)
-          * of the list, as it will likely be hot in the GPU
-          * cache and in the aperture for us.  If the caller
-          * asked us to zero the buffer, we don't want this
-          * because we are going to mmap it.
-          */
-         bo = LIST_ENTRY(struct brw_bo, bucket->head.prev, head);
-         list_del(&bo->head);
+      /* For non-render-target BOs (where we're probably
+       * going to map it first thing in order to fill it
+       * with data), check if the last BO in the cache is
+       * unbusy, and only reuse in that case. Otherwise,
+       * allocating a new buffer is probably faster than
+       * waiting for the GPU to finish.
+       */
+      bo = LIST_ENTRY(struct brw_bo, bucket->head.next, head);
+      if (!brw_bo_busy(bo)) {
          alloc_from_cache = true;
-      } else {
-         /* For non-render-target BOs (where we're probably
-          * going to map it first thing in order to fill it
-          * with data), check if the last BO in the cache is
-          * unbusy, and only reuse in that case. Otherwise,
-          * allocating a new buffer is probably faster than
-          * waiting for the GPU to finish.
-          */
-         bo = LIST_ENTRY(struct brw_bo, bucket->head.next, head);
-         if (!brw_bo_busy(bo)) {
-            alloc_from_cache = true;
-            list_del(&bo->head);
-         }
+         list_del(&bo->head);
       }
 
       if (alloc_from_cache) {

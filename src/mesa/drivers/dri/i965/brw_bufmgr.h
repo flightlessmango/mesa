@@ -195,7 +195,6 @@ struct brw_bo {
    bool cache_coherent;
 };
 
-#define BO_ALLOC_BUSY       (1<<0)
 #define BO_ALLOC_ZEROED     (1<<1)
 
 /**

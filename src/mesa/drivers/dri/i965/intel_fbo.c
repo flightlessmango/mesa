@@ -973,7 +973,7 @@ intel_renderbuffer_move_to_temp(struct brw_context *brw,
                                  0, 0,
                                  width, height, 1,
                                  irb->mt->surf.samples,
-                                 MIPTREE_CREATE_BUSY);
+                                 MIPTREE_CREATE_DEFAULT);
 
    if (!invalidate)
       intel_miptree_copy_slice(brw, intel_image->mt,

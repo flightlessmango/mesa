@@ -159,7 +159,7 @@ intel_finalize_mipmap_tree(struct brw_context *brw,
                                           height,
                                           depth,
                                           1 /* num_samples */,
-                                          MIPTREE_CREATE_BUSY);
+                                          MIPTREE_CREATE_DEFAULT);
       if (!intelObj->mt)
          return;
    }

@@ -349,7 +349,7 @@ make_surface(struct brw_context *brw, GLenum target, mesa_format format,
              unsigned first_level, unsigned last_level,
              unsigned width0, unsigned height0, unsigned depth0,
              unsigned num_samples, isl_tiling_flags_t tiling_flags,
-             isl_surf_usage_flags_t isl_usage_flags, uint32_t alloc_flags,
+             isl_surf_usage_flags_t isl_usage_flags,
              unsigned row_pitch_B, struct brw_bo *bo)
 {
    struct intel_mipmap_tree *mt = calloc(sizeof(*mt), 1);
@@ -425,7 +425,7 @@ make_surface(struct brw_context *brw, GLenum target, mesa_format format,
                                   BRW_MEMZONE_OTHER,
                                   isl_tiling_to_i915_tiling(
                                      mt->surf.tiling),
-                                  mt->surf.row_pitch_B, alloc_flags);
+                                  mt->surf.row_pitch_B, 0);
       if (!mt->bo)
          goto fail;
    } else {
@@ -478,8 +478,6 @@ miptree_create(struct brw_context *brw,
                enum intel_miptree_create_flags flags)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   const uint32_t alloc_flags =
-      (flags & MIPTREE_CREATE_BUSY || num_samples > 1) ? BO_ALLOC_BUSY : 0;
    isl_tiling_flags_t tiling_flags = ISL_TILING_ANY_MASK;
 
    /* TODO: This used to be because there wasn't BLORP to handle Y-tiling. */
@@ -498,7 +496,7 @@ miptree_create(struct brw_context *brw,
       make_surface(brw, target, mt_fmt, first_level, last_level,
                    width0, height0, depth0, num_samples,
                    tiling_flags, mt_surf_usage(mt_fmt),
-                   alloc_flags, 0, NULL);
+                   0, NULL);
 
    if (mt == NULL)
       return NULL;
@@ -509,7 +507,7 @@ miptree_create(struct brw_context *brw,
                                    last_level, width0, height0, depth0,
                                    num_samples, tiling_flags,
                                    mt_surf_usage(decomp_format),
-                                   alloc_flags, 0, NULL);
+                                   0, NULL);
 
       if (mt->shadow_mt == NULL) {
          intel_miptree_release(&mt);
@@ -522,7 +520,7 @@ miptree_create(struct brw_context *brw,
          make_surface(brw, target, MESA_FORMAT_S_UINT8, first_level, last_level,
                       width0, height0, depth0, num_samples,
                       ISL_TILING_W_BIT, mt_surf_usage(MESA_FORMAT_S_UINT8),
-                      alloc_flags, 0, NULL);
+                      0, NULL);
       if (mt->stencil_mt == NULL) {
          intel_miptree_release(&mt);
          return NULL;
@@ -596,7 +594,7 @@ intel_miptree_create_for_bo(struct brw_context *brw,
       mt = make_surface(brw, target, mt_fmt,
                         0, 0, width, height, depth, 1, ISL_TILING_Y0_BIT,
                         mt_surf_usage(mt_fmt),
-                        0, pitch, bo);
+                        pitch, bo);
       if (!mt)
          return NULL;
 
@@ -611,7 +609,7 @@ intel_miptree_create_for_bo(struct brw_context *brw,
                         0, 0, width, height, depth, 1,
                         ISL_TILING_W_BIT,
                         mt_surf_usage(MESA_FORMAT_S_UINT8),
-                        0, pitch, bo);
+                        pitch, bo);
       if (!mt)
          return NULL;
 
@@ -636,7 +634,7 @@ intel_miptree_create_for_bo(struct brw_context *brw,
                      0, 0, width, height, depth, 1,
                      1lu << tiling,
                      mt_surf_usage(format),
-                     0, pitch, bo);
+                     pitch, bo);
    if (!mt)
       return NULL;
 
@@ -969,7 +967,7 @@ intel_miptree_create_for_renderbuffer(struct brw_context *brw,
 
    mt = intel_miptree_create(brw, target, format, 0, 0,
                              width, height, depth, num_samples,
-                             MIPTREE_CREATE_BUSY);
+                             MIPTREE_CREATE_DEFAULT);
    if (!mt)
       goto fail;
 
@@ -1477,7 +1475,7 @@ intel_alloc_aux_buffer(struct brw_context *brw,
    const bool needs_memset =
       !alloc_zeroed && (wants_memset || has_indirect_clear);
    const uint32_t alloc_flags =
-      alloc_zeroed ? BO_ALLOC_ZEROED : (needs_memset ? 0 : BO_ALLOC_BUSY);
+      alloc_zeroed ? BO_ALLOC_ZEROED : 0;
 
    /* ISL has stricter set of alignment rules then the drm allocator.
     * Therefore one can pass the ISL dimensions in terms of bytes instead of
@@ -1493,8 +1491,6 @@ intel_alloc_aux_buffer(struct brw_context *brw,
 
    /* Initialize the bo to the desired value */
    if (needs_memset) {
-      assert(!(alloc_flags & BO_ALLOC_BUSY));
-
       void *map = brw_bo_map(brw, buf->bo, MAP_WRITE | MAP_RAW);
       if (map == NULL) {
          intel_miptree_aux_buffer_free(buf);
@@ -2759,7 +2755,7 @@ intel_update_r8stencil(struct brw_context *brw,
                             src->surf.samples,
                             ISL_TILING_Y0_BIT,
                             ISL_SURF_USAGE_TEXTURE_BIT,
-                            BO_ALLOC_BUSY, 0, NULL);
+                            0, NULL);
       assert(mt->shadow_mt);
    }
 
@@ -3060,7 +3056,7 @@ intel_miptree_map_blit(struct brw_context *brw,
                                  ISL_TILING_LINEAR_BIT,
                                  ISL_SURF_USAGE_RENDER_TARGET_BIT |
                                  ISL_SURF_USAGE_TEXTURE_BIT,
-                                 0, 0, NULL);
+                                 0, NULL);
 
    if (!map->linear_mt) {
       fprintf(stderr, "Failed to allocate blit temporary\n");

@@ -262,6 +262,23 @@ brw_bo_reference(struct brw_bo *bo)
  */
 void brw_bo_unreference(struct brw_bo *bo);
 
+/**
+ * Release references on a list of BOs when the given BO becomes idle.
+ *
+ * When wait_bo becomes idle, all of the buffer objects in unref_bos will have
+ * one reference released.  When this function is called, the bufmgr will take
+ * a reference to wait_bo which will get released when it becomes idle and the
+ * clean-up has been done.
+ *
+ * Clean up is done every time brw_bufmgr_collect is called.
+ */
+void brw_bo_unreference_bos_when_idle(struct brw_bo *wait_bo,
+                                      struct brw_bo **unref_bos,
+                                      unsigned num_unref_bos);
+
+/* Does the cleanup work requested by brw_bo_unreference_bos_when_bo_idle */
+void brw_bufmgr_collect(struct brw_bufmgr *bufmgr);
+
 /* Must match MapBufferRange interface (for convenience) */
 #define MAP_READ        GL_MAP_READ_BIT
 #define MAP_WRITE       GL_MAP_WRITE_BIT

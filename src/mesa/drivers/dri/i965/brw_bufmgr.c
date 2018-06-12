@@ -155,6 +155,12 @@ struct brw_bufmgr {
    bool bo_reuse:1;
 
    uint64_t initial_kflags;
+
+   /* List of struct bo_idle_unref_request
+    *
+    * See also brw_bufmgr_collect()
+    */
+   struct list_head unref_requests;
 };
 
 static int bo_set_tiling_internal(struct brw_bo *bo, uint32_t tiling_mode,
@@ -902,6 +908,92 @@ brw_bo_unreference(struct brw_bo *bo)
    }
 }
 
+struct bo_idle_unref_request {
+   struct brw_bo *wait_bo;
+
+   struct list_head link;
+
+   unsigned num_unref_bos;
+   struct brw_bo *unref_bos[0];
+};
+
+void
+brw_bo_unreference_bos_when_idle(struct brw_bo *wait_bo,
+                                 struct brw_bo **unref_bos,
+                                 unsigned num_unref_bos)
+{
+   struct brw_bufmgr *bufmgr = wait_bo->bufmgr;
+
+   struct bo_idle_unref_request *req =
+      malloc(sizeof(*req) + num_unref_bos * sizeof(req->unref_bos[0]));
+
+   if (req == NULL) {
+      /* This should never happen.  If it does, we can always just stall and
+       * then unreference everything.
+       */
+      brw_bo_wait_rendering(wait_bo);
+      for (unsigned i = 0; i < num_unref_bos; i++)
+         brw_bo_unreference(unref_bos[i]);
+      return;
+   }
+
+   req->wait_bo = wait_bo;
+   brw_bo_reference(wait_bo);
+
+   req->num_unref_bos = num_unref_bos;
+   memcpy(req->unref_bos, unref_bos, num_unref_bos * sizeof(*unref_bos));
+
+   mtx_lock(&bufmgr->lock);
+   list_addtail(&req->link, &bufmgr->unref_requests);
+   mtx_unlock(&bufmgr->lock);
+}
+
+static void
+bufmgr_collect(struct brw_bufmgr *bufmgr, bool wait)
+{
+   mtx_lock(&bufmgr->lock);
+
+   struct list_head idle_list;
+   list_inithead(&idle_list);
+
+   /* Move all entries with idle BOs into the idle list */
+   list_for_each_entry_safe(struct bo_idle_unref_request, req,
+                            &bufmgr->unref_requests, link) {
+      if (wait) {
+         /* This case is only for when we're destroying the bufmgr so nothing
+          * should ever be busy.  We'll wait on it in release builds just to
+          * make sure.
+          */
+         assert(!brw_bo_busy(req->wait_bo));
+         brw_bo_wait(req->wait_bo, -1);
+      } else if (brw_bo_busy(req->wait_bo)) {
+         continue;
+      }
+
+      list_del(&req->link);
+      list_addtail(&req->link, &idle_list);
+   }
+
+   /* Drop the lock before we start unreferencing things */
+   mtx_unlock(&bufmgr->lock);
+
+   list_for_each_entry_safe(struct bo_idle_unref_request, req,
+                            &idle_list, link) {
+      brw_bo_unreference(req->wait_bo);
+      for (unsigned i = 0; i < req->num_unref_bos; i++)
+         brw_bo_unreference(req->unref_bos[i]);
+      list_del(&req->link);
+      free(req);
+   }
+   assert(list_empty(&idle_list));
+}
+
+void
+brw_bufmgr_collect(struct brw_bufmgr *bufmgr)
+{
+   bufmgr_collect(bufmgr, false);
+}
+
 static void
 bo_wait_with_stall_warning(struct brw_context *brw,
                            struct brw_bo *bo,
@@ -1266,12 +1358,20 @@ brw_bo_wait(struct brw_bo *bo, int64_t timeout_ns)
 
    bo->idle = true;
 
+   /* We just had to call into the kernel to wait on a BO, something is now
+    * idle so we may as well garbage collect.
+    */
+   brw_bufmgr_collect(bufmgr);
+
    return ret;
 }
 
 void
 brw_bufmgr_destroy(struct brw_bufmgr *bufmgr)
 {
+   bufmgr_collect(bufmgr, true);
+   assert(list_empty(&bufmgr->unref_requests));
+
    mtx_destroy(&bufmgr->lock);
 
    /* Free any cached buffer objects we were going to reuse */
@@ -1721,6 +1821,8 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
       _mesa_hash_table_create(NULL, key_hash_uint, key_uint_equal);
    bufmgr->handle_table =
       _mesa_hash_table_create(NULL, key_hash_uint, key_uint_equal);
+
+   list_inithead(&bufmgr->unref_requests);
 
    return bufmgr;
 }

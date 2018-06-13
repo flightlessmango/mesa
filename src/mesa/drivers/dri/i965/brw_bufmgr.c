@@ -521,6 +521,14 @@ bo_alloc_internal(struct brw_bufmgr *bufmgr,
       bo_size = size == 0 ? page_size : ALIGN(size, page_size);
    } else {
       bo_size = bucket->size;
+
+      /* If there's nothing in the bucket, call bufmgr_collect in the hopes
+       * that maybe we can free and re-use an old BO.  It should be safe to
+       * call list_empty() without taking a lock since it's just a pointer
+       * comparison and nothing bad will happen if we get it wrong.
+       */
+      if (list_empty(&bucket->head))
+         brw_bufmgr_collect(bufmgr);
    }
    assert(bo_size);
 
@@ -537,31 +545,29 @@ retry:
        * waiting for the GPU to finish.
        */
       bo = LIST_ENTRY(struct brw_bo, bucket->head.next, head);
-      if (!brw_bo_busy(bo)) {
-         alloc_from_cache = true;
-         list_del(&bo->head);
+      assert(!brw_bo_busy(bo));
+
+      alloc_from_cache = true;
+      list_del(&bo->head);
+
+      if (!brw_bo_madvise(bo, I915_MADV_WILLNEED)) {
+         bo_free(bo);
+         brw_bo_cache_purge_bucket(bufmgr, bucket);
+         goto retry;
       }
 
-      if (alloc_from_cache) {
-         if (!brw_bo_madvise(bo, I915_MADV_WILLNEED)) {
+      if (bo_set_tiling_internal(bo, tiling_mode, stride)) {
+         bo_free(bo);
+         goto retry;
+      }
+
+      if (zeroed) {
+         void *map = brw_bo_map(NULL, bo, MAP_WRITE | MAP_RAW);
+         if (!map) {
             bo_free(bo);
-            brw_bo_cache_purge_bucket(bufmgr, bucket);
             goto retry;
          }
-
-         if (bo_set_tiling_internal(bo, tiling_mode, stride)) {
-            bo_free(bo);
-            goto retry;
-         }
-
-         if (zeroed) {
-            void *map = brw_bo_map(NULL, bo, MAP_WRITE | MAP_RAW);
-            if (!map) {
-               bo_free(bo);
-               goto retry;
-            }
-            memset(map, 0, bo_size);
-         }
+         memset(map, 0, bo_size);
       }
    }
 
@@ -868,6 +874,13 @@ bo_unreference_final(struct brw_bo *bo, time_t time)
    struct bo_cache_bucket *bucket;
 
    DBG("bo_unreference final: %d (%s)\n", bo->gem_handle, bo->name);
+
+   /* The only way an internal BO can be busy is if it's in use by one of our
+    * (this screen's) batch buffers.  Since we always wait for the batch to be
+    * idle before we unref the BOs it references, we can never get here with a
+    * busy internal BO.
+    */
+   assert(bo->external || !brw_bo_busy(bo));
 
    bucket = bucket_for_size(bufmgr, bo->size);
    /* Put the buffer into our internal cache for reuse if we can. */

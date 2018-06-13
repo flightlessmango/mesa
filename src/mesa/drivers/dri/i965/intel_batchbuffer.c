@@ -536,10 +536,12 @@ static void
 brw_new_batch(struct brw_context *brw)
 {
    /* Unreference any BOs held by the previous batch, and reset counts. */
-   for (int i = 0; i < brw->batch.exec_count; i++) {
-      brw_bo_unreference(brw->batch.exec_bos[i]);
+   brw_bo_unreference_bos_when_idle(brw->batch.batch.bo,
+                                    brw->batch.exec_bos,
+                                    brw->batch.exec_count);
+
+   for (int i = 0; i < brw->batch.exec_count; i++)
       brw->batch.exec_bos[i] = NULL;
-   }
    brw->batch.batch_relocs.reloc_count = 0;
    brw->batch.state_relocs.reloc_count = 0;
    brw->batch.exec_count = 0;

@@ -784,6 +784,7 @@ map_miptree_aux_addresses(struct brw_context *brw, struct intel_mipmap_tree *mt)
       gen_aux_map_add_image(aux_map_ctx, &mt->surf, mt->bo->gtt_offset,
                             mt->aux_buf->bo->gtt_offset +
                             mt->aux_buf->offset);
+      mt->bo->aux_map_address = mt->aux_buf->bo->gtt_offset;
    }
 }
 

@@ -878,6 +878,13 @@ bo_unreference_final(struct brw_bo *bo, time_t time)
 
    DBG("bo_unreference final: %d (%s)\n", bo->gem_handle, bo->name);
 
+   if (bo->aux_map_address) {
+      void *aux_map_ctx = brw_bufmgr_get_aux_map_context(bufmgr);
+      assert(aux_map_ctx);
+      gen_aux_map_unmap_range(aux_map_ctx, bo->gtt_offset, bo->size);
+      bo->aux_map_address = 0;
+   }
+
    /* The only way an internal BO can be busy is if it's in use by one of our
     * (this screen's) batch buffers.  Since we always wait for the batch to be
     * idle before we unref the BOs it references, we can never get here with a

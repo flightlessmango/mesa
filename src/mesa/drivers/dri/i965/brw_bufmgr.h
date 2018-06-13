@@ -130,6 +130,11 @@ struct brw_bo {
    uint64_t gtt_offset;
 
    /**
+    * If non-zero, then this bo has an aux-map translation to this address.
+    */
+   uint64_t aux_map_address;
+
+   /**
     * The validation list index for this buffer, or -1 when not in a batch.
     * Note that a single buffer may be in multiple batches (contexts), and
     * this is a global field, which refers to the last batch using the BO.

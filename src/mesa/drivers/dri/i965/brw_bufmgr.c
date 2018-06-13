@@ -537,14 +537,10 @@ bo_alloc_internal(struct brw_bufmgr *bufmgr,
 retry:
    alloc_from_cache = false;
    if (bucket != NULL && !list_empty(&bucket->head)) {
-      /* For non-render-target BOs (where we're probably
-       * going to map it first thing in order to fill it
-       * with data), check if the last BO in the cache is
-       * unbusy, and only reuse in that case. Otherwise,
-       * allocating a new buffer is probably faster than
-       * waiting for the GPU to finish.
+      /* Allocate BOs from the tail (MRU) of the list as it will likely be
+       * hotter in the GPU cache and in the aperature for us.
        */
-      bo = LIST_ENTRY(struct brw_bo, bucket->head.next, head);
+      bo = LIST_ENTRY(struct brw_bo, bucket->head.prev, head);
       assert(!brw_bo_busy(bo));
 
       alloc_from_cache = true;

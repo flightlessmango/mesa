@@ -386,7 +386,7 @@ modifier_is_supported(const struct gen_device_info *devinfo,
       return devinfo->gen >= 6;
 
    case I915_FORMAT_MOD_Y_TILED_CCS:
-      return devinfo->gen >= 9;
+      return devinfo->gen >= 9 && devinfo->gen < 12;
 
    default:
       return false;

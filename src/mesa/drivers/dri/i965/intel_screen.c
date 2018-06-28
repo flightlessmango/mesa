@@ -333,14 +333,11 @@ static const struct intel_image_format intel_image_formats[] = {
        { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } }
 };
 
-static const struct {
-   uint64_t modifier;
-   unsigned since_gen;
-} supported_modifiers[] = {
-   { .modifier = DRM_FORMAT_MOD_LINEAR       , .since_gen = 1 },
-   { .modifier = I915_FORMAT_MOD_X_TILED     , .since_gen = 1 },
-   { .modifier = I915_FORMAT_MOD_Y_TILED     , .since_gen = 6 },
-   { .modifier = I915_FORMAT_MOD_Y_TILED_CCS , .since_gen = 9 },
+uint64_t supported_modifiers[] = {
+   DRM_FORMAT_MOD_LINEAR,
+   I915_FORMAT_MOD_X_TILED,
+   I915_FORMAT_MOD_Y_TILED,
+   I915_FORMAT_MOD_Y_TILED_CCS,
 };
 
 static bool
@@ -350,7 +347,6 @@ modifier_is_supported(const struct gen_device_info *devinfo,
 {
    const struct isl_drm_modifier_info *modinfo =
       isl_drm_modifier_get_info(modifier);
-   int i;
 
    /* ISL had better know about the modifier */
    if (!modinfo)
@@ -381,14 +377,20 @@ modifier_is_supported(const struct gen_device_info *devinfo,
          return false;
    }
 
-   for (i = 0; i < ARRAY_SIZE(supported_modifiers); i++) {
-      if (supported_modifiers[i].modifier != modifier)
-         continue;
+   switch (modifier) {
+   case DRM_FORMAT_MOD_LINEAR:
+   case I915_FORMAT_MOD_X_TILED:
+      return true;
 
-      return supported_modifiers[i].since_gen <= devinfo->gen;
+   case I915_FORMAT_MOD_Y_TILED:
+      return devinfo->gen >= 6;
+
+   case I915_FORMAT_MOD_Y_TILED_CCS:
+      return devinfo->gen >= 9;
+
+   default:
+      return false;
    }
-
-   return false;
 }
 
 static uint64_t
@@ -1376,7 +1378,7 @@ intel_query_dma_buf_modifiers(__DRIscreen *_screen, int fourcc, int max,
       return false;
 
    for (i = 0; i < ARRAY_SIZE(supported_modifiers); i++) {
-      uint64_t modifier = supported_modifiers[i].modifier;
+      uint64_t modifier = supported_modifiers[i];
       if (!modifier_is_supported(&screen->devinfo, f, 0, modifier))
          continue;
 

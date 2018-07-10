@@ -67,6 +67,9 @@
 #define EXECLIST_CONTROL_VCSUNIT0   0x12550
 #define EXECLIST_CONTROL_BCSUNIT   0x22550
 
+#define LMEM_CFG_ADDR      0xcf58
+#define LMEM_CFG_ADDR_ENABLE  (1 << 31)
+
 #define MEMORY_MAP_SIZE (64 /* MiB */ * 1024 * 1024)
 
 #define PTE_SIZE 4

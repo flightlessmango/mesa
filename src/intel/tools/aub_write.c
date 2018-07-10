@@ -108,6 +108,25 @@ dword_out(struct aub_file *aub, uint32_t data)
 }
 
 static void
+register_write_out(struct aub_file *aub, uint32_t addr, uint32_t value)
+{
+   uint32_t dwords = 1;
+
+   if (aub->verbose_log_file) {
+      fprintf(aub->verbose_log_file,
+              "  MMIO WRITE (0x%08x = 0x%08x)\n", addr, value);
+   }
+
+   dword_out(aub, CMD_MEM_TRACE_REGISTER_WRITE | (5 + dwords - 1));
+   dword_out(aub, addr);
+   dword_out(aub, AUB_MEM_TRACE_REGISTER_SIZE_DWORD |
+                  AUB_MEM_TRACE_REGISTER_SPACE_MMIO);
+   dword_out(aub, 0xFFFFFFFF);   /* mask lo */
+   dword_out(aub, 0x00000000);   /* mask hi */
+   dword_out(aub, value);
+}
+
+static void
 write_execlists_header(struct aub_file *aub, const char *name)
 {
    char app_name[8 * 4];
@@ -117,6 +136,10 @@ write_execlists_header(struct aub_file *aub, const char *name)
       snprintf(app_name, sizeof(app_name), "PCI-ID=0x%X %s",
                aub->pci_id, name);
    app_name_len = ALIGN(app_name_len, sizeof(uint32_t));
+
+   /* Enable local memory - the GGTT will be stored there by default */
+   if (aub->devinfo.is_arctic_sound)
+      register_write_out(aub, LMEM_CFG_ADDR, LMEM_CFG_ADDR_ENABLE);
 
    dwords = 5 + app_name_len / sizeof(uint32_t);
    dword_out(aub, CMD_MEM_TRACE_VERSION | (dwords - 1));
@@ -220,25 +243,6 @@ mem_trace_memory_write_header_out(struct aub_file *aub, uint64_t addr,
    dword_out(aub, addr >> 32);   /* addr hi */
    dword_out(aub, addr_space);   /* gtt */
    dword_out(aub, len);
-}
-
-static void
-register_write_out(struct aub_file *aub, uint32_t addr, uint32_t value)
-{
-   uint32_t dwords = 1;
-
-   if (aub->verbose_log_file) {
-      fprintf(aub->verbose_log_file,
-              "  MMIO WRITE (0x%08x = 0x%08x)\n", addr, value);
-   }
-
-   dword_out(aub, CMD_MEM_TRACE_REGISTER_WRITE | (5 + dwords - 1));
-   dword_out(aub, addr);
-   dword_out(aub, AUB_MEM_TRACE_REGISTER_SIZE_DWORD |
-                  AUB_MEM_TRACE_REGISTER_SPACE_MMIO);
-   dword_out(aub, 0xFFFFFFFF);   /* mask lo */
-   dword_out(aub, 0x00000000);   /* mask hi */
-   dword_out(aub, value);
 }
 
 static void

@@ -459,8 +459,9 @@ write_engine_execlist_setup(struct aub_file *aub,
                                      ggtt_ptes * GEN8_PTE_SIZE,
                                      AUB_MEM_TRACE_MEMORY_ADDRESS_SPACE_GGTT_ENTRY,
                                      name);
+   const uint32_t add_in_bits = aub->devinfo.is_arctic_sound ? 3 : 1;
    for (uint32_t i = 0; i < ggtt_ptes; i++) {
-      dword_out(aub, 1 + 0x1000 * i + phys_addr);
+      dword_out(aub, add_in_bits + 0x1000 * i + phys_addr);
       dword_out(aub, 0);
    }
 

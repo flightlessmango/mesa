@@ -821,6 +821,44 @@ static const uint16_t gen12_src1_index_table[16] = {
    0b100011010001, /*      -r<4;4,1> */
 };
 
+static const uint16_t ats_src0_index_table[16] = {
+   0b000100000000, /*       r<1;1,0>  */
+   0b000000000000, /*       r<0;1,0>  */
+   0b000100000010, /*      -r<1;1,0>  */
+   0b000100000001, /*  (abs)r<1;1,0>  */
+   0b000000000010, /*      -r<0;1,0>  */
+   0b001000000000, /*       r<2;1,0>  */
+   0b001001000000, /*       r<2;4,0>  */
+   0b001101000000, /*       r<4;4,0>  */
+   0b001100000000, /*       r<4;1,0>  */
+   0b000100000011, /* -(abs)r<1;1,0>  */
+   0b000000000001, /*  (abs)r<0;1,0>  */
+   0b111100010000, /*       r[a]<1,0> */
+   0b010001100000, /*       r<8;8,0>  */
+   0b000101000000, /*       r<1;4,0>  */
+   0b010001001000, /*       r<8;4,2>  */
+   0b001000000010, /*      -r<2;1,0>  */
+};
+
+static const uint16_t ats_src1_index_table[16] = {
+   0b000100000000, /*       r<1;1,0>  */
+   0b000000000000, /*       r<0;1,0>  */
+   0b000100000010, /*      -r<1;1,0>  */
+   0b000100000001, /*  (abs)r<1;1,0>  */
+   0b000000000010, /*      -r<0;1,0>  */
+   0b001000000000, /*       r<2;1,0>  */
+   0b001001000000, /*       r<2;4,0>  */
+   0b001101000000, /*       r<4;4,0>  */
+   0b001100000000, /*       r<4;1,0>  */
+   0b000100000011, /* -(abs)r<1;1,0>  */
+   0b000000000001, /*  (abs)r<0;1,0>  */
+   0b111100010000, /*       r[a]<1,0> */
+   0b010001100000, /*       r<8;8,0>  */
+   0b000101000000, /*       r<1;4,0>  */
+   0b010001001000, /*       r<8;4,2>  */
+   0b001000000010, /*      -r<2;1,0>  */
+};
+
 /* This is actually the control index table for Cherryview (26 bits), but the
  * only difference from Broadwell (24 bits) is that it has two extra 0-bits at
  * the start.
@@ -851,36 +889,71 @@ static const uint64_t gen8_3src_source_index_table[4] = {
 static const uint64_t gen12_3src_control_index_table[32] = {
    0b000001001010010101000000000000000100, /*      (16|M0)       grf<1>:f   :f  :f  :f */
    0b000001001010010101000000000000000011, /*      (8|M0)        grf<1>:f   :f  :f  :f */
-   0b000001001000010111100000000000000011, /*      (8|M0)        arf<1>:nf  :f  :f  :f */
-   0b000001001000010111100010000000000011, /* (W)  (8|M0)        arf<1>:nf  :f  :f  :f */
-   0b000001001010111101000010000000000011, /* (W)  (8|M0)        grf<1>:f  :nf  :f  :f */
-   0b000001001010111101000000000000000011, /*      (8|M0)        grf<1>:f  :nf  :f  :f */
-   0b000001001000010111100000000000010011, /*      (8|M8)        arf<1>:nf  :f  :f  :f */
-   0b000001001010111101000000000000010011, /*      (8|M8)        grf<1>:f  :nf  :f  :f */
-   0b000001001000010111100010000000010011, /* (W)  (8|M8)        arf<1>:nf  :f  :f  :f */
-   0b000001001010111101000010000000010011, /* (W)  (8|M8)        grf<1>:f  :nf  :f  :f */
+   0b000001001000010101000000000000000011, /*      (8|M0)        arf<1>:f   :f  :f  :f */
+   0b000001001010010101000010000000000011, /* (W)  (8|M0)        grf<1>:f   :f  :f  :f */
+   0b000001001000010101000010000000000011, /* (W)  (8|M0)        arf<1>:f   :f  :f  :f */
+   0b000001001000010101000000000000010011, /*      (8|M8)        arf<1>:f   :f  :f  :f */
+   0b000001001010010101000000000000010011, /*      (8|M8)        grf<1>:f   :f  :f  :f */
+   0b000001001000010101000010000000010011, /* (W)  (8|M8)        arf<1>:f   :f  :f  :f */
+   0b000001001010010101000010000000010011, /* (W)  (8|M8)        grf<1>:f   :f  :f  :f */
    0b000001001010010101000010000000000100, /* (W)  (16|M0)       grf<1>:f   :f  :f  :f */
    0b000001001000010101000000000000000100, /*      (16|M0)       arf<1>:f   :f  :f  :f */
    0b000001001010010101010000000000000100, /*      (16|M0)  (sat)grf<1>:f   :f  :f  :f */
-   0b000001001000010101000000000000000011, /*      (8|M0)        arf<1>:f   :f  :f  :f */
    0b000001001010010101000000000000100100, /*      (16|M16)      grf<1>:f   :f  :f  :f */
    0b000001001000010101000010000000000100, /* (W)  (16|M0)       arf<1>:f   :f  :f  :f */
    0b000001001010010101000010000000000000, /* (W)  (1|M0)        grf<1>:f   :f  :f  :f */
    0b000001001010010101010000000000000011, /*      (8|M0)   (sat)grf<1>:f   :f  :f  :f */
-   0b000001001000010111100010000000100011, /* (W)  (8|M16)       arf<1>:nf  :f  :f  :f */
-   0b000001001000010111100010000000110011, /* (W)  (8|M24)       arf<1>:nf  :f  :f  :f */
-   0b000001001010111101000010000000110011, /* (W)  (8|M24)       grf<1>:f  :nf  :f  :f */
-   0b000001001010111101000010000000100011, /* (W)  (8|M16)       grf<1>:f  :nf  :f  :f */
-   0b000001001000010111100000000000110011, /*      (8|M24)       arf<1>:nf  :f  :f  :f */
-   0b000001001000010111100000000000100011, /*      (8|M16)       arf<1>:nf  :f  :f  :f */
-   0b000001001010111101000000000000110011, /*      (8|M24)       grf<1>:f  :nf  :f  :f */
-   0b000001001010111101000000000000100011, /*      (8|M16)       grf<1>:f  :nf  :f  :f */
-   0b000001001010010101000010000000000011, /* (W)  (8|M0)        grf<1>:f   :f  :f  :f */
+   0b000001001000010101000010000000110011, /* (W)  (8|M24)       arf<1>:f   :f  :f  :f */
+   0b000001001000010101000010000000100011, /* (W)  (8|M16)       arf<1>:f   :f  :f  :f */
+   0b000001001010010101000010000000110011, /* (W)  (8|M24)       grf<1>:f   :f  :f  :f */
+   0b000001001010010101000010000000100011, /* (W)  (8|M16)       grf<1>:f   :f  :f  :f */
+   0b000001001000010101000000000000100011, /*      (8|M16)       arf<1>:f   :f  :f  :f */
+   0b000001001000010101000000000000110011, /*      (8|M24)       arf<1>:f   :f  :f  :f */
+   0b000001001010010101000000000000100011, /*      (8|M16)       grf<1>:f   :f  :f  :f */
+   0b000001001010010101000000000000110011, /*      (8|M24)       grf<1>:f   :f  :f  :f */
    0b000001001000010101010000000000000100, /*      (16|M0)  (sat)arf<1>:f   :f  :f  :f */
    0b000001001010010101010010000000000100, /* (W)  (16|M0)  (sat)grf<1>:f   :f  :f  :f */
    0b000001001010010101000010000000100100, /* (W)  (16|M16)      grf<1>:f   :f  :f  :f */
    0b000001001010010001000010000000000000, /* (W)  (1|M0)        grf<1>:ud :ud :ud :ud */
    0b000001001000010101000000000000100100, /*      (16|M16)      arf<1>:f   :f  :f  :f */
+   0b000001001010010101010000000000100100, /*      (16|M16) (sat)grf<1>:f   :f  :f  :f */
+   0b000001001010010101000010000000000010, /* (W)  (4|M0)        grf<1>:f   :f  :f  :f */
+   0b000001001000010101010000000000000011, /*      (8|M0)   (sat)arf<1>:f   :f  :f  :f */
+};
+
+static const uint64_t ats_3src_control_index_table[32] = {
+   0b0000010010100010101000000000000000100, /*          (16|M0)       grf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000000000000000011, /*          (8|M0)        grf<1>:f   :f   :f   :f          */
+   0b0000010010000010111100000000000000011, /*          (8|M0)        arf<1>:nf  :f   :f   :f          */
+   0b0000010010000010111100010000000000011, /*     (W)  (8|M0)        arf<1>:nf  :f   :f   :f          */
+   0b0000010010100111101000010000000000011, /*     (W)  (8|M0)        grf<1>:f  :nf   :f   :f          */
+   0b0000010010100111101000000000000000011, /*          (8|M0)        grf<1>:f  :nf   :f   :f          */
+   0b0000010010000010111100000000000010011, /*          (8|M8)        arf<1>:nf  :f   :f   :f          */
+   0b0000010010100111101000000000000010011, /*          (8|M8)        grf<1>:f  :nf   :f   :f          */
+   0b0000010010000010111100010000000010011, /*     (W)  (8|M8)        arf<1>:nf  :f   :f   :f          */
+   0b0000010010100111101000010000000010011, /*     (W)  (8|M8)        grf<1>:f  :nf   :f   :f          */
+   0b0000010010100010101000010000000000100, /*     (W)  (16|M0)       grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000000000000000100, /*          (16|M0)       arf<1>:f   :f   :f   :f          */
+   0b0000010010100010101010000000000000100, /*          (16|M0)  (sat)grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000000000000000011, /*          (8|M0)        arf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000000000000100100, /*          (16|M16)      grf<1>:f   :f   :f   :f          */
+   0b0000010010000010101000010000000000100, /*     (W)  (16|M0)       arf<1>:f   :f   :f   :f          */
+   0b0000010010100010101000010000000000000, /*     (W)  (1|M0)        grf<1>:f   :f   :f   :f          */
+   0b0000010010100010101010000000000000011, /*          (8|M0)   (sat)grf<1>:f   :f   :f   :f          */
+   0b0000010010000010111100010000000100011, /*     (W)  (8|M16)       arf<1>:nf  :f   :f   :f          */
+   0b0000010010000010111100010000000110011, /*     (W)  (8|M24)       arf<1>:nf  :f   :f   :f          */
+   0b0000010010100111101000010000000110011, /*     (W)  (8|M24)       grf<1>:f  :nf   :f   :f          */
+   0b0000010010100111101000010000000100011, /*     (W)  (8|M16)       grf<1>:f  :nf   :f   :f          */
+   0b0000000100111110011000000000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d  :ub   :b          */
+   0b0000000000111110011000100000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d  :ub  :ub {Atomic} */
+   0b0000100100111110011000100000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d   :b   :b {Atomic} */
+   0b0000100000111110011000100000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d   :b  :ub {Atomic} */
+   0b0000100100111110011000000000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d   :b   :b          */
+   0b0000000000111110011000000000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d  :ub  :ub          */
+   0b0000000100111110011000100000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d  :ub   :b {Atomic} */
+   0b0000100000111110011000000000000000011, /* dpas.8x* (8|M0)        grf<1>:d   :d   :b  :ub          */
+   0b0000101101111010101000100000000000011, /* dpas.8x* (8|M0)        grf<1>:f   :f  :bf  :bf {Atomic} */
+   0b0000101101111010101000000000000000011, /* dpas.8x* (8|M0)        grf<1>:f   :f  :bf  :bf          */
 };
 
 static const uint32_t gen12_3src_source_index_table[32] = {
@@ -916,6 +989,44 @@ static const uint32_t gen12_3src_source_index_table[32] = {
    0b101101100101100000000, /*  grf<0;0>   grf<8;1> -grf<1> */
    0b100100000100101000011, /*  grf<8;1>   grf<0;0> -grf<0> */
    0b101001100101101000011, /*  grf<8;1>   arf<8;1> -grf<1> */
+};
+
+static const uint32_t ats_3src_source_index_table[32] = {
+   0b100100000001100000000, /*           grf<0;0>   grf<1;0>     grf<0>      */
+   0b100100000001000000001, /*           arf<1;0>   grf<1;0>     grf<0>      */
+   0b101100000001100000001, /*           grf<1;0>   grf<1;0>     grf<1>      */
+   0b100100000001100000001, /*           grf<1;0>   grf<1;0>     grf<0>      */
+   0b101100000000100000001, /*           grf<1;0>   grf<0;0>     grf<1>      */
+   0b101100000001100001001, /*          -grf<1;0>   grf<1;0>     grf<1>      */
+   0b101000000001100000001, /*           grf<1;0>   arf<1;0>     grf<1>      */
+   0b101100000001100000000, /*           grf<0;0>   grf<1;0>     grf<1>      */
+   0b100000000001100000000, /*           grf<0;0>   arf<1;0>     grf<0>      */
+   0b101100000101100000001, /*           grf<1;0>   grf<1;0>    -grf<1>      */
+   0b101100010001100000001, /*           grf<1;0>  -grf<1;0>     grf<1>      */
+   0b101100000000100000000, /*           grf<0;0>   grf<0;0>     grf<1>      */
+   0b100000000001100000001, /*           grf<1;0>   arf<1;0>     grf<0>      */
+   0b100100010001100000000, /*           grf<0;0>  -grf<1;0>     grf<0>      */
+   0b100100010001100000001, /*           grf<1;0>  -grf<1;0>     grf<0>      */
+   0b100100000001100001001, /*          -grf<1;0>   grf<1;0>     grf<0>      */
+   0b100100000000100000001, /*           grf<1;0>   grf<0;0>     grf<0>      */
+   0b100100000001100001000, /*          -grf<0;0>   grf<1;0>     grf<0>      */
+   0b100100000000100000000, /*           grf<0;0>   grf<0;0>     grf<0>
+                             * dpas.*x1  grf:d      grf:[ub,b]   grf:[ub,b]
+                             * dpas.*x1  grf:f      grf:bf       grf:bf
+                             */
+   0b101100010001100000000, /*           grf<0;0>  -grf<1;0>     grf<1>      */
+   0b100100000101100000000, /*           grf<0;0>   grf<1;0>    -grf<0>      */
+   0b101000000001100000000, /*           grf<0;0>   arf<1;0>     grf<1>      */
+   0b100100000101100000001, /*           grf<1;0>   grf<1;0>    -grf<0>      */
+   0b101100000101100001001, /*          -grf<1;0>   grf<1;0>    -grf<1>      */
+   0b100100010000100000000, /* dpas.*x1  grf:d      grf:[u2,s2]  grf:[ub,b]  */
+   0b100100000100100000000, /* dpas.*x1  grf:d      grf:[ub,b]   grf:[u2,s2] */
+   0b100100010100100000000, /* dpas.*x1  grf:d      grf:[u2,s2]  grf:[u2,s2] */
+   0b100100001000100000000, /* dpas.*x1  grf:d      grf:[u4,s4]  grf:[ub,b]  */
+   0b100100001100100000000, /* dpas.*x1  grf:d      grf:[u4,s4]  grf:[u2,s2] */
+   0b100100000010100000000, /* dpas.*x1  grf:d      grf:[ub,b]   grf:[u4,s4] */
+   0b100100001010100000000, /* dpas.*x1  grf:d      grf:[u4,s4]  grf:[u4,s4] */
+   0b100100010010100000000, /* dpas.*x1  grf:d      grf:[u2,s2]  grf:[u4,s4] */
 };
 
 static const uint32_t gen12_3src_subreg_table[32] = {
@@ -1150,7 +1261,34 @@ set_3src_control_index(const struct gen_device_info *devinfo,
 {
    assert(devinfo->gen >= 8);
 
-   if (devinfo->gen >= 12) {
+   if (devinfo->is_arctic_sound) {
+      uint64_t uncompacted =             /* 37b/ATS+ */
+         (brw_inst_bits(src, 95, 92) << 33) | /*  4b */
+         (brw_inst_bits(src, 90, 88) << 30) | /*  3b */
+         (brw_inst_bits(src, 82, 80) << 27) | /*  3b */
+         (brw_inst_bits(src, 50, 50) << 26) | /*  1b */
+         (brw_inst_bits(src, 49, 48) << 24) | /*  2b */
+         (brw_inst_bits(src, 42, 40) << 21) | /*  3b */
+         (brw_inst_bits(src, 39, 39) << 20) | /*  1b */
+         (brw_inst_bits(src, 38, 36) << 17) | /*  3b */
+         (brw_inst_bits(src, 34, 34) << 16) | /*  1b */
+         (brw_inst_bits(src, 33, 33) << 15) | /*  1b */
+         (brw_inst_bits(src, 32, 32) << 14) | /*  1b */
+         (brw_inst_bits(src, 31, 31) << 13) | /*  1b */
+         (brw_inst_bits(src, 28, 28) << 12) | /*  1b */
+         (brw_inst_bits(src, 27, 24) <<  8) | /*  4b */
+         (brw_inst_bits(src, 23, 23) <<  7) | /*  1b */
+         (brw_inst_bits(src, 22, 22) <<  6) | /*  1b */
+         (brw_inst_bits(src, 21, 19) <<  3) | /*  3b */
+         (brw_inst_bits(src, 18, 16));        /*  3b */
+
+      for (unsigned i = 0; i < ARRAY_SIZE(ats_3src_control_index_table); i++) {
+         if (ats_3src_control_index_table[i] == uncompacted) {
+            brw_compact_inst_set_3src_control_index(devinfo, dst, i);
+            return true;
+         }
+      }
+   } else if (devinfo->gen >= 12) {
       uint64_t uncompacted =             /* 36b/TGL+ */
          (brw_inst_bits(src, 95, 92) << 32) | /*  4b */
          (brw_inst_bits(src, 90, 88) << 29) | /*  3b */
@@ -1222,8 +1360,14 @@ set_3src_source_index(const struct gen_device_info *devinfo,
          (brw_inst_bits(src,  43,  43) <<  1) | /*  1b */
          (brw_inst_bits(src,  35,  35));        /*  1b */
 
-      for (unsigned i = 0; i < ARRAY_SIZE(gen12_3src_source_index_table); i++) {
-         if (gen12_3src_source_index_table[i] == uncompacted) {
+      const uint32_t *three_src_source_index_table = devinfo->is_arctic_sound ?
+         ats_3src_source_index_table : gen12_3src_source_index_table;
+      const uint32_t three_src_source_index_table_len =
+         devinfo->is_arctic_sound ? ARRAY_SIZE(ats_3src_source_index_table) :
+                                    ARRAY_SIZE(gen12_3src_source_index_table);
+
+      for (unsigned i = 0; i < three_src_source_index_table_len; i++) {
+         if (three_src_source_index_table[i] == uncompacted) {
             brw_compact_inst_set_3src_source_index(devinfo, dst, i);
             return true;
          }
@@ -2155,14 +2299,22 @@ brw_init_compaction_tables(const struct gen_device_info *devinfo)
    assert(gen12_subreg_table[ARRAY_SIZE(gen12_subreg_table) - 1] != 0);
    assert(gen12_src0_index_table[ARRAY_SIZE(gen12_src0_index_table) - 1] != 0);
    assert(gen12_src1_index_table[ARRAY_SIZE(gen12_src1_index_table) - 1] != 0);
+   assert(ats_src0_index_table[ARRAY_SIZE(ats_src0_index_table) - 1] != 0);
+   assert(ats_src1_index_table[ARRAY_SIZE(ats_src1_index_table) - 1] != 0);
 
    switch (devinfo->gen) {
    case 12:
       control_index_table = gen12_control_index_table;;
       datatype_table = gen12_datatype_table;
       subreg_table = gen12_subreg_table;
-      src0_index_table = gen12_src0_index_table;
-      src1_index_table = gen12_src1_index_table;
+
+      if (devinfo->is_arctic_sound) {
+         src0_index_table = ats_src0_index_table;
+         src1_index_table = ats_src1_index_table;
+      } else {
+         src0_index_table = gen12_src0_index_table;
+         src1_index_table = gen12_src1_index_table;
+      }
       break;
    case 11:
       control_index_table = gen8_control_index_table;

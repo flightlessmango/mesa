@@ -545,6 +545,8 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 
 #if GEN_GEN >= 7
+   const bool info_has_aux_surf = info->aux_surf && info->aux_surf->size_B > 0;
+
    if (info->aux_usage != ISL_AUX_USAGE_NONE) {
       /* Check valid aux usages per-gen */
       if (GEN_GEN >= 12) {
@@ -567,10 +569,10 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 
       if (GEN_GEN >= 12) {
          /* We don't need an auxiliary surface for CCS on gen12+ */
-         assert (info->aux_usage == ISL_AUX_USAGE_CCS_E || info->aux_surf);
+         assert (info->aux_usage == ISL_AUX_USAGE_CCS_E || info_has_aux_surf);
       } else {
          /* We must have an auxiliary surface */
-         assert(info->aux_surf);
+         assert(info_has_aux_surf);
       }
 
       /* The docs don't appear to say anything whatsoever about compression
@@ -605,7 +607,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
    }
 
-   if (info->aux_surf) {
+   if (info_has_aux_surf) {
       assert(info->aux_usage != ISL_AUX_USAGE_NONE);
 
       if (GEN_GEN >= 12) {

@@ -1428,12 +1428,16 @@ anv_image_fill_surface_state(struct anv_device *device,
       }
       state_inout->clear_address = clear_address;
 
+      const bool state_needs_aux_surf = aux_usage != ISL_AUX_USAGE_NONE &&
+         !(device->info.gen >= 12 && aux_usage == ISL_AUX_USAGE_CCS_E);
+
       isl_surf_fill_state(&device->isl_dev, state_inout->state.map,
                           .surf = isl_surf,
                           .view = &view,
                           .address = anv_address_physical(state_inout->address),
                           .clear_color = *clear_color,
-                          .aux_surf = &aux_surface->isl,
+                          .aux_surf = state_needs_aux_surf ?
+                                      &aux_surface->isl : NULL,
                           .aux_usage = aux_usage,
                           .aux_address = anv_address_physical(aux_address),
                           .clear_address = anv_address_physical(clear_address),

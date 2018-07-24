@@ -1390,9 +1390,13 @@ blorp_emit_surface_state(struct blorp_batch *batch,
    const bool use_clear_address =
       GEN_GEN >= 10 && (surface->clear_color_addr.buffer != NULL);
 
+   const bool state_needs_aux_surf = aux_usage != ISL_AUX_USAGE_NONE &&
+      !(GEN_GEN >= 12 && aux_usage == ISL_AUX_USAGE_CCS_E);
+
    isl_surf_fill_state(batch->blorp->isl_dev, state,
                        .surf = &surf, .view = &surface->view,
-                       .aux_surf = aux_surf, .aux_usage = aux_usage,
+                       .aux_surf = state_needs_aux_surf ? aux_surf : NULL,
+                       .aux_usage = aux_usage,
                        .address =
                           blorp_get_surface_address(batch, surface->addr),
                        .aux_address = aux_usage == ISL_AUX_USAGE_NONE ? 0 :

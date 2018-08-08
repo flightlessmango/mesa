@@ -395,6 +395,15 @@ static const struct engine {
       .status_reg = EXECLIST_STATUS_BCSUNIT,
       .control_reg = EXECLIST_CONTROL_BCSUNIT,
    },
+   [I915_ENGINE_CLASS_COMPUTE] = {
+      .name = "COMPUTE",
+      .engine_class = I915_ENGINE_CLASS_COMPUTE,
+      .hw_class = 1,
+      .elsp_reg = EXECLIST_SUBMITPORT_CCSUNIT,
+      .elsq_reg = EXECLIST_SQ_CONTENTS0_CCSUNIT,
+      .status_reg = EXECLIST_STATUS_CCSUNIT,
+      .control_reg = EXECLIST_CONTROL_CCSUNIT,
+   },
 };
 
 static const struct engine *
@@ -404,10 +413,18 @@ engine_from_engine_class(enum drm_i915_gem_engine_class engine_class)
    case I915_ENGINE_CLASS_RENDER:
    case I915_ENGINE_CLASS_COPY:
    case I915_ENGINE_CLASS_VIDEO:
+   case I915_ENGINE_CLASS_COMPUTE:
       return &engines[engine_class];
    default:
       unreachable("unknown ring");
    }
+}
+
+static void
+noop_context_init(const struct gen_context_parameters *params, uint32_t *data,
+                  uint32_t *size)
+{
+   *size = 0;
 }
 
 static void
@@ -421,19 +438,29 @@ get_context_init(const struct gen_device_info *devinfo,
       [I915_ENGINE_CLASS_RENDER] = gen8_render_context_init,
       [I915_ENGINE_CLASS_COPY] = gen8_blitter_context_init,
       [I915_ENGINE_CLASS_VIDEO] = gen8_video_context_init,
+      [I915_ENGINE_CLASS_COMPUTE] = noop_context_init,
    };
    static const gen_context_init_t gen10_contexts[] = {
       [I915_ENGINE_CLASS_RENDER] = gen10_render_context_init,
       [I915_ENGINE_CLASS_COPY] = gen10_blitter_context_init,
       [I915_ENGINE_CLASS_VIDEO] = gen10_video_context_init,
+      [I915_ENGINE_CLASS_COMPUTE] = noop_context_init,
+   };
+   static const gen_context_init_t gen12_contexts[] = {
+      [I915_ENGINE_CLASS_RENDER] = gen10_render_context_init,
+      [I915_ENGINE_CLASS_COPY] = gen10_blitter_context_init,
+      [I915_ENGINE_CLASS_VIDEO] = gen10_video_context_init,
+      [I915_ENGINE_CLASS_COMPUTE] = gen12_compute_context_init,
    };
 
    assert(devinfo->gen >= 8);
 
-   if (devinfo->gen <= 10)
-      gen8_contexts[engine_class](params, data, size);
-   else
+   if (devinfo->gen >= 12)
+      gen12_contexts[engine_class](params, data, size);
+   else if (devinfo->gen >= 10)
       gen10_contexts[engine_class](params, data, size);
+   else
+      gen8_contexts[engine_class](params, data, size);
 }
 
 static uint32_t
@@ -506,14 +533,22 @@ write_execlists_default_setup(struct aub_file *aub)
    write_engine_execlist_setup(aub, I915_ENGINE_CLASS_RENDER);
    write_engine_execlist_setup(aub, I915_ENGINE_CLASS_COPY);
    write_engine_execlist_setup(aub, I915_ENGINE_CLASS_VIDEO);
+   if (aub->devinfo.gen >= 12)
+      write_engine_execlist_setup(aub, I915_ENGINE_CLASS_COMPUTE);
 
    register_write_out(aub, HWS_PGA_RCSUNIT, aub->engine_setup[I915_ENGINE_CLASS_RENDER].pphwsp_addr);
    register_write_out(aub, HWS_PGA_VCSUNIT0, aub->engine_setup[I915_ENGINE_CLASS_VIDEO].pphwsp_addr);
    register_write_out(aub, HWS_PGA_BCSUNIT, aub->engine_setup[I915_ENGINE_CLASS_COPY].pphwsp_addr);
+   if (aub->devinfo.gen >= 12) {
+      register_write_out(aub, HWS_PGA_BCSUNIT,
+                         aub->engine_setup[I915_ENGINE_CLASS_COMPUTE].pphwsp_addr);
+   }
 
    register_write_out(aub, GFX_MODE_RCSUNIT, 0x80008000 /* execlist enable */);
    register_write_out(aub, GFX_MODE_VCSUNIT0, 0x80008000 /* execlist enable */);
    register_write_out(aub, GFX_MODE_BCSUNIT, 0x80008000 /* execlist enable */);
+   if (aub->devinfo.gen >= 12)
+      register_write_out(aub, GFX_MODE_CCSUNIT, 0x80008000 /* execlist enable */);
 }
 
 static void write_legacy_default_setup(struct aub_file *aub)
@@ -723,9 +758,10 @@ aub_dump_ring_buffer_legacy(struct aub_file *aub,
    unsigned aub_mi_bbs_len;
    int ring_count = 0;
    static const int engine_class_to_ring[] = {
-      [I915_ENGINE_CLASS_RENDER] = AUB_TRACE_TYPE_RING_PRB0,
-      [I915_ENGINE_CLASS_VIDEO]  = AUB_TRACE_TYPE_RING_PRB1,
-      [I915_ENGINE_CLASS_COPY]   = AUB_TRACE_TYPE_RING_PRB2,
+      [I915_ENGINE_CLASS_RENDER]  = AUB_TRACE_TYPE_RING_PRB0,
+      [I915_ENGINE_CLASS_VIDEO]   = AUB_TRACE_TYPE_RING_PRB1,
+      [I915_ENGINE_CLASS_COPY]    = AUB_TRACE_TYPE_RING_PRB2,
+      [I915_ENGINE_CLASS_COMPUTE] = AUB_TRACE_TYPE_RING_PRB3,
    };
    int ring = engine_class_to_ring[engine_class];
 

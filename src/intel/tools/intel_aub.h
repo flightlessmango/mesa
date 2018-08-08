@@ -89,6 +89,7 @@
 #define AUB_TRACE_TYPE_RING_PRB0	(2 << 8)
 #define AUB_TRACE_TYPE_RING_PRB1	(3 << 8)
 #define AUB_TRACE_TYPE_RING_PRB2	(4 << 8)
+#define AUB_TRACE_TYPE_RING_PRB3	(5 << 8)
 
 // Address space
 #define AUB_TRACE_ADDRESS_SPACE_MASK	0x00ff0000

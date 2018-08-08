@@ -103,8 +103,8 @@ configure_file(
 libintel_dump_gpu = shared_library(
   'intel_dump_gpu',
   files(
-    'gen_context.h', 'gen8_context.h', 'gen10_context.h', 'intel_aub.h',
-    'aub_write.h', 'aub_write.c', 'intel_dump_gpu.c',
+    'gen_context.h', 'gen8_context.h', 'gen10_context.h', 'gen12_context.h',
+    'intel_aub.h', 'aub_write.h', 'aub_write.c', 'intel_dump_gpu.c',
   ),
   dependencies : dep_dl,
   include_directories : [inc_common, inc_intel, inc_include],

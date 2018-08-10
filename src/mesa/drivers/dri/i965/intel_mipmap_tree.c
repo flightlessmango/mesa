@@ -906,8 +906,6 @@ intel_miptree_create_for_dri_image(struct brw_context *brw,
     */
    image->bo->cache_coherent = false;
 
-   map_miptree_aux_addresses(brw, mt);
-
    return mt;
 }
 

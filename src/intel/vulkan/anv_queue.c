@@ -131,7 +131,7 @@ VkResult anv_QueueSubmit(
     * the kernel to kick us or we'll have to wait until the client waits on a
     * fence before we actually know whether or not we've hung.
     */
-   VkResult result = anv_device_query_status(device);
+   VkResult result = anv_queue_query_status(queue);
    if (result != VK_SUCCESS)
       return result;
 

@@ -908,6 +908,11 @@ VkResult anv_CreateCommandPool(
    if (pool == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
+   assert(pCreateInfo->queueFamilyIndex < ANV_MAX_QUEUE_FAMILIES);
+   assert(device->queue[pCreateInfo->queueFamilyIndex].queue_family <
+          ANV_MAX_QUEUE_FAMILIES);
+   pool->queue_family = device->queue[pCreateInfo->queueFamilyIndex].queue_family;
+
    if (pAllocator)
       pool->alloc = *pAllocator;
    else

@@ -203,6 +203,12 @@ struct gen_l3_config;
  */
 #define ANV_PREDICATE_RESULT_REG 0x2678 /* MI_ALU_REG15 */
 
+enum anv_queue_family {
+   ANV_RENDER_QUEUE_FAMILY,
+   ANV_COMPUTE_QUEUE_FAMILY,
+   ANV_MAX_QUEUE_FAMILIES,
+};
+
 #define anv_printflike(a, b) __attribute__((__format__(__printf__, a, b)))
 
 static inline uint32_t
@@ -932,6 +938,7 @@ struct anv_physical_device {
        uint8_t                                  function;
     }                                           pci_info;
     struct gen_device_info                      info;
+    enum anv_queue_family                       queue_map[ANV_MAX_QUEUE_FAMILIES];
     /** Amount of "GPU memory" we want to advertise
      *
      * Clearly, this value is bogus since Intel is a UMA architecture.  On
@@ -1032,6 +1039,8 @@ struct anv_queue {
     struct anv_device *                         device;
 
     uint32_t                                    exec_flags;
+
+    enum anv_queue_family                       queue_family;
 
     VkDeviceQueueCreateFlags                    flags;
 };
@@ -1151,7 +1160,8 @@ struct anv_device {
 
     struct anv_state                            slice_hash;
 
-    struct anv_queue                            queue;
+    uint32_t                                    num_queues[ANV_MAX_QUEUE_FAMILIES];
+    struct anv_queue                            *queue;
 
     struct anv_scratch_pool                     scratch_pool;
 
@@ -1226,6 +1236,8 @@ VkResult anv_device_query_status(struct anv_device *device);
 VkResult anv_device_bo_busy(struct anv_device *device, struct anv_bo *bo);
 VkResult anv_device_wait(struct anv_device *device, struct anv_bo *bo,
                          int64_t timeout);
+
+VkResult anv_queue_query_status(struct anv_queue *queue);
 
 void* anv_gem_mmap(struct anv_device *device,
                    uint32_t gem_handle, uint64_t offset, uint64_t size, uint32_t flags);
@@ -2479,6 +2491,7 @@ struct anv_cmd_state {
 struct anv_cmd_pool {
    VkAllocationCallbacks                        alloc;
    struct list_head                             cmd_buffers;
+   enum anv_queue_family                        queue_family;
 };
 
 #define ANV_CMD_BUFFER_BATCH_SIZE 8192

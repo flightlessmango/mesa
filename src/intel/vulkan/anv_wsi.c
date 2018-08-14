@@ -251,7 +251,8 @@ VkResult anv_AcquireNextImage2KHR(
     * should wait for the current GPU state to finish.
     */
    if (pAcquireInfo->fence != VK_NULL_HANDLE) {
-      anv_QueueSubmit(anv_queue_to_handle(&device->queue), 0, NULL,
+      struct anv_queue *queue = &device->queue[ANV_RENDER_QUEUE_FAMILY];
+      anv_QueueSubmit(anv_queue_to_handle(queue), 0, NULL,
                       pAcquireInfo->fence);
    }
 

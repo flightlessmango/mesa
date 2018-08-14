@@ -314,6 +314,13 @@ anv_gem_has_context_priority(int fd)
 int
 anv_gem_create_context(struct anv_device *device)
 {
+   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
+      /* We need GEM_CONTEXT_CREATE_EXT support, but it'll be added later */
+      if (device->num_queues[i] > 1 ||
+          (i != ANV_RENDER_QUEUE_FAMILY && device->num_queues[i] > 0))
+         return -1;
+   }
+
    struct drm_i915_gem_context_create create = { 0 };
 
    int ret = gen_ioctl(device->fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE, &create);

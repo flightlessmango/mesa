@@ -264,11 +264,12 @@ anv_dump_image_to_ppm(struct anv_device *device,
    struct dump_image dump;
    dump_image_init(device, &dump, width, height, filename);
 
+   const uint32_t family = 0;
    VkCommandPool commandPool;
    result = anv_CreateCommandPool(vk_device,
       &(VkCommandPoolCreateInfo) {
          .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-         .queueFamilyIndex = 0,
+         .queueFamilyIndex = family,
          .flags = 0,
       }, NULL, &commandPool);
    assert(result == VK_SUCCESS);
@@ -304,7 +305,7 @@ anv_dump_image_to_ppm(struct anv_device *device,
       }, NULL, &fence);
    assert(result == VK_SUCCESS);
 
-   result = anv_QueueSubmit(anv_queue_to_handle(&device->queue), 1,
+   result = anv_QueueSubmit(anv_queue_to_handle(&device->queue[family]), 1,
       &(VkSubmitInfo) {
          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
          .commandBufferCount = 1,

@@ -3537,6 +3537,22 @@ use_intel_mipree_map_blit(struct brw_context *brw,
    return false;
 }
 
+static void
+intel_miptree_map_cpu(struct brw_context *brw,
+                      struct intel_mipmap_tree *mt,
+                      struct intel_miptree_map *map,
+                      uint32_t level,
+                      uint32_t slice)
+{
+   intel_miptree_access_raw(brw, mt, level, slice,
+                            map->mode & GL_MAP_WRITE_BIT);
+   if (mt->surf.tiling != ISL_TILING_LINEAR) {
+      intel_miptree_map_tiled_memcpy(brw, mt, map, level, slice);
+   } else {
+      intel_miptree_map_map(brw, mt, map, level, slice);
+   }
+}
+
 /**
  * Parameter \a out_stride has type ptrdiff_t not because the buffer stride may
  * exceed 32 bits but to diminish the likelihood subtle bugs in pointer
@@ -3591,7 +3607,7 @@ intel_miptree_map(struct brw_context *brw,
    } else {
       if (mt->surf.tiling != ISL_TILING_LINEAR)
          perf_debug("intel_miptree_map: mapping via gtt");
-      intel_miptree_map_map(brw, mt, map, level, slice);
+      intel_miptree_map_cpu(brw, mt, map, level, slice);
    }
 
    *out_ptr = map->ptr;

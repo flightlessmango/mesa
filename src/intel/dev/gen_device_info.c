@@ -1057,6 +1057,7 @@ static const struct gen_device_info gen_device_info_tgl_1x6x16 = {
 #define GEN12_5_FEATURES(_gt, _slices, _subslices, _l3) \
    GEN8_FEATURES,                                       \
    GEN12_HW_INFO,                                       \
+   .has_llc = false,                                    \
    .has_64bit_types = true,                             \
    .has_integer_dword_mul = false,                      \
    .gt = _gt, .num_slices = _slices, .l3_banks = _l3,   \

@@ -484,6 +484,12 @@ make_surface(const struct anv_device *dev,
             if (!(image->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
                 image->ccs_e_compatible) {
                image->planes[plane].aux_usage = ISL_AUX_USAGE_CCS_E;
+            } else if (dev->info.gen >= 12) {
+               anv_perf_warn(dev->instance, image,
+                             "CCS_D is not yet handled on gen12+ "
+                             "Not allocating an CCS buffer.");
+               image->planes[plane].aux_surface.isl.size_B = 0;
+               return VK_SUCCESS;
             }
          }
       }

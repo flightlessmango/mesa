@@ -783,7 +783,8 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
       if (isl_format_supports_ccs_e(devinfo, res->surf.format))
          res->aux.possible_usages |= 1 << ISL_AUX_USAGE_CCS_E;
 
-      if (isl_format_supports_ccs_d(devinfo, res->surf.format))
+      if (isl_format_supports_ccs_d(devinfo, res->surf.format) &&
+          devinfo->gen <= 11)
          res->aux.possible_usages |= 1 << ISL_AUX_USAGE_CCS_D;
    }
 

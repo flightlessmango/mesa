@@ -1568,6 +1568,7 @@ compact_immediate(const struct gen_device_info *devinfo,
          if ((imm & 0xf) == 0)
             return (imm >> 4) & 0xfff;
          break;
+      case BRW_REGISTER_TYPE_UQ:
       case BRW_REGISTER_TYPE_UD:
       case BRW_REGISTER_TYPE_VF:
       case BRW_REGISTER_TYPE_UV:
@@ -1581,6 +1582,7 @@ compact_immediate(const struct gen_device_info *devinfo,
          if ((imm & 0xf000) == 0)
             return imm & 0xfff;
          break;
+      case BRW_REGISTER_TYPE_Q:
       case BRW_REGISTER_TYPE_D:
          /* We get the low 11-bits as-is; 12th is replicated */
          if (((int)imm >> 11) == 0 || ((int)imm >> 11) == -1)
@@ -1593,8 +1595,6 @@ compact_immediate(const struct gen_device_info *devinfo,
          break;
       case BRW_REGISTER_TYPE_NF:
       case BRW_REGISTER_TYPE_DF:
-      case BRW_REGISTER_TYPE_Q:
-      case BRW_REGISTER_TYPE_UQ:
       case BRW_REGISTER_TYPE_B:
       case BRW_REGISTER_TYPE_UB:
          unreachable("not reached");

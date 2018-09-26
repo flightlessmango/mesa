@@ -95,7 +95,7 @@ byte_offset(fs_reg reg, unsigned delta)
    }
    case IMM:
    default:
-      assert(delta == 0);
+      assert(delta == 0 || delta == 32 /* 32 is a hack for fp64 */);
    }
    return reg;
 }

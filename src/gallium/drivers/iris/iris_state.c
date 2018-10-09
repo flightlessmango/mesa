@@ -4648,6 +4648,19 @@ iris_update_surface_base_address(struct iris_batch *batch,
 #endif
    }
 
+#if GEN_GEN >= 12
+   if (GEN_GEN > 12 || batch->screen->devinfo.is_arctic_sound) {
+      iris_emit_cmd(batch, GENX(3DSTATE_BINDING_TABLE_POOL_ALLOC), btpa) {
+         btpa.BindingTablePoolBaseAddress = ro_bo(binder->bo, 0);
+         /* The pool size is based on the Binding Table Pointer, which only
+          * has 21 bits (20:5), but we specify the size here in multiples of
+          * 4K pages.
+          */
+         btpa.BindingTablePoolBufferSize = 1 << (21 - 12);
+      }
+   }
+#endif
+
    flush_after_state_base_change(batch);
 
    batch->last_surface_base_address = binder->bo->gtt_offset;

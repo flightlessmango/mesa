@@ -829,6 +829,33 @@ brw_upload_state_base_address(struct brw_context *brw)
          OUT_BATCH(0);
       }
       ADVANCE_BATCH();
+      if (devinfo->gen >= 12) {
+         /* Starting on gen11, we can enable the Binding Table Pool to make the
+          * Binding Table Pointers be an offset based on the Binding Table Pool
+          * Address. Then on gen12, that's not an option anymore, and the
+          * Binding Table Pool is always enabled. From the description of
+          * 3DSTATE_BINDING_TABLE_POOL_ALLOC:
+          *
+          *    This command is to program the base address and size of the
+          *    binding table pool. The address to fetch the binding table is
+          *    based on the Binding Table Pool Base Address and the binding
+          *    table pointer if the Binding Table Pool is enabled. Otherwise
+          *    the binding table pointer is an offset from the Surface Base
+          *    Address.
+          *
+          * So let's make sure we 3DSTATE_BINDING_TABLE_POOL_ALLOC and
+          * everything should work as before.
+          */
+         BEGIN_BATCH(4);
+         OUT_BATCH(_3DSTATE_BINDING_TABLE_POOL_ALLOC << 16 | (4 - 2));
+         OUT_RELOC64(brw->batch.state.bo, RELOC_32BIT, mocs_wb);
+         /* The pool size is based on the Binding Table Pointer, which only has
+          * 21 bits (20:5), but we specify the size here in multiples of 4K
+          * pages.
+          */
+         OUT_BATCH(1 << (21 - 12));
+         ADVANCE_BATCH();
+      }
    } else if (devinfo->gen >= 6) {
       uint8_t mocs = devinfo->gen == 7 ? GEN7_MOCS_L3 : 0;
 

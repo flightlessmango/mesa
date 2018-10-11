@@ -1056,6 +1056,7 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
 
       if ((tex->op == nir_texop_txf && options->lower_txf_offset) ||
           (sat_mask && nir_tex_instr_src_index(tex, nir_tex_src_coord) >= 0) ||
+          (tex->op == nir_texop_tg4 && options->lower_tg4_offset) ||
           (tex->sampler_dim == GLSL_SAMPLER_DIM_RECT &&
            options->lower_rect_offset)) {
          progress = lower_offset(b, tex) || progress;

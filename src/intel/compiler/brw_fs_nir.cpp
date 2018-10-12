@@ -5380,6 +5380,11 @@ fs_visitor::nir_emit_texture(const fs_builder &bld, nir_tex_instr *instr)
          if (brw_texture_offset(instr, i, &offset_bits)) {
             header_bits |= offset_bits;
          } else {
+            /* On gen9+, if the offsets are not both constant and in the {-8,7}
+             * range, we will have already lowered them to resinfo + offset in
+             * nir_lower_tex_block(). So we should never reach this point.
+             */
+            assert(devinfo->gen < 9);
             srcs[TEX_LOGICAL_SRC_TG4_OFFSET] =
                retype(src, BRW_REGISTER_TYPE_D);
          }

@@ -670,6 +670,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    const nir_lower_tex_options tex_options = {
       .lower_txp = ~0,
       .lower_tg4_offset = devinfo->gen >= 9,
+      .lower_tg4_offset_if_not_basic = devinfo->gen >= 9,
       .lower_txf_offset = true,
       .lower_rect_offset = true,
       .lower_tex_without_implicit_lod = true,

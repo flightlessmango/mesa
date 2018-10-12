@@ -1025,6 +1025,20 @@ nir_lower_txs_lod(nir_builder *b, nir_tex_instr *tex)
 }
 
 static bool
+offsets_require_lowering(nir_tex_instr *tex)
+{
+   int offset_index = nir_tex_instr_src_index(tex, nir_tex_src_offset);
+   if (offset_index < 0)
+      return false;
+
+   assert(tex->src[offset_index].src.is_ssa);
+
+   nir_const_value *offset =
+      nir_src_as_const_value(tex->src[offset_index].src);
+   return !offset || (offset[0].u32 & ~0xf) || (offset[1].u32 & ~0xf);
+}
+
+static bool
 nir_lower_tex_block(nir_block *block, nir_builder *b,
                     const nir_lower_tex_options *options)
 {
@@ -1054,9 +1068,14 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
          progress |= project_src(b, tex);
       }
 
+      bool tg4_offset_needs_lowering = true;
+      if (options->lower_tg4_offset && options->lower_tg4_offset_if_not_basic)
+         tg4_offset_needs_lowering = offsets_require_lowering(tex);
+
       if ((tex->op == nir_texop_txf && options->lower_txf_offset) ||
           (sat_mask && nir_tex_instr_src_index(tex, nir_tex_src_coord) >= 0) ||
-          (tex->op == nir_texop_tg4 && options->lower_tg4_offset) ||
+          (tex->op == nir_texop_tg4 && options->lower_tg4_offset &&
+           tg4_offset_needs_lowering) ||
           (tex->sampler_dim == GLSL_SAMPLER_DIM_RECT &&
            options->lower_rect_offset)) {
          progress = lower_offset(b, tex) || progress;

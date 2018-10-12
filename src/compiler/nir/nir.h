@@ -3756,6 +3756,16 @@ typedef struct nir_lower_tex_options {
    bool lower_tg4_offset;
 
    /**
+    * If true, only lower away nir_tex_src_offset for tg4 instructions if the
+    * offsets are not constant and 4 bits each.
+    *
+    * This option only restricts the cases where the offsets are lowered when
+    * the lower_tg4_offset option is enabled. The backend can do something
+    * smarter in those cases.
+    */
+   bool lower_tg4_offset_if_not_basic;
+
+   /**
     * If true, lower rect textures to 2D, using txs to fetch the
     * texture dimensions and dividing the texture coords by the
     * texture dims to normalize.

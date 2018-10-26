@@ -245,6 +245,7 @@ enum blorp_shader_type {
 struct brw_blorp_blit_prog_key
 {
    enum blorp_shader_type shader_type; /* Must be BLORP_SHADER_TYPE_BLIT */
+   bool compute_program;
 
    /* Number of samples per pixel that have been configured in the surface
     * state for texturing from.

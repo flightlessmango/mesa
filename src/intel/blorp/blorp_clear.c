@@ -37,6 +37,7 @@
 struct brw_blorp_const_color_prog_key
 {
    enum blorp_shader_type shader_type; /* Must be BLORP_SHADER_TYPE_CLEAR */
+   bool compute_program;
    bool use_simd16_replicated_data;
    bool clear_rgb_as_red;
    bool pad[3];
@@ -52,6 +53,7 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
 
    const struct brw_blorp_const_color_prog_key blorp_key = {
       .shader_type = BLORP_SHADER_TYPE_CLEAR,
+      .compute_program = false,
       .use_simd16_replicated_data = use_replicated_data,
       .clear_rgb_as_red = clear_rgb_as_red,
    };

@@ -250,6 +250,72 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
    return program;
 }
 
+static void
+setup_cs_uniforms(struct nir_shader *nir, uint32_t *param,
+                  unsigned int nr_params)
+{
+   nir_foreach_variable(var, &nir->uniforms) {
+      unsigned int slot = var->data.driver_location / 4;
+      unsigned int start = var->data.location;
+      assert(start % 4 == 0);
+      start = start / 4;
+      unsigned int dwords =
+         DIV_ROUND_UP(type_size_scalar_bytes(var->type, false), 4);
+      for (unsigned int i = 0; i < dwords; i++) {
+         param[slot + i] = 0x10000 | (start + i);
+      }
+   }
+}
+
+const unsigned *
+blorp_compile_cs(struct blorp_context *blorp, void *mem_ctx,
+                 struct nir_shader *nir,
+                 struct brw_cs_prog_key *cs_key,
+                 struct brw_cs_prog_data *cs_prog_data)
+{
+   const struct brw_compiler *compiler = blorp->compiler;
+
+   nir->options =
+      compiler->glsl_compiler_options[MESA_SHADER_COMPUTE].NirOptions;
+
+   memset(cs_prog_data, 0, sizeof(*cs_prog_data));
+
+   cs_prog_data->base.nr_params = 0;
+   cs_prog_data->base.param = NULL;
+
+   /* BLORP always uses the first two binding table entries:
+    * - Surface 0 is the render target (which always start from 0)
+    * - Surface 1 is the source texture
+    */
+   cs_prog_data->base.binding_table.texture_start = BLORP_TEXTURE_BT_INDEX;
+
+   brw_preprocess_nir(compiler, nir, NULL);
+   nir_remove_dead_variables(nir, nir_var_shader_in);
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+   nir_assign_var_locations(&nir->uniforms, &nir->num_uniforms,
+                            type_size_scalar_bytes);
+   nir_lower_io(nir, nir_var_uniform, type_size_scalar_bytes, 0);
+
+   unsigned nr_params = nir->num_uniforms / 4;
+   cs_prog_data->base.nr_params = nr_params;
+   cs_prog_data->base.param = rzalloc_array(NULL, uint32_t, nr_params);
+
+   setup_cs_uniforms(nir, cs_prog_data->base.param, nr_params);
+
+   const unsigned *program =
+      brw_compile_cs(compiler, blorp->driver_ctx, mem_ctx, cs_key,
+                     cs_prog_data, nir, -1, NULL, NULL);
+
+   /* We assume SIMD16 for blorp compute programs in a few places. */
+   assert(cs_prog_data->simd_size == 16);
+
+   ralloc_steal(NULL, cs_prog_data->base.param);
+   ralloc_steal(NULL, cs_prog_data->base.pull_param);
+
+   return program;
+}
+
 struct blorp_sf_key {
    enum blorp_shader_type shader_type; /* Must be BLORP_SHADER_TYPE_GEN4_SF */
 

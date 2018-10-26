@@ -573,7 +573,9 @@ blorp_clear(struct blorp_batch *batch,
    swizzle = ISL_SWIZZLE_IDENTITY;
 
    bool clear_rgb_as_red = false;
-   if (format == ISL_FORMAT_R9G9B9E5_SHAREDEXP) {
+   if (format == ISL_FORMAT_B8G8R8X8_UNORM) {
+      format = ISL_FORMAT_B8G8R8A8_UNORM;
+   } else if (format == ISL_FORMAT_R9G9B9E5_SHAREDEXP) {
       clear_color.u32[0] = float3_to_rgb9e5(clear_color.f32);
       format = ISL_FORMAT_R32_UINT;
    } else if (format == ISL_FORMAT_L8_UNORM_SRGB) {

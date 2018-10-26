@@ -315,7 +315,9 @@ genX(blorp_exec)(struct blorp_batch *batch,
    if (params->stencil.enabled)
       brw_cache_flush_for_depth(brw, params->stencil.addr.buffer);
 
-   brw_select_pipeline(brw, BRW_RENDER_PIPELINE);
+   enum brw_pipeline pipeline =
+      params->compute_program ? BRW_COMPUTE_PIPELINE : BRW_RENDER_PIPELINE;
+   brw_select_pipeline(brw, pipeline);
 
 retry:
    intel_batchbuffer_require_space(brw, 1400);
@@ -343,15 +345,18 @@ retry:
    gen8_write_pma_stall_bits(brw, 0);
 #endif
 
+   /* TODO: check if needed for params->compute_program */
    const unsigned scale = params->fast_clear_op ? UINT_MAX : 1;
    if (brw->current_hash_scale != scale) {
       brw_emit_hashing_mode(brw, params->x1 - params->x0,
                             params->y1 - params->y0, scale);
    }
 
-   blorp_emit(batch, GENX(3DSTATE_DRAWING_RECTANGLE), rect) {
-      rect.ClippedDrawingRectangleXMax = MAX2(params->x1, params->x0) - 1;
-      rect.ClippedDrawingRectangleYMax = MAX2(params->y1, params->y0) - 1;
+   if (!params->compute_program) {
+      blorp_emit(batch, GENX(3DSTATE_DRAWING_RECTANGLE), rect) {
+         rect.ClippedDrawingRectangleXMax = MAX2(params->x1, params->x0) - 1;
+         rect.ClippedDrawingRectangleYMax = MAX2(params->y1, params->y0) - 1;
+      }
    }
 
    blorp_exec(batch, params);

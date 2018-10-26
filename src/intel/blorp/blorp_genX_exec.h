@@ -1476,21 +1476,22 @@ blorp_emit_null_surface_state(struct blorp_batch *batch,
 }
 
 static void
-blorp_emit_surface_states(struct blorp_batch *batch,
-                          const struct blorp_params *params)
+blorp_alloc_surface_states(struct blorp_batch *batch,
+                           const struct blorp_params *params,
+                           uint32_t *bind_offset)
 {
    const struct isl_device *isl_dev = batch->blorp->isl_dev;
-   uint32_t bind_offset = 0, surface_offsets[2];
+   uint32_t surface_offsets[2];
    void *surface_maps[2];
 
    UNUSED bool has_indirect_clear_color = false;
    if (params->use_pre_baked_binding_table) {
-      bind_offset = params->pre_baked_binding_table_offset;
+      *bind_offset = params->pre_baked_binding_table_offset;
    } else {
       unsigned num_surfaces = 1 + params->src.enabled;
       blorp_alloc_binding_table(batch, num_surfaces,
                                 isl_dev->ss.size, isl_dev->ss.align,
-                                &bind_offset, surface_offsets, surface_maps);
+                                bind_offset, surface_offsets, surface_maps);
 
       if (params->dst.enabled) {
          blorp_emit_surface_state(batch, &params->dst,
@@ -1535,6 +1536,14 @@ blorp_emit_surface_states(struct blorp_batch *batch,
       }
    }
 #endif
+}
+
+static void
+blorp_emit_surface_states(struct blorp_batch *batch,
+                          const struct blorp_params *params)
+{
+   uint32_t bind_offset = 0;
+   blorp_alloc_surface_states(batch, params, &bind_offset);
 
 #if GEN_GEN >= 7
    blorp_emit(batch, GENX(3DSTATE_BINDING_TABLE_POINTERS_VS), bt);

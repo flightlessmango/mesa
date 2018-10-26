@@ -373,6 +373,7 @@ struct brw_blorp_blit_prog_key
  */
 
 void brw_blorp_init_wm_prog_key(struct brw_wm_prog_key *wm_key);
+void brw_blorp_init_cs_prog_key(struct brw_cs_prog_key *cs_key);
 
 const unsigned *
 blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,

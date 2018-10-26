@@ -170,6 +170,14 @@ brw_blorp_init_wm_prog_key(struct brw_wm_prog_key *wm_key)
       wm_key->base.tex.swizzles[i] = SWIZZLE_XYZW;
 }
 
+void
+brw_blorp_init_cs_prog_key(struct brw_cs_prog_key *cs_key)
+{
+   memset(cs_key, 0, sizeof(*cs_key));
+   for (int i = 0; i < MAX_SAMPLERS; i++)
+      cs_key->base.tex.swizzles[i] = SWIZZLE_XYZW;
+}
+
 const unsigned *
 blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
                  struct nir_shader *nir,

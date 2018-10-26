@@ -385,7 +385,7 @@ clear_color(struct iris_context *ice,
    blorp_clear(&blorp_batch, &surf, format, swizzle,
                level, box->z, box->depth, box->x, box->y,
                box->x + box->width, box->y + box->height,
-               color, color_write_disable);
+               color, color_write_disable, false);
 
    blorp_batch_finish(&blorp_batch);
    iris_flush_and_dirty_for_history(ice, batch, res,

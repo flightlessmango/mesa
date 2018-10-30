@@ -1642,6 +1642,9 @@ intel_miptree_alloc_aux(struct brw_context *brw,
       aux_surf_ok =
          isl_surf_get_ccs_surf(&brw->isl_dev, &mt->surf, &aux_surf, 0);
       break;
+   case ISL_AUX_USAGE_MCS_CCS:
+   case ISL_AUX_USAGE_HIZ_CCS:
+      unreachable("Not yet implemented");
    }
 
    /* We should have a valid aux_surf. */

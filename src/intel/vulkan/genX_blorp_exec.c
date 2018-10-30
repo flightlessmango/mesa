@@ -253,7 +253,10 @@ genX(blorp_exec)(struct blorp_batch *batch,
 
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
-   genX(flush_pipeline_select_3d)(cmd_buffer);
+   if (params->compute_program)
+      genX(flush_pipeline_select_gpgpu)(cmd_buffer);
+   else
+      genX(flush_pipeline_select_3d)(cmd_buffer);
 
    genX(setup_aux_map)(cmd_buffer);
 

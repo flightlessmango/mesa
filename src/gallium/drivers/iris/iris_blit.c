@@ -591,7 +591,8 @@ iris_copy_region(struct blorp_context *blorp,
       iris_batch_maybe_flush(batch, 1500);
 
       blorp_batch_init(&ice->blorp, &blorp_batch, batch, 0);
-      blorp_buffer_copy(&blorp_batch, src_addr, dst_addr, src_box->width);
+      blorp_buffer_copy(&blorp_batch, src_addr, dst_addr, src_box->width,
+                        false);
       blorp_batch_finish(&blorp_batch);
    } else {
       // XXX: what about one surface being a buffer and not the other?
@@ -617,7 +618,7 @@ iris_copy_region(struct blorp_context *blorp,
          blorp_copy(&blorp_batch, &src_surf, src_level, src_box->z + slice,
                     &dst_surf, dst_level, dstz + slice,
                     src_box->x, src_box->y, dstx, dsty,
-                    src_box->width, src_box->height);
+                    src_box->width, src_box->height, false);
       }
       blorp_batch_finish(&blorp_batch);
 

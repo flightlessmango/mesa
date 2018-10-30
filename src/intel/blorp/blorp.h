@@ -152,13 +152,15 @@ blorp_copy(struct blorp_batch *batch,
            unsigned dst_level, unsigned dst_layer,
            uint32_t src_x, uint32_t src_y,
            uint32_t dst_x, uint32_t dst_y,
-           uint32_t src_width, uint32_t src_height);
+           uint32_t src_width, uint32_t src_height,
+           bool compute);
 
 void
 blorp_buffer_copy(struct blorp_batch *batch,
                   struct blorp_address src,
                   struct blorp_address dst,
-                  uint64_t size);
+                  uint64_t size,
+                  bool compute);
 
 union isl_color_value
 swizzle_color_value(union isl_color_value src, struct isl_swizzle swizzle);

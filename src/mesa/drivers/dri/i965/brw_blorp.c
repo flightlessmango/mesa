@@ -518,7 +518,8 @@ brw_blorp_copy_miptrees(struct brw_context *brw,
    blorp_batch_init(&brw->blorp, &batch, brw, 0);
    blorp_copy(&batch, &src_surf, src_level, src_layer,
               &dst_surf, dst_level, dst_layer,
-              src_x, src_y, dst_x, dst_y, src_width, src_height);
+              src_x, src_y, dst_x, dst_y, src_width, src_height,
+              false);
    blorp_batch_finish(&batch);
 
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL |
@@ -544,7 +545,7 @@ brw_blorp_copy_buffers(struct brw_context *brw,
    struct blorp_address dst = { .buffer = dst_bo, .offset = dst_offset };
 
    blorp_batch_init(&brw->blorp, &batch, brw, 0);
-   blorp_buffer_copy(&batch, src, dst, size);
+   blorp_buffer_copy(&batch, src, dst, size, false);
    blorp_batch_finish(&batch);
 }
 

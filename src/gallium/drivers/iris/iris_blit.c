@@ -592,7 +592,7 @@ iris_copy_region(struct blorp_context *blorp,
 
       blorp_batch_init(&ice->blorp, &blorp_batch, batch, 0);
       blorp_buffer_copy(&blorp_batch, src_addr, dst_addr, src_box->width,
-                        false);
+                        batch->name == IRIS_BATCH_COMPUTE);
       blorp_batch_finish(&blorp_batch);
    } else {
       // XXX: what about one surface being a buffer and not the other?
@@ -659,7 +659,16 @@ iris_resource_copy_region(struct pipe_context *ctx,
                           const struct pipe_box *src_box)
 {
    struct iris_context *ice = (void *) ctx;
-   struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
+
+   const bool buffer_to_buffer =
+      dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER;
+   const bool compute =
+      buffer_to_buffer &&
+      unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+               blorp_buffer_copy_supports_compute(&ice->blorp));
+
+   struct iris_batch *batch =
+      &ice->batches[compute ? IRIS_BATCH_COMPUTE : IRIS_BATCH_RENDER];
 
    /* Use MI_COPY_MEM_MEM for tiny (<= 16 byte, % 4) buffer copies. */
    if (src->target == PIPE_BUFFER && dst->target == PIPE_BUFFER &&

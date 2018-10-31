@@ -514,12 +514,16 @@ brw_blorp_copy_miptrees(struct brw_context *brw,
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL |
                                     PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE);
 
+   const bool compute =
+      unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+               blorp_copy_supports_compute(&brw->blorp, &dst_surf));
+
    struct blorp_batch batch;
    blorp_batch_init(&brw->blorp, &batch, brw, 0);
    blorp_copy(&batch, &src_surf, src_level, src_layer,
               &dst_surf, dst_level, dst_layer,
               src_x, src_y, dst_x, dst_y, src_width, src_height,
-              false);
+              compute);
    blorp_batch_finish(&batch);
 
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL |
@@ -544,8 +548,12 @@ brw_blorp_copy_buffers(struct brw_context *brw,
    struct blorp_address src = { .buffer = src_bo, .offset = src_offset };
    struct blorp_address dst = { .buffer = dst_bo, .offset = dst_offset };
 
+   const bool compute =
+      unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+               blorp_buffer_copy_supports_compute(&brw->blorp));
+
    blorp_batch_init(&brw->blorp, &batch, brw, 0);
-   blorp_buffer_copy(&batch, src, dst, size, false);
+   blorp_buffer_copy(&batch, src, dst, size, compute);
    blorp_batch_finish(&batch);
 }
 

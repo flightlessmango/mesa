@@ -144,6 +144,10 @@ blorp_blit(struct blorp_batch *batch,
            enum blorp_filter filter,
            bool mirror_x, bool mirror_y);
 
+bool
+blorp_copy_supports_compute(struct blorp_context *blorp,
+                            const struct blorp_surf *dst_surf);
+
 void
 blorp_copy(struct blorp_batch *batch,
            const struct blorp_surf *src_surf,
@@ -154,6 +158,9 @@ blorp_copy(struct blorp_batch *batch,
            uint32_t dst_x, uint32_t dst_y,
            uint32_t src_width, uint32_t src_height,
            bool compute);
+
+bool
+blorp_buffer_copy_supports_compute(struct blorp_context *blorp);
 
 void
 blorp_buffer_copy(struct blorp_batch *batch,

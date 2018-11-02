@@ -393,6 +393,9 @@ bool
 blorp_ensure_sf_program(struct blorp_batch *batch,
                         struct blorp_params *params);
 
+uint8_t
+blorp_get_cs_local_y(struct blorp_params *params);
+
 const unsigned *
 blorp_compile_cs(struct blorp_context *blorp, void *mem_ctx,
                  struct nir_shader *nir,

@@ -250,6 +250,20 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
    return program;
 }
 
+uint8_t
+blorp_get_cs_local_y(struct blorp_params *params)
+{
+   uint32_t height = params->y1 - params->y0;
+   uint32_t or_ys = params->y0 | params->y1;
+   if (height > 32 || (or_ys & 3) == 0) {
+      return 4;
+   } else if ((or_ys & 1) == 0) {
+      return 2;
+   } else {
+      return 1;
+   }
+}
+
 static void
 setup_cs_uniforms(struct nir_shader *nir, uint32_t *param,
                   unsigned int nr_params)

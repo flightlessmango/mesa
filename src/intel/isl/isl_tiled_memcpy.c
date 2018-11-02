@@ -841,6 +841,28 @@ tiled_offset(uint32_t x_B, uint32_t y_px, uint32_t pitch_B,
 {
    assert(x_B < pitch_B);
    switch (tiling) {
+   case ISL_TILING_F: {
+      /* The table below represents the mapping from coordinate (x_B, y_px) to
+       * byte offset in a 128x32px 1Bpp image:
+       *
+       *    Bit ind : 11 10  9  8  7  6  5  4  3  2  1  0
+       *    Swizzle : y4 y3 x6 y2 x5 x4 y1 y0 x3 x2 x1 x0
+       */
+      const uint32_t intile = mov_bits(x_B,  4, 0,  0) |
+                              mov_bits(y_px, 2, 0,  4) |
+                              mov_bits(x_B,  2, 4,  6) |
+                              mov_bits(y_px, 1, 2,  8) |
+                              mov_bits(x_B,  1, 6,  9) |
+                              mov_bits(y_px, 2, 3, 10);
+      assert(intile < 4096);
+
+      assert(pitch_B % 128 == 0);
+      const uint32_t extile = linear_offset(x_B / 128,
+                                            y_px / 32,
+                                            pitch_B / 128);
+      assert((extile & 0xFFF00000) == 0);
+      return extile << 12 | intile;
+      }
    default:
       unreachable("Unsupported tiling!\n");
    }
@@ -882,6 +904,13 @@ get_traversal_unit(uint32_t level, enum isl_tiling tiling,
 
    assert(level == 1);
    switch (tiling) {
+   case ISL_TILING_F:
+      /* GPU surface traversal:
+       * - Row-major over each cache line. (level 1)
+       * CPU surface traversal:
+       * - For each four GPU cache lines, access four CPU cache lines.
+       */
+      return (struct dim) { .w = 16, .h = 4 };
    default:
       unreachable("Unsupported tiling!\n");
    }
@@ -892,6 +921,10 @@ static uint32_t
 l0_tiled_offset(uint32_t y_px, uint32_t y0, enum isl_tiling tiling)
 {
    switch (tiling) {
+   case ISL_TILING_F:
+      assert(get_traversal_unit(1, tiling, 1, 1).h == 4);
+      assert(y_px >= y0 && y_px - y0 < 4);
+      return (y_px - y0) * 16;
    default:
       unreachable("Unsupported tiling!\n");
    }

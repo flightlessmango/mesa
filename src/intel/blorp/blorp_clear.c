@@ -40,7 +40,6 @@ struct brw_blorp_const_color_prog_key
    bool compute_program;
    bool use_simd16_replicated_data;
    bool clear_rgb_as_red;
-   bool pad[3];
 };
 
 static bool

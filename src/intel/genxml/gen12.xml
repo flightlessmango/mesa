@@ -1774,6 +1774,7 @@
       <value name="TILEYF" value="1"/>
       <value name="TILEYS" value="2"/>
     </field>
+    <field name="ATSTiled Mode" start="222" end="223" type="uint"/>
     <field name="Surface QPitch" start="224" end="238" type="uint"/>
     <field name="LOD" start="240" end="243" type="uint"/>
     <field name="Render Target View Extent" start="245" end="255" type="uint"/>
@@ -2941,6 +2942,7 @@
       <value name="TILEYF" value="1"/>
       <value name="TILEYS" value="2"/>
     </field>
+    <field name="ATSTiled Mode" start="222" end="223" type="uint"/>
     <field name="Surface QPitch" start="224" end="238" type="uint"/>
     <field name="LOD" start="240" end="243" type="uint"/>
     <field name="Render Target View Extent" start="245" end="255" type="uint"/>

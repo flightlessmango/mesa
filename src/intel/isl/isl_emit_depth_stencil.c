@@ -58,6 +58,13 @@ static const uint32_t isl_to_gen_ds_surftype[] = {
    [ISL_SURF_DIM_3D] = SURFTYPE_3D,
 };
 
+#if GEN_GEN >= 12
+static const uint8_t isl_to_gen_tiling[] = {
+   [ISL_TILING_F]  = TILE4,
+   [ISL_TILING_S]  = TILE64,
+};
+#endif
+
 void
 isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
                                    const struct isl_depth_stencil_hiz_emit_info *restrict info)
@@ -97,7 +104,11 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       db.MOCS = info->mocs;
 #endif
 
-#if GEN_GEN <= 6
+#if GEN_GEN >= 12
+      if (dev->info->is_arctic_sound)
+         db.ATSTiledMode = isl_to_gen_tiling[info->depth_surf->tiling];
+      db.MipTailStartLOD = 15;
+#elif GEN_GEN <= 6
       db.TiledSurface = info->depth_surf->tiling != ISL_TILING_LINEAR;
       db.TileWalk = info->depth_surf->tiling == ISL_TILING_Y0 ? TILEWALK_YMAJOR :
                                                                 TILEWALK_XMAJOR;
@@ -149,6 +160,9 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       sb.Depth = sb.RenderTargetViewExtent = info->view->array_len - 1;
       sb.LOD                  = info->view->base_level;
       sb.MinimumArrayElement  = info->view->base_array_layer;
+      if (dev->info->is_arctic_sound)
+         sb.ATSTiledMode = isl_to_gen_tiling[info->stencil_surf->tiling];
+      sb.MipTailStartLOD = 15;
 #elif GEN_GEN >= 8 || GEN_IS_HASWELL
       sb.StencilBufferEnable = true;
 #endif

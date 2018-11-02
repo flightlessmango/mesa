@@ -221,9 +221,10 @@ isl_tiling_get_info(enum isl_tiling tiling,
       /* It is possible to have non-power-of-two formats in a tiled buffer.
        * The easiest way to handle this is to treat the tile as if it is three
        * times as wide.  This way no pixel will ever cross a tile boundary.
-       * This really only works on legacy X and Y tiling formats.
+       * This really only works on a subset of tiling formats.
        */
-      assert(tiling == ISL_TILING_X || tiling == ISL_TILING_Y0);
+      assert(tiling == ISL_TILING_X || tiling == ISL_TILING_Y0 ||
+             tiling == ISL_TILING_F || tiling == ISL_TILING_S);
       assert(bs % 3 == 0 && isl_is_pow2(format_bpb / 3));
       isl_tiling_get_info(tiling, format_bpb / 3, tile_info);
       return;
@@ -243,6 +244,7 @@ isl_tiling_get_info(enum isl_tiling tiling,
       break;
 
    case ISL_TILING_Y0:
+   case ISL_TILING_F:
       assert(bs > 0);
       logical_el = isl_extent2d(128 / bs, 32);
       phys_B = isl_extent2d(128, 32);
@@ -277,6 +279,22 @@ isl_tiling_get_info(enum isl_tiling tiling,
       phys_B = isl_extent2d(width, height);
       break;
    }
+   case ISL_TILING_S:
+      assert(bs > 0);
+      if (bs == 1) {
+         logical_el = isl_extent2d(256, 256);
+      } else {
+         logical_el = isl_extent2d(256 * (ffs(bs) & ~1) / bs,
+                                   256 / (ffs(bs) & ~1));
+      }
+      phys_B = isl_extent2d(logical_el.w * bs,
+                            logical_el.h);
+
+      if (bs ==  2) assert(logical_el.w == 256 && logical_el.h == 128);
+      if (bs ==  4) assert(logical_el.w == 128 && logical_el.h == 128);
+      if (bs ==  8) assert(logical_el.w == 128 && logical_el.h ==  64);
+      if (bs == 16) assert(logical_el.w ==  64 && logical_el.h ==  64);
+      break;
 
    case ISL_TILING_HIZ:
       /* HiZ buffers are required to have ISL_FORMAT_HIZ which is an 8x4
@@ -396,7 +414,38 @@ isl_surf_choose_tiling(const struct isl_device *dev,
       return true;
    }
 
-   if (ISL_DEV_GEN(dev) >= 6) {
+   if (ISL_DEV_GEN(dev) > 12 || dev->info->is_arctic_sound) {
+
+      /* Intersect with the set of valid tilings. */
+      tiling_flags &= (ISL_TILING_LINEAR_BIT |
+                       ISL_TILING_X_BIT |
+                       ISL_TILING_F_BIT |
+                       ISL_TILING_S_BIT);
+
+      /* From ATS' RENDER_SURFACE_STATE:NumberofMultisamples,
+       *
+       *    ProgrammingNote
+       *    This field must not be programmed to anything other than
+       *    [MULTISAMPLECOUNT_1] unless the Tile Mode field is programmed to
+       *    Tile64.
+       */
+      if (info->samples > 1) {
+         tiling_flags &= ISL_TILING_S_BIT;
+      } else if (isl_surf_usage_is_depth_or_stencil(info->usage)) {
+         /* ATS' 3DSTATE_{DEPTH,STENCIL}_BUFFER::TileMode field only allows
+          * TileF and TileS as options.
+          */
+         tiling_flags &= (ISL_TILING_S_BIT | ISL_TILING_F_BIT);
+      } else if (info->dim == ISL_SURF_DIM_1D) {
+         /* From ATS' RENDER_SURFACE_STATE:TileMode,
+          *
+          *    ProgrammingNote
+          *    If Surface Type is SURFTYPE_1D this field must be
+          *    TILEMODE_LINEAR [...]
+          */
+         tiling_flags &= ISL_TILING_LINEAR_BIT;
+      }
+   } else if (ISL_DEV_GEN(dev) >= 6) {
       isl_gen6_filter_tiling(dev, info, &tiling_flags);
    } else {
       isl_gen4_filter_tiling(dev, info, &tiling_flags);
@@ -423,6 +472,8 @@ isl_surf_choose_tiling(const struct isl_device *dev,
       CHOOSE(ISL_TILING_LINEAR);
    }
 
+   CHOOSE(ISL_TILING_F);
+   CHOOSE(ISL_TILING_S);
    CHOOSE(ISL_TILING_Ys);
    CHOOSE(ISL_TILING_Yf);
    CHOOSE(ISL_TILING_Y0);

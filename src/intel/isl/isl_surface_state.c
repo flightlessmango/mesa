@@ -74,6 +74,9 @@ static const uint8_t isl_to_gen_tiling[] = {
    [ISL_TILING_Ys]      = YMAJOR,
 #if GEN_GEN <= 11
    [ISL_TILING_W]       = WMAJOR,
+#else
+   [ISL_TILING_F]       = YMAJOR,
+   [ISL_TILING_S]       = TILE64,
 #endif
 };
 #endif

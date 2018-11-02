@@ -201,6 +201,8 @@ isl_gen6_filter_tiling(const struct isl_device *dev,
       *flags &= ~ISL_TILING_Yf_BIT;
       *flags &= ~ISL_TILING_Ys_BIT;
    }
+   *flags &= ~ISL_TILING_F_BIT;
+   *flags &= ~ISL_TILING_S_BIT;
 
    /* And... clear the Yf and Ys bits anyway because Anvil doesn't support
     * them yet.

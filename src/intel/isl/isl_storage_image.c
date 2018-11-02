@@ -281,6 +281,7 @@ isl_surf_fill_image_param(const struct isl_device *dev,
       break;
 
    case ISL_TILING_Y0:
+   case ISL_TILING_F:
       /* The layout of a Y-tiled surface in memory isn't really fundamentally
        * different to the layout of an X-tiled surface, we simply pretend that
        * the surface is broken up in a number of smaller 16Bx32 tiles, each

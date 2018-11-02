@@ -816,6 +816,165 @@ ytiled_to_linear_faster(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3,
                     dst, src, dst_pitch, swizzle_bit, mem_copy, mem_copy);
 }
 
+static int32_t
+linear_offset(uint32_t x, uint32_t row, int32_t directional_pitch)
+{
+   assert(x < abs(directional_pitch));
+   return x + row * directional_pitch;
+}
+
+/* Extract and move bits from a bitfield. */
+static inline uint32_t
+mov_bits(uint32_t field, uint8_t num_bits, uint8_t cur_ind, uint8_t next_ind)
+{
+   assert(num_bits + cur_ind <= sizeof(field) * 8);
+   assert(num_bits + next_ind <= sizeof(field) * 8);
+   const uint32_t nbit_mask = (1 << num_bits) - 1;
+   const uint32_t masked_bits = field & (nbit_mask << cur_ind);
+   const uint32_t bits = masked_bits >> cur_ind;
+   return bits << next_ind;
+}
+
+static uint32_t
+tiled_offset(uint32_t x_B, uint32_t y_px, uint32_t pitch_B,
+             enum isl_tiling tiling)
+{
+   assert(x_B < pitch_B);
+   switch (tiling) {
+   default:
+      unreachable("Unsupported tiling!\n");
+   }
+}
+
+/**
+ * Return the distance between a position and the smaller of: the maximum value
+ * it can take (+1) OR the next aligned position.
+ */
+static uint32_t
+get_dist(uint32_t pos, uint32_t end, uint32_t align)
+{
+   assert(pos < end);
+   const uint32_t misalignment = pos % align;
+   return MIN2(align - misalignment, end - pos);
+}
+
+struct dim {
+   uint32_t w;
+   uint32_t h;
+};
+
+/**
+ * For a specific level of traversal, the unit by which the successive (x, y)'s
+ * should be aligned to.
+ *
+ * This function isn't necessary for the bottom level (0), so it is not allowed
+ * to ensure good performance. Level 0's alignment unit would have a width
+ * equal to level 1's and a height of 1.
+ */
+static struct dim
+get_traversal_unit(uint32_t level, enum isl_tiling tiling,
+                   uint32_t w, uint32_t h)
+{
+   /* NOTE: The traversal at level 0 is in column-major fashion and only
+    * assumes one column. Therefore, level 1's alignment width should equal the
+    * tile span.
+    */
+
+   assert(level == 1);
+   switch (tiling) {
+   default:
+      unreachable("Unsupported tiling!\n");
+   }
+}
+
+/* At traversal level 0, the offset generated for a given y. */
+static uint32_t
+l0_tiled_offset(uint32_t y_px, uint32_t y0, enum isl_tiling tiling)
+{
+   switch (tiling) {
+   default:
+      unreachable("Unsupported tiling!\n");
+   }
+}
+
+/**
+ * Generate the minimal set of coordinates and corresponding step sizes for a
+ * traversal level.
+ *
+ * NOTE: Level 0's traversal occurs in column-major fashion and assumes only
+ * one column.
+ */
+#define BEGIN_TRAVERSE_LEVEL(out_x, out_y, out_dist, \
+                             x0, y0, width, height, tiling, l) \
+   struct dim out_dist; \
+   uint32_t out_y = y0; \
+   do { \
+      out_dist.h = !l ? 1 : \
+                   get_dist(out_y, y0 + height, \
+                            get_traversal_unit(l, tiling, width, height).h); \
+   uint32_t out_x = x0; \
+   do { \
+      out_dist.w = !l ? width : \
+                   get_dist(out_x, x0 + width, \
+                            get_traversal_unit(l, tiling, width, height).w);
+
+#define END_TRAVERSE_LEVEL(out_x, out_y, out_dist, \
+                           x0, y0, width, height, tiling, l) \
+      out_x += out_dist.w; \
+   } while (l && (out_x < x0 + width)); \
+      out_y += out_dist.h; \
+   } while (out_y < y0 + height);
+
+/**
+ * Copy data between a linear surface and a tiled surface.
+ *
+ * - (tx0, ty0) and (lx0, ly0) are for the tiled and linear surfaces
+ *   respectively. The x is in units of bytes and the y is in units of pixels.
+ * - The pointers for the tiled and linear surfaces point to (0, 0).
+ */
+static inline void
+linear_tiled_memcpy(uint32_t tx0, uint32_t ty0,
+                    uint32_t lx0, uint32_t ly0,
+                    uint32_t width, uint32_t height,
+                    char *dst, const char *src,
+                    int32_t linear_pitch, uint32_t tiled_pitch,
+                    uint32_t swizzle_bit, enum isl_tiling tiling,
+                    isl_memcpy_type copy_type, bool src_is_linear)
+{
+   const isl_mem_copy_fn mem_copy = choose_copy_function(copy_type);
+
+   /* Traverse over the space defined by the tiled coordinates, the width, and
+    * the height. Any x coordinates copied are also counted as being visited.
+    * The traversal is controlled by multiple levels of abstraction for better
+    * memory access patterns.
+    */
+   BEGIN_TRAVERSE_LEVEL(l1_x, l1_y, l1_step, tx0, ty0, width, height, tiling, 1)
+   BEGIN_TRAVERSE_LEVEL(tx, ty, copy_size, l1_x, l1_y, l1_step.w, l1_step.h, tiling, 0)
+
+   /* Calculate the offsets. For better performance, the tiled address offset
+    * calculation is split into two parts.
+    */
+   const uint32_t lx = tx - (tx0 - lx0);
+   const uint32_t ly = ty - (ty0 - ly0);
+   const uint32_t loffset = linear_offset(lx, ly, linear_pitch);
+   const uint32_t toffset = tiled_offset(l1_x, l1_y, tiled_pitch, tiling) +
+                            l0_tiled_offset(ty, l1_y, tiling);
+
+   /* Perform the copy. */
+   if (src_is_linear) {
+      mem_copy(dst + toffset,
+               src + loffset,
+               copy_size.w);
+   } else {
+      mem_copy(dst + loffset,
+               src + toffset,
+               copy_size.w);
+   }
+
+   END_TRAVERSE_LEVEL(tx, ty, copy_size, l1_x, l1_y, l1_step.w, l1_step.h, tiling, 0)
+   END_TRAVERSE_LEVEL(l1_x, l1_y, l1_step, tx0, ty0, width, height, tiling, 1)
+}
+
 /**
  * Copy from linear to tiled texture.
  *
@@ -854,7 +1013,10 @@ intel_linear_to_tiled(uint32_t xt1, uint32_t xt2,
       span = ytile_span;
       tile_copy = linear_to_ytiled_faster;
    } else {
-      unreachable("unsupported tiling");
+      const bool src_is_linear = true;
+      return linear_tiled_memcpy(xt1, yt1, 0, 0, xt2 - xt1, yt2 - yt1,
+                                 dst, src, src_pitch, dst_pitch, swizzle_bit,
+                                 tiling, copy_type, src_is_linear);
    }
 
    /* Round out to tile boundaries. */
@@ -945,7 +1107,10 @@ intel_tiled_to_linear(uint32_t xt1, uint32_t xt2,
       span = ytile_span;
       tile_copy = ytiled_to_linear_faster;
    } else {
-      unreachable("unsupported tiling");
+      const bool src_is_linear = false;
+      return linear_tiled_memcpy(xt1, yt1, 0, 0, xt2 - xt1, yt2 - yt1,
+                                 dst, src, dst_pitch, src_pitch, swizzle_bit,
+                                 tiling, copy_type, src_is_linear);
    }
 
 #if defined(INLINE_SSE41)

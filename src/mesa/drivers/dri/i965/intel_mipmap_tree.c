@@ -595,7 +595,7 @@ intel_miptree_create_for_bo(struct brw_context *brw,
       const mesa_format mt_fmt = (devinfo->gen < 6) ? format :
          intel_depth_format_for_depthstencil_format(format);
       mt = make_surface(brw, target, mt_fmt,
-                        0, 0, width, height, depth, 1, ISL_TILING_Y0_BIT,
+                        0, 0, width, height, depth, 1, ISL_TILING_ANY_MASK,
                         mt_surf_usage(mt_fmt),
                         pitch, bo);
       if (!mt)

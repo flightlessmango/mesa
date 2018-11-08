@@ -665,7 +665,7 @@ isl_choose_image_alignment_el(const struct isl_device *dev,
 {
    const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
    if (fmtl->txc == ISL_TXC_MCS) {
-      assert(tiling == ISL_TILING_Y0);
+      assert(tiling == ISL_TILING_Y0 || tiling == ISL_TILING_F);
 
       /*
        * IvyBrigde PRM Vol 2, Part 1, "11.7 MCS Buffer for Render Target(s)":
@@ -1832,7 +1832,9 @@ isl_surf_get_mcs_surf(const struct isl_device *dev,
                         .array_len = surf->logical_level0_px.array_len,
                         .samples = 1, /* MCS surfaces are really single-sampled */
                         .usage = ISL_SURF_USAGE_MCS_BIT,
-                        .tiling_flags = ISL_TILING_Y0_BIT);
+                        .tiling_flags = dev->info->gen > 12 ||
+                                        dev->info->is_arctic_sound ?
+                                        ISL_TILING_F_BIT : ISL_TILING_Y0_BIT);
 }
 
 bool

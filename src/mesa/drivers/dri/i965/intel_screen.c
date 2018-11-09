@@ -383,7 +383,8 @@ modifier_is_supported(const struct gen_device_info *devinfo,
       return true;
 
    case I915_FORMAT_MOD_Y_TILED:
-      return devinfo->gen >= 6;
+      return devinfo->gen >= 6 &&
+             devinfo->gen <= 12 && !devinfo->is_arctic_sound;
 
    case I915_FORMAT_MOD_Y_TILED_CCS:
       return devinfo->gen >= 9 && devinfo->gen < 12;

@@ -4232,12 +4232,55 @@ const struct brw_tracked_state genX(cs_pull_constants) = {
    .emit = genX(upload_cs_pull_constants),
 };
 
+#if GEN_GEN >= 12
 static void
-genX(upload_cs_state)(struct brw_context *brw)
+upload_compute_cs_state(struct brw_context *brw)
 {
-   if (!brw->cs.base.prog_data)
-      return;
+   struct brw_stage_state *stage_state = &brw->cs.base;
+   struct brw_stage_prog_data *prog_data = stage_state->prog_data;
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
+   brw_batch_emit(brw, GENX(CFE_STATE), cfe) {
+      if (prog_data->total_scratch) {
+         uint32_t per_thread_scratch_value;
+
+         if (GEN_GEN >= 8) {
+            /* Broadwell's Per Thread Scratch Space is in the range [0, 11]
+             * where 0 = 1k, 1 = 2k, 2 = 4k, ..., 11 = 2M.
+             */
+            per_thread_scratch_value = ffs(stage_state->per_thread_scratch) - 11;
+         } else if (GEN_IS_HASWELL) {
+            /* Haswell's Per Thread Scratch Space is in the range [0, 10]
+             * where 0 = 2k, 1 = 4k, 2 = 8k, ..., 10 = 2M.
+             */
+            per_thread_scratch_value = ffs(stage_state->per_thread_scratch) - 12;
+         } else {
+            /* Earlier platforms use the range [0, 11] to mean [1kB, 12kB]
+             * where 0 = 1kB, 1 = 2kB, 2 = 3kB, ..., 11 = 12kB.
+             */
+            per_thread_scratch_value = stage_state->per_thread_scratch / 1024 - 1;
+         }
+         cfe.ScratchSpaceBasePointer = rw_32_bo(stage_state->scratch_bo, 0);
+         cfe.PerThreadScratchSpace = per_thread_scratch_value;
+      }
+
+      /* If brw->screen->subslice_total is greater than one, then
+       * devinfo->max_cs_threads stores number of threads per sub-slice;
+       * thus we need to multiply by that number by subslices to get
+       * the actual maximum number of threads; the -1 is because the HW
+       * has a bias of 1 (would not make sense to say the maximum number
+       * of threads is 0).
+       */
+      const uint32_t subslices = MAX2(brw->screen->subslice_total, 1);
+      cfe.MaximumNumberofThreads = devinfo->max_cs_threads * subslices - 1;
+   }
+}
+#endif
+
+#if GEN_GEN <= 12
+static void
+upload_media_cs_state(struct brw_context *brw)
+{
    uint32_t offset;
    uint32_t *desc = (uint32_t*) brw_state_batch(
       brw, GENX(INTERFACE_DESCRIPTOR_DATA_length) * sizeof(uint32_t), 64,
@@ -4379,6 +4422,27 @@ genX(upload_cs_state)(struct brw_context *brw)
          GENX(INTERFACE_DESCRIPTOR_DATA_length) * sizeof(uint32_t);
       load.InterfaceDescriptorDataStartAddress = offset;
    }
+}
+#endif
+
+static void
+genX(upload_cs_state)(struct brw_context *brw)
+{
+   if (!brw->cs.base.prog_data)
+      return;
+
+#if GEN_GEN > 12
+   upload_compute_cs_state(brw);
+#elif GEN_GEN == 12
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   if (devinfo->is_arctic_sound) {
+      upload_compute_cs_state(brw);
+   } else {
+      upload_media_cs_state(brw);
+   }
+#else
+   upload_media_cs_state(brw);
+#endif
 }
 
 static const struct brw_tracked_state genX(cs_state) = {

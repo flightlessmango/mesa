@@ -4520,6 +4520,71 @@ prepare_indirect_gpgpu_walker(struct brw_context *brw)
 #endif
 }
 
+#if GEN_GEN >= 12
+static void
+genX(emit_compute_walker)(struct brw_context *brw)
+{
+   struct brw_stage_state *stage_state = &brw->cs.base;
+   struct brw_stage_prog_data *prog_data = stage_state->prog_data;
+   struct brw_cs_prog_data *cs_prog_data = brw_cs_prog_data(prog_data);
+
+   const GLuint *num_groups = brw->compute.num_work_groups;
+
+   bool indirect = brw->compute.num_work_groups_bo != NULL;
+   if (indirect)
+      prepare_indirect_gpgpu_walker(brw);
+
+   const unsigned simd_size = cs_prog_data->simd_size;
+   unsigned group_size = cs_prog_data->local_size[0] *
+      cs_prog_data->local_size[1] * cs_prog_data->local_size[2];
+
+   uint32_t last_mask = 0xffffffffu >> (32 - simd_size);
+   const unsigned last_non_aligned = group_size & (simd_size - 1);
+   if (last_non_aligned != 0)
+      last_mask >>= (simd_size - last_non_aligned);
+
+   uint32_t *bind = brw_state_batch(brw, prog_data->binding_table.size_bytes,
+                                    32, &stage_state->bind_bo_offset);
+   memcpy(bind, stage_state->surf_offset,
+          prog_data->binding_table.size_bytes);
+
+   brw_batch_emit(brw, GENX(COMPUTE_WALKER), cw) {
+      cw.IndirectParameterEnable        = indirect;
+      cw.SIMDSize                       = cs_prog_data->simd_size / 16;
+      cw.LocalXMaximum                  = cs_prog_data->local_size[0] - 1;
+      cw.LocalYMaximum                  = cs_prog_data->local_size[1] - 1;
+      cw.LocalZMaximum                  = cs_prog_data->local_size[2] - 1;
+      cw.ThreadGroupIDXDimension        = num_groups[0];
+      cw.ThreadGroupIDYDimension        = num_groups[1];
+      cw.ThreadGroupIDZDimension        = num_groups[2];
+      cw.ExecutionMask                  = last_mask;
+
+#if GEN_GEN == 12
+#define INTERFACE_DESCRIPTOR_DATA_S GENX(INTERFACE_DESCRIPTOR_DATA_HP)
+#else
+#define INTERFACE_DESCRIPTOR_DATA_S GENX(INTERFACE_DESCRIPTOR_DATA)
+#endif
+
+      assert(cs_prog_data->push.total.regs == 0);
+      cw.InterfaceDescriptor = (struct INTERFACE_DESCRIPTOR_DATA_S) {
+         .KernelStartPointer = brw->cs.base.prog_offset,
+         .SamplerStatePointer = stage_state->sampler_offset,
+         .SamplerCount = DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16),
+                                      4),
+         .BindingTablePointer = stage_state->bind_bo_offset,
+         .NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads,
+         .SharedLocalMemorySize = encode_slm_size(GEN_GEN,
+                                                  prog_data->total_shared),
+         .BarrierEnable = cs_prog_data->uses_barrier,
+      };
+   }
+
+#undef INTERFACE_DESCRIPTOR_DATA_S
+
+}
+#endif
+
+#if GEN_GEN <= 12
 static void
 genX(emit_gpgpu_walker)(struct brw_context *brw)
 {
@@ -4557,6 +4622,7 @@ genX(emit_gpgpu_walker)(struct brw_context *brw)
 
    brw_batch_emit(brw, GENX(MEDIA_STATE_FLUSH), msf);
 }
+#endif
 
 #endif
 
@@ -5959,6 +6025,14 @@ genX(init_atoms)(struct brw_context *brw)
                            compute_atoms, ARRAY_SIZE(compute_atoms));
 
    brw->vtbl.emit_mi_report_perf_count = genX(emit_mi_report_perf_count);
+
+#if GEN_GEN > 12
+   brw->vtbl.emit_compute_walker = genX(emit_compute_walker);
+#elif GEN_GEN == 12
+   brw->vtbl.emit_compute_walker = brw->screen->devinfo.is_arctic_sound ?
+      genX(emit_compute_walker) : genX(emit_gpgpu_walker);
+#else
    brw->vtbl.emit_compute_walker = genX(emit_gpgpu_walker);
+#endif
 #endif
 }

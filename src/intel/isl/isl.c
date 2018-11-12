@@ -400,8 +400,11 @@ isl_surf_choose_tiling(const struct isl_device *dev,
 
    /* HiZ surfaces always use the HiZ tiling */
    if (info->usage & ISL_SURF_USAGE_HIZ_BIT) {
-      assert(info->format == ISL_FORMAT_HIZ);
-      assert(tiling_flags == ISL_TILING_HIZ_BIT);
+      UNUSED bool ilk_hiz = info->format == ISL_FORMAT_HIZ &&
+                            tiling_flags == ISL_TILING_HIZ_BIT;
+      UNUSED bool ats_hiz = info->format == ISL_FORMAT_ATS_HIZ &&
+                            tiling_flags == ISL_TILING_F_BIT;
+      assert(ilk_hiz != ats_hiz);
       *tiling = isl_tiling_flag_to_enum(tiling_flags);
       return true;
    }
@@ -675,6 +678,11 @@ isl_choose_image_alignment_el(const struct isl_device *dev,
        */
       *image_align_el = isl_extent3d(4, 4, 1);
       return;
+   } else if (info->format == ISL_FORMAT_ATS_HIZ) {
+      /* On ATS+, HiZ surfaces are always aligned to 16x16 pixels in the
+       * primary surface which works out to 1x4 HiZ elments.
+       */
+      *image_align_el = isl_extent3d(1, 4, 1);
    } else if (info->format == ISL_FORMAT_HIZ) {
       assert(ISL_DEV_GEN(dev) >= 6);
       if (ISL_DEV_GEN(dev) == 6) {
@@ -1745,10 +1753,16 @@ isl_surf_get_hiz_surf(const struct isl_device *dev,
     * on SKL+.
     */
    const unsigned samples = ISL_DEV_GEN(dev) >= 9 ? 1 : surf->samples;
+   const isl_tiling_flags_t tiling_flag =
+      ISL_DEV_GEN(dev) > 12 || dev->info->is_arctic_sound ?
+      ISL_TILING_F_BIT : ISL_TILING_HIZ_BIT;
+   const enum isl_format format =
+      ISL_DEV_GEN(dev) > 12 || dev->info->is_arctic_sound ?
+      ISL_FORMAT_ATS_HIZ : ISL_FORMAT_HIZ;
 
    return isl_surf_init(dev, hiz_surf,
                         .dim = surf->dim,
-                        .format = ISL_FORMAT_HIZ,
+                        .format = format,
                         .width = surf->logical_level0_px.width,
                         .height = surf->logical_level0_px.height,
                         .depth = surf->logical_level0_px.depth,
@@ -1756,7 +1770,7 @@ isl_surf_get_hiz_surf(const struct isl_device *dev,
                         .array_len = surf->logical_level0_px.array_len,
                         .samples = samples,
                         .usage = ISL_SURF_USAGE_HIZ_BIT,
-                        .tiling_flags = ISL_TILING_HIZ_BIT);
+                        .tiling_flags = tiling_flag);
 }
 
 bool

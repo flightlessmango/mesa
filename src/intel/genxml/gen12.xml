@@ -2095,6 +2095,7 @@
       <value name="TILEYF" value="1"/>
       <value name="TILEYS" value="2"/>
     </field>
+    <field name="ATSTiled Mode" start="54" end="55" type="uint"/>
     <field name="MOCS" start="57" end="63" type="uint"/>
     <field name="Hierarchical Depth Buffer MOCS" start="57" end="63" type="uint"/>
     <field name="Surface Base Address" start="64" end="127" type="address"/>

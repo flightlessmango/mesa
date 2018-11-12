@@ -36,6 +36,96 @@ isl_gen12_choose_image_alignment_el(const struct isl_device *dev,
    /* Handled by isl_choose_image_alignment_el */
    assert(info->format != ISL_FORMAT_HIZ);
 
+   /* Arctic sound has new alignment requirements:
+    */
+   if (dev->info->gen > 12 || dev->info->is_arctic_sound) {
+      if (info->samples > 1) {
+         /* Vertical and horizontal alignment fields in the RENDER_SURFACE_STATE
+          * are ignored for Tile64.  In the case of TileS the alignment
+          * requirements are fixed and are provided for by the tables below for 2D
+          * and CUBE surface.
+          *
+          *       bPP HALIGN VALIGN
+          *       128  64    64
+          *        64 128    64
+          *        32 128    128
+          *        16 256    128
+          *         8 256    256
+          *
+          * For MSFMT_MSS type multi-sampled Tile64 surfaces, the alignments given
+          * above must be divided by the appropriate value from the table below. 
+          *
+          *       Samples Hdiv Vdiv
+          *        2       2    1 
+          *        4       2    2 
+          *        8       4    2 
+          *       16       4    4 
+          */
+         /* Samples | ffs(s) | ffs(s) & ~1 | s / (ffs(s) & ~1)
+          *       2     2          2                1
+          *       4     3          2                2
+          *       8     4          4                2
+          *      16     5          4                4
+          */
+         const uint32_t hdiv = ffs(info->samples) & ~1;
+         const uint32_t vdiv = info->samples / hdiv;
+
+         /* base_valign = logical_el.h
+          * base_halign = logical_el.w
+          */
+         const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
+         const uint32_t bs = fmtl-> bpb / 8;
+         const uint32_t base_halign = 256 * MAX(ffs(bs) & ~1, 1) / bs;
+         const uint32_t base_valign = 256 / MAX(ffs(bs) & ~1, 1);
+         if (bs ==  2) assert(base_halign == 256 && base_valign == 128);
+         if (bs ==  4) assert(base_halign == 128 && base_valign == 128);
+         if (bs ==  8) assert(base_halign == 128 && base_valign ==  64);
+         if (bs == 16) assert(base_halign ==  64 && base_valign ==  64);
+         const uint32_t halign_el = base_halign / hdiv;
+         const uint32_t valign_el = base_valign / vdiv;
+
+         *image_align_el = isl_extent3d(halign_el, valign_el, 1);
+         return;
+      } else {
+         /* - 16b Depth Surfaces Must Be HALIGN=16Bytes (8texels)
+          * - 32b Depth Surfaces Must Be HALIGN=32Bytes (8texels)
+          * - Stencil Surfaces (8b) Must be HALIGN=16Bytes (16texels)
+          * - Losslessly Compressed Surfaces Must be HALIGN=128 for all supported Bpp
+          * - Linear Surfaces for 8,16,32, 64 and 128bpp surfaces must be HALIGN=128
+          *   (including 1D which is always Linear)
+          * - 24bpp, 48bpp and 96bpp surfaces must use HALIGN=16
+          *
+          *
+          * These valign requirements have stayed the same:
+          *
+          *    ProgrammingNotes
+          *    This field is intended to be set to VALIGN_4 if the
+          *    surface was rendered as a depth buffer, for a multisampled (4x) render
+          *    target, or for a multisampled (8x) render target, since these surfaces
+          *    support only alignment of 4. Use of VALIGN_4 for other surfaces is
+          *    supported, but increases memory usage.
+          *
+          *    ProgrammingNotes
+          *    This field is intended to be set to VALIGN_8 only if
+          *    the surface was rendered as a stencil buffer, since stencil buffer
+          *    surfaces support only alignment of 8. If set to VALIGN_8, Surface
+          *    Format must be R8_UINT.
+          */
+         const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
+         const uint32_t bs = fmtl-> bpb / 8;
+         if (isl_surf_usage_is_depth(info->usage)) {
+            *image_align_el = isl_extent3d(8, 4, 1);
+         } else if (isl_surf_usage_is_stencil(info->usage) || info->format == ISL_FORMAT_R8_UINT) {
+            *image_align_el = isl_extent3d(16, 8, 1);
+         } else if (isl_is_pow2(bs)) {
+            *image_align_el = isl_extent3d(128 / bs, 4, 1);
+         } else {
+            *image_align_el = isl_extent3d(16, 4, 1);
+         }
+         return;
+      }
+   }
+
    if (isl_surf_usage_is_depth(info->usage)) {
       /* The alignment parameters for depth buffers are summarized in the
        * following table:

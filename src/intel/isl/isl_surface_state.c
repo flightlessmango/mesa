@@ -39,6 +39,22 @@ __gen_combine_address(__attribute__((unused)) void *data,
 
 #include "isl_priv.h"
 
+
+#if GEN_GEN >= 7
+static uint8_t isl_to_ats_halign(uint8_t align_w)
+{
+   switch (align_w) {
+#if GEN_GEN >= 12
+   case 16: return HALIGN16B;
+   case 32: return HALIGN32B;
+   case 64: return HALIGN64B;
+   case 128: return HALIGN128B;
+#endif
+   default: unreachable("Invalid align_w.\n");
+   }
+}
+#endif
+
 #if GEN_GEN >= 8
 static const uint8_t isl_to_gen_halign[] = {
     [4] = HALIGN4,
@@ -145,9 +161,18 @@ get_surftype(enum isl_surf_dim dim, isl_surf_usage_flags_t usage)
  * but an index into the isl_to_gen_[hv]align arrays above.
  */
 UNUSED static struct isl_extent3d
-get_image_alignment(const struct isl_surf *surf)
+get_image_alignment(const struct isl_device *dev, const struct isl_surf *surf)
 {
-   if (GEN_GEN >= 9) {
+   if (GEN_GEN > 12 || dev->info->is_arctic_sound) {
+      /* In ATS, halign is in terms of Bytes for pow2 formats.*/
+      struct isl_extent3d ext = isl_surf_get_image_alignment_el(surf);
+      const struct isl_format_layout *fmtl =
+         isl_format_get_layout(surf->format);
+      if (isl_is_pow2(fmtl->bpb))
+         return isl_extent3d(fmtl->bpb * ext.w / 8, ext.h, 1);
+      else
+         return ext;
+   } else if (GEN_GEN >= 9) {
       if (isl_tiling_is_std_y(surf->tiling) ||
           surf->dim_layout == ISL_DIM_LAYOUT_GEN9_1D) {
          /* The hardware ignores the alignment values. Anyway, the surface's
@@ -431,11 +456,17 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 
 #if GEN_GEN >= 6
-   const struct isl_extent3d image_align = get_image_alignment(info->surf);
-   s.SurfaceVerticalAlignment = isl_to_gen_valign[image_align.height];
+   if (info->surf->tiling != ISL_TILING_S) {
+      const struct isl_extent3d image_align =
+         get_image_alignment(dev, info->surf);
+      s.SurfaceVerticalAlignment = isl_to_gen_valign[image_align.height];
 #if GEN_GEN >= 7
-   s.SurfaceHorizontalAlignment = isl_to_gen_halign[image_align.width];
+      s.SurfaceHorizontalAlignment =
+         GEN_GEN > 12 || dev->info->is_arctic_sound ?
+         isl_to_ats_halign(image_align.width) :
+         isl_to_gen_halign[image_align.width];
 #endif
+   }
 #endif
 
    if (info->surf->dim_layout == ISL_DIM_LAYOUT_GEN9_1D) {
@@ -739,7 +770,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 }
 
 void
-isl_genX(buffer_fill_state_s)(void *state,
+isl_genX(buffer_fill_state_s)(const struct isl_device *dev, void *state,
                               const struct isl_buffer_fill_state_info *restrict info)
 {
    uint64_t buffer_size = info->size_B;
@@ -790,7 +821,8 @@ isl_genX(buffer_fill_state_s)(void *state,
 #if GEN_GEN >= 6
    s.SurfaceVerticalAlignment = isl_to_gen_valign[4];
 #if GEN_GEN >= 7
-   s.SurfaceHorizontalAlignment = isl_to_gen_halign[4];
+   s.SurfaceHorizontalAlignment = GEN_GEN > 12 || dev->info->is_arctic_sound ?
+                                  isl_to_ats_halign(128) : isl_to_gen_halign[4];
    s.SurfaceArray = false;
 #endif
 #endif

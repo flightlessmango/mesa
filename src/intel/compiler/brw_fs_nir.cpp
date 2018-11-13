@@ -99,7 +99,8 @@ fs_visitor::nir_setup_uniforms()
 
    uniforms = nir->num_uniforms / 4;
 
-   if (stage == MESA_SHADER_COMPUTE) {
+   if (stage == MESA_SHADER_COMPUTE &&
+       devinfo->gen <= 12 && !devinfo->is_arctic_sound) {
       /* Add a uniform for the thread local id.  It must be the last uniform
        * on the list.
        */
@@ -3753,7 +3754,12 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
       break;
 
    case nir_intrinsic_load_subgroup_id:
-      bld.MOV(retype(dest, BRW_REGISTER_TYPE_UD), subgroup_id);
+      if (devinfo->gen > 12 || devinfo->is_arctic_sound)
+         bld.AND(retype(dest, BRW_REGISTER_TYPE_UD),
+                 retype(brw_vec1_grf(0, 2), BRW_REGISTER_TYPE_UD),
+                 brw_imm_ud(INTEL_MASK(7, 0)));
+      else
+         bld.MOV(retype(dest, BRW_REGISTER_TYPE_UD), subgroup_id);
       break;
 
    case nir_intrinsic_load_local_invocation_id:

@@ -2337,9 +2337,20 @@ fs_visitor::assign_constant_locations()
     * If changing this value, note the limitation about total_regs in
     * brw_curbe.c.
     */
-   unsigned int max_push_components = 16 * 8;
-   if (subgroup_id_index >= 0)
-      max_push_components--; /* Save a slot for the thread ID */
+   unsigned int max_push_components;
+   if (stage == MESA_SHADER_COMPUTE &&
+       (devinfo->gen > 12 || devinfo->is_arctic_sound)) {
+      /* The COMPUTE_WALKER command doesn't support push constants, so we set
+       * max_push_components to 0.
+       */
+      assert(subgroup_id_index < 0);
+      max_push_components = 0;
+   } else {
+      max_push_components = 16 * 8;
+      if (subgroup_id_index >= 0)
+         max_push_components--; /* Save a slot for the thread ID */
+   }
+
 
    /* We push small arrays, but no bigger than 16 floats.  This is big enough
     * for a vec4 but hopefully not large enough to push out other stuff.  We

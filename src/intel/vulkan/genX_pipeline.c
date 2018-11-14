@@ -2185,6 +2185,7 @@ genX(graphics_pipeline_create)(
    return pipeline->batch.status;
 }
 
+#if GEN_GEN <= 12
 static void
 emit_media_cs_state(struct anv_pipeline *pipeline,
                     const struct anv_physical_device *physical_device)
@@ -2284,6 +2285,42 @@ emit_media_cs_state(struct anv_pipeline *pipeline,
                                         pipeline->interface_descriptor_data,
                                         &desc);
 }
+#endif
+
+#if GEN_GEN >= 12
+static void
+emit_compute_cs_state(struct anv_pipeline *pipeline,
+                      const struct anv_physical_device *physical_device)
+{
+   const struct brw_cs_prog_data *cs_prog_data = get_cs_prog_data(pipeline);
+
+   anv_pipeline_setup_l3_config(pipeline, cs_prog_data->base.total_shared > 0);
+
+   uint32_t group_size = cs_prog_data->local_size[0] *
+      cs_prog_data->local_size[1] * cs_prog_data->local_size[2];
+   uint32_t remainder = group_size & (cs_prog_data->simd_size - 1);
+
+   if (remainder > 0)
+      pipeline->cs_right_mask = ~0u >> (32 - remainder);
+   else
+      pipeline->cs_right_mask = ~0u >> (32 - cs_prog_data->simd_size);
+
+   const uint32_t subslices = MAX2(physical_device->subslice_total, 1);
+
+   const struct anv_shader_bin *cs_bin =
+      pipeline->shaders[MESA_SHADER_COMPUTE];
+   const struct gen_device_info *devinfo = &physical_device->info;
+
+   anv_batch_emit(&pipeline->batch, GENX(CFE_STATE), cfe) {
+      cfe.StackSize              = 0;
+      cfe.MaximumNumberofThreads =
+         devinfo->max_cs_threads * subslices - 1;
+      cfe.PerThreadScratchSpace = get_scratch_space(cs_bin);
+      cfe.ScratchSpaceBasePointer =
+         get_scratch_address(pipeline, MESA_SHADER_COMPUTE, cs_bin);
+   }
+}
+#endif
 
 static VkResult
 compute_pipeline_create(
@@ -2348,7 +2385,15 @@ compute_pipeline_create(
       return result;
    }
 
-   emit_media_cs_state(pipeline, physical_device);
+   const struct gen_device_info *devinfo = &physical_device->info;
+#if GEN_GEN >= 12
+   if (GEN_GEN > 12 || devinfo->is_arctic_sound)
+      emit_compute_cs_state(pipeline, physical_device);
+#endif
+#if GEN_GEN <= 12
+   if (GEN_GEN < 12 || !devinfo->is_arctic_sound)
+      emit_media_cs_state(pipeline, physical_device);
+#endif
 
    *pPipeline = anv_pipeline_to_handle(pipeline);
 

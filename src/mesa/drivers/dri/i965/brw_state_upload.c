@@ -215,12 +215,15 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
    if (devinfo->gen >= 8) {
       gen8_emit_3dstate_sample_pattern(brw);
 
-      BEGIN_BATCH(5);
-      OUT_BATCH(_3DSTATE_WM_HZ_OP << 16 | (5 - 2));
+      uint8_t hz_dwords = devinfo->gen > 12 || devinfo->is_arctic_sound ? 6 : 5;
+      BEGIN_BATCH(hz_dwords);
+      OUT_BATCH(_3DSTATE_WM_HZ_OP << 16 | (hz_dwords - 2));
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
       OUT_BATCH(0);
+      if (hz_dwords == 6)
+         OUT_BATCH(0);
       ADVANCE_BATCH();
 
       BEGIN_BATCH(2);

@@ -3540,10 +3540,14 @@ static VkResult
 flush_compute_descriptor_set(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_pipeline *pipeline = cmd_buffer->state.compute.base.pipeline;
-   struct anv_state surfaces = { 0, }, samplers = { 0, };
+   struct anv_state *surfaces =
+      &cmd_buffer->state.binding_tables[MESA_SHADER_COMPUTE];
+   struct anv_state *samplers =
+      &cmd_buffer->state.samplers[MESA_SHADER_COMPUTE];
+   *surfaces = *samplers = (struct anv_state) { 0, };
    VkResult result;
 
-   result = emit_binding_table(cmd_buffer, MESA_SHADER_COMPUTE, &surfaces);
+   result = emit_binding_table(cmd_buffer, MESA_SHADER_COMPUTE, surfaces);
    if (result != VK_SUCCESS) {
       assert(result == VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
@@ -3556,14 +3560,14 @@ flush_compute_descriptor_set(struct anv_cmd_buffer *cmd_buffer)
        */
       genX(cmd_buffer_emit_state_base_address)(cmd_buffer);
 
-      result = emit_binding_table(cmd_buffer, MESA_SHADER_COMPUTE, &surfaces);
+      result = emit_binding_table(cmd_buffer, MESA_SHADER_COMPUTE, surfaces);
       if (result != VK_SUCCESS) {
          anv_batch_set_error(&cmd_buffer->batch, result);
          return result;
       }
    }
 
-   result = emit_samplers(cmd_buffer, MESA_SHADER_COMPUTE, &samplers);
+   result = emit_samplers(cmd_buffer, MESA_SHADER_COMPUTE, samplers);
    if (result != VK_SUCCESS) {
       anv_batch_set_error(&cmd_buffer->batch, result);
       return result;
@@ -3571,8 +3575,8 @@ flush_compute_descriptor_set(struct anv_cmd_buffer *cmd_buffer)
 
    uint32_t iface_desc_data_dw[GENX(INTERFACE_DESCRIPTOR_DATA_length)];
    struct GENX(INTERFACE_DESCRIPTOR_DATA) desc = {
-      .BindingTablePointer = surfaces.offset,
-      .SamplerStatePointer = samplers.offset,
+      .BindingTablePointer = surfaces->offset,
+      .SamplerStatePointer = samplers->offset,
    };
    GENX(INTERFACE_DESCRIPTOR_DATA_pack)(NULL, iface_desc_data_dw, &desc);
 

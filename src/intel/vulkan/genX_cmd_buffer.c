@@ -3706,6 +3706,59 @@ void genX(CmdDispatch)(
    genX(CmdDispatchBase)(commandBuffer, 0, 0, 0, x, y, z);
 }
 
+#if GEN_GEN >= 12
+static inline void
+emit_compute_walker(struct anv_cmd_buffer *cmd_buffer,
+                    const struct anv_pipeline *pipeline, bool indirect,
+                    const struct brw_cs_prog_data *prog_data,
+                    uint32_t groupCountX, uint32_t groupCountY,
+                    uint32_t groupCountZ)
+{
+   const struct anv_shader_bin *cs_bin =
+      pipeline->shaders[MESA_SHADER_COMPUTE];
+   bool predicate = cmd_buffer->state.conditional_render_enabled;
+
+   anv_batch_emit(&cmd_buffer->batch, GENX(COMPUTE_WALKER), cw) {
+      cw.IndirectParameterEnable        = indirect;
+      cw.PredicateEnable                = predicate;
+      cw.SIMDSize                       = prog_data->simd_size / 16;
+      cw.LocalXMaximum                  = prog_data->local_size[0] - 1;
+      cw.LocalYMaximum                  = prog_data->local_size[1] - 1;
+      cw.LocalZMaximum                  = prog_data->local_size[2] - 1;
+      cw.ThreadGroupIDXDimension        = groupCountX;
+      cw.ThreadGroupIDYDimension        = groupCountY;
+      cw.ThreadGroupIDZDimension        = groupCountZ;
+      cw.ExecutionMask                  = pipeline->cs_right_mask;
+
+#if GEN_GEN == 12
+#define INTERFACE_DESCRIPTOR_DATA_S GENX(INTERFACE_DESCRIPTOR_DATA_HP)
+#else
+#define INTERFACE_DESCRIPTOR_DATA_S GENX(INTERFACE_DESCRIPTOR_DATA)
+#endif
+
+      assert(prog_data->push.total.regs == 0);
+      const gl_shader_stage s = MESA_SHADER_COMPUTE;
+      struct anv_state *surfaces = &cmd_buffer->state.binding_tables[s];
+      struct anv_state *samplers = &cmd_buffer->state.samplers[s];
+      cw.InterfaceDescriptor = (struct INTERFACE_DESCRIPTOR_DATA_S) {
+         .KernelStartPointer = cs_bin->kernel.offset,
+         .SamplerStatePointer = samplers->offset,
+         /* i965: DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4), */
+         .SamplerCount = 0,
+         .BindingTablePointer = surfaces->offset,
+         .NumberofThreadsinGPGPUThreadGroup = prog_data->threads,
+         .SharedLocalMemorySize = encode_slm_size(GEN_GEN,
+                                                  prog_data->base.total_shared),
+         .BarrierEnable = prog_data->uses_barrier,
+      };
+   }
+
+#undef INTERFACE_DESCRIPTOR_DATA_S
+
+}
+#endif
+
+#if GEN_GEN <= 12
 static inline void
 emit_gpgpu_walker(struct anv_cmd_buffer *cmd_buffer,
                   const struct anv_pipeline *pipeline, bool indirect,
@@ -3730,6 +3783,30 @@ emit_gpgpu_walker(struct anv_cmd_buffer *cmd_buffer,
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(MEDIA_STATE_FLUSH), msf);
+}
+#endif
+
+static inline void
+emit_cs_walker(struct anv_cmd_buffer *cmd_buffer,
+               const struct anv_pipeline *pipeline, bool indirect,
+               const struct brw_cs_prog_data *prog_data,
+               uint32_t groupCountX, uint32_t groupCountY,
+               uint32_t groupCountZ)
+{
+#if GEN_GEN > 12
+   emit_compute_walker(cmd_buffer, pipeline, indirect, prog_data, groupCountX,
+                       groupCountY, groupCountZ);
+#elif GEN_GEN == 12
+   if (cmd_buffer->device->info.is_arctic_sound)
+      emit_compute_walker(cmd_buffer, pipeline, indirect, prog_data,
+                          groupCountX, groupCountY, groupCountZ);
+   else
+      emit_gpgpu_walker(cmd_buffer, pipeline, indirect, prog_data, groupCountX,
+                        groupCountY, groupCountZ);
+#else
+   emit_gpgpu_walker(cmd_buffer, pipeline, indirect, prog_data, groupCountX,
+                     groupCountY, groupCountZ);
+#endif
 }
 
 void genX(CmdDispatchBase)(
@@ -3769,8 +3846,8 @@ void genX(CmdDispatchBase)(
    if (cmd_buffer->state.conditional_render_enabled)
       genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
 
-   emit_gpgpu_walker(cmd_buffer, pipeline, false, prog_data, groupCountX,
-                     groupCountY, groupCountZ);
+   emit_cs_walker(cmd_buffer, pipeline, false, prog_data, groupCountX,
+                  groupCountY, groupCountZ);
 }
 
 #define GPGPU_DISPATCHDIMX 0x2500
@@ -3867,7 +3944,7 @@ void genX(CmdDispatchIndirect)(
       genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
 #endif
 
-   emit_gpgpu_walker(cmd_buffer, pipeline, true, prog_data, 0, 0, 0);
+   emit_cs_walker(cmd_buffer, pipeline, true, prog_data, 0, 0, 0);
 }
 
 static void

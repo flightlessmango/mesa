@@ -1137,7 +1137,13 @@ brw_inst_set_imm_df(const struct gen_device_info *devinfo,
    } dt;
    (void) devinfo;
    dt.d = value;
-   brw_inst_set_bits(insn, 127, 64, dt.u);
+
+   if (devinfo->gen >= 12) {
+      brw_inst_set_bits(insn, 95, 64, dt.u >> 32);
+      brw_inst_set_bits(insn, 127, 96, dt.u & 0xFFFFFFFF);
+   } else {
+      brw_inst_set_bits(insn, 127, 64, dt.u);
+   }
 }
 
 static inline void
@@ -1145,7 +1151,12 @@ brw_inst_set_imm_uq(const struct gen_device_info *devinfo,
                     brw_inst *insn, uint64_t value)
 {
    (void) devinfo;
-   brw_inst_set_bits(insn, 127, 64, value);
+   if (devinfo->gen >= 12) {
+      brw_inst_set_bits(insn, 95, 64, value >> 32);
+      brw_inst_set_bits(insn, 127, 96, value & 0xFFFFFFFF);
+   } else {
+      brw_inst_set_bits(insn, 127, 64, value);
+   }
 }
 
 /** @} */

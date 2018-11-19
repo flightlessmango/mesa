@@ -821,6 +821,9 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_opt_algebraic_before_ffma);
    } while (progress);
 
+   if (devinfo->is_arctic_sound)
+      OPT(nir_lower_idiv);
+
    brw_nir_optimize(nir, compiler, is_scalar, false);
 
    if (OPT(nir_lower_int64, nir->options->lower_int64_options))

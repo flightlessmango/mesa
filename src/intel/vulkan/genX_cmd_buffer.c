@@ -167,14 +167,17 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
     * So let's make sure we 3DSTATE_BINDING_TABLE_POOL_ALLOC and everything
     * should work as before.
     */
-   anv_batch_emit(
-      &cmd_buffer->batch, GENX(3DSTATE_BINDING_TABLE_POOL_ALLOC), btpa) {
-      btpa.BindingTablePoolBaseAddress =
-         anv_cmd_buffer_surface_base_address(cmd_buffer);
-      /* The pool size is based on the Binding Table Pointer, which only has 21
-       * bits (20:5), but we specify the size here in multiples of 4K pages.
-       */
-      btpa.BindingTablePoolBufferSize = 1 << (21 - 12);
+   if (GEN_GEN > 12 || cmd_buffer->device->info.is_arctic_sound) {
+      anv_batch_emit(
+         &cmd_buffer->batch, GENX(3DSTATE_BINDING_TABLE_POOL_ALLOC), btpa) {
+         btpa.BindingTablePoolBaseAddress =
+            anv_cmd_buffer_surface_base_address(cmd_buffer);
+         /* The pool size is based on the Binding Table Pointer, which only
+          * has 21 bits (20:5), but we specify the size here in multiples of
+          * 4K pages.
+          */
+         btpa.BindingTablePoolBufferSize = 1 << (21 - 12);
+      }
    }
 #endif
 

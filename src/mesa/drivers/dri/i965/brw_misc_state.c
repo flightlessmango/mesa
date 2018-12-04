@@ -829,7 +829,7 @@ brw_upload_state_base_address(struct brw_context *brw)
          OUT_BATCH(0);
       }
       ADVANCE_BATCH();
-      if (devinfo->gen >= 12) {
+      if (devinfo->gen > 12 || devinfo->is_arctic_sound) {
          /* Starting on gen11, we can enable the Binding Table Pool to make the
           * Binding Table Pointers be an offset based on the Binding Table Pool
           * Address. Then on gen12, that's not an option anymore, and the

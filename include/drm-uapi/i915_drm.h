@@ -319,6 +319,7 @@ typedef struct _drm_i915_sarea {
 #define DRM_I915_PERF_ADD_CONFIG	0x37
 #define DRM_I915_PERF_REMOVE_CONFIG	0x38
 #define DRM_I915_QUERY			0x39
+#define DRM_I915_GEM_MMAP_OFFSET	DRM_I915_GEM_MMAP_GTT
 
 #define DRM_IOCTL_I915_INIT		DRM_IOW( DRM_COMMAND_BASE + DRM_I915_INIT, drm_i915_init_t)
 #define DRM_IOCTL_I915_FLUSH		DRM_IO ( DRM_COMMAND_BASE + DRM_I915_FLUSH)
@@ -377,6 +378,7 @@ typedef struct _drm_i915_sarea {
 #define DRM_IOCTL_I915_PERF_ADD_CONFIG	DRM_IOW(DRM_COMMAND_BASE + DRM_I915_PERF_ADD_CONFIG, struct drm_i915_perf_oa_config)
 #define DRM_IOCTL_I915_PERF_REMOVE_CONFIG	DRM_IOW(DRM_COMMAND_BASE + DRM_I915_PERF_REMOVE_CONFIG, __u64)
 #define DRM_IOCTL_I915_QUERY			DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_QUERY, struct drm_i915_query)
+#define DRM_IOCTL_I915_GEM_MMAP_OFFSET         DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_MMAP_OFFSET, struct drm_i915_gem_mmap_offset)
 
 /* Allow drivers to submit batchbuffers directly to hardware, relying
  * on the security mechanisms provided by hardware.
@@ -559,6 +561,9 @@ typedef struct drm_i915_irq_wait {
  */
 #define I915_PARAM_MMAP_GTT_COHERENT	52
 
+/* Mmap offset ioctl */
+#define I915_PARAM_MMAP_OFFSET_VERSION 54
+
 typedef struct drm_i915_getparam {
 	__s32 param;
 	/*
@@ -729,6 +734,31 @@ struct drm_i915_gem_mmap_gtt {
 	 * This is a fixed-size type for 32/64 compatibility.
 	 */
 	__u64 offset;
+};
+
+struct drm_i915_gem_mmap_offset {
+	/** Handle for the object being mapped. */
+	__u32 handle;
+	__u32 pad;
+	/**
+	 * Fake offset to use for subsequent mmap call
+	 *
+	 * This is a fixed-size type for 32/64 compatibility.
+	 */
+	__u64 offset;
+
+	/**
+	 * Flags for extended behaviour.
+	 *
+	 * It is mandatory that either one of the _WC/_WB flags
+	 * should be passed here.
+	 */
+	__u64 flags;
+#define I915_MMAP_OFFSET_WC (1 << 0)
+#define I915_MMAP_OFFSET_WB (1 << 1)
+#define I915_MMAP_OFFSET_UC (1 << 2)
+#define I915_MMAP_OFFSET_FLAGS \
+	(I915_MMAP_OFFSET_WC | I915_MMAP_OFFSET_WB | I915_MMAP_OFFSET_UC)
 };
 
 struct drm_i915_gem_set_domain {

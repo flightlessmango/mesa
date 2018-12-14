@@ -1059,7 +1059,7 @@ static const struct gen_device_info gen_device_info_tgl_1x6x16 = {
    GEN12_HW_INFO,                                       \
    .has_llc = false,                                    \
    .has_64bit_types = true,                             \
-   .has_integer_dword_mul = false,                      \
+   .has_integer_dword_mul = true,                       \
    .gt = _gt, .num_slices = _slices, .l3_banks = _l3,   \
    .num_subslices = _subslices
 

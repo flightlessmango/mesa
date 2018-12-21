@@ -665,12 +665,15 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
        !(devinfo->gen >= 10 || devinfo->is_kabylake))
       OPT(brw_nir_apply_trig_workarounds);
 
-   static const nir_lower_tex_options tex_options = {
+   const bool lower_txd_3d =
+      devinfo->gen > 12 || (devinfo->gen == 12 && devinfo->is_arctic_sound);
+   const nir_lower_tex_options tex_options = {
       .lower_txp = ~0,
       .lower_txf_offset = true,
       .lower_rect_offset = true,
       .lower_tex_without_implicit_lod = true,
       .lower_txd_cube_map = true,
+      .lower_txd_3d = lower_txd_3d,
       .lower_txb_shadow_clamp = true,
       .lower_txd_shadow_clamp = true,
       .lower_txd_offset_clamp = true,

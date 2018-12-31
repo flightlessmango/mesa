@@ -2704,6 +2704,10 @@ void
 genX(setup_aux_map)(struct anv_cmd_buffer *cmd_buffer)
 {
 #if GEN_GEN >= 12
+   enum anv_queue_family queue_family = cmd_buffer->pool->queue_family;
+   if (queue_family == ANV_COMPUTE_QUEUE_FAMILY)
+      return;
+
    assert(cmd_buffer->device->aux_map_ctx);
    uint64_t base_addr = gen_aux_map_get_base(cmd_buffer->device->aux_map_ctx);
    assert(base_addr != 0 && align_u64(base_addr, 32 * 1024) == base_addr);

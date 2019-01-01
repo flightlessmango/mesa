@@ -338,6 +338,9 @@ void anv_CmdCopyImage(
    struct blorp_batch batch;
    blorp_batch_init(&cmd_buffer->device->blorp, &batch, cmd_buffer, 0);
 
+   const bool compute_queue =
+      cmd_buffer->pool->queue_family == ANV_COMPUTE_QUEUE_FAMILY;
+
    for (unsigned r = 0; r < regionCount; r++) {
       VkOffset3D srcOffset =
          anv_sanitize_image_offset(src_image->type, pRegions[r].srcOffset);
@@ -390,9 +393,10 @@ void anv_CmdCopyImage(
                                               dst_base_layer, layer_count);
 
             const bool compute =
-               unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+               unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                         blorp_copy_supports_compute(&cmd_buffer->device->blorp,
                                                     &dst_surf));
+            assert(compute || !compute_queue);
 
             for (unsigned i = 0; i < layer_count; i++) {
                blorp_copy(&batch, &src_surf, src_level, src_base_layer + i,
@@ -409,9 +413,10 @@ void anv_CmdCopyImage(
                                                     1UL << aspect_bit,
                                                     &dst_shadow_surf)) {
                const bool compute =
-                  unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+                  unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                            blorp_copy_supports_compute(&cmd_buffer->device->blorp,
                                                        &dst_shadow_surf));
+               assert(compute || !compute_queue);
 
                for (unsigned i = 0; i < layer_count; i++) {
                   blorp_copy(&batch, &src_surf, src_level, src_base_layer + i,
@@ -436,9 +441,10 @@ void anv_CmdCopyImage(
                                            dst_base_layer, layer_count);
 
          const bool compute =
-            unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+            unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                      blorp_copy_supports_compute(&cmd_buffer->device->blorp,
                                                  &dst_surf));
+         assert(compute || !compute_queue);
 
          for (unsigned i = 0; i < layer_count; i++) {
             blorp_copy(&batch, &src_surf, src_level, src_base_layer + i,
@@ -454,9 +460,10 @@ void anv_CmdCopyImage(
                                                  dst_image, dst_mask,
                                                  &dst_shadow_surf)) {
             const bool compute =
-               unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+               unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                         blorp_copy_supports_compute(&cmd_buffer->device->blorp,
                                                     &dst_shadow_surf));
+            assert(compute || !compute_queue);
 
             for (unsigned i = 0; i < layer_count; i++) {
                blorp_copy(&batch, &src_surf, src_level, src_base_layer + i,
@@ -484,6 +491,9 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
 {
    struct blorp_batch batch;
    blorp_batch_init(&cmd_buffer->device->blorp, &batch, cmd_buffer, 0);
+
+   const bool compute_queue =
+      cmd_buffer->pool->queue_family == ANV_COMPUTE_QUEUE_FAMILY;
 
    struct {
       struct blorp_surf surf;
@@ -574,9 +584,10 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
       }
 
       const bool compute =
-         unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+         unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                   blorp_copy_supports_compute(&cmd_buffer->device->blorp,
                                               &dst->surf));
+      assert(compute || !compute_queue);
 
       for (unsigned z = 0; z < extent.depth; z++) {
          blorp_copy(&batch, &src->surf, src->level, src->offset.z,
@@ -587,9 +598,10 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
 
          if (dst_has_shadow) {
             const bool compute =
-               unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+               unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                         blorp_copy_supports_compute(&cmd_buffer->device->blorp,
                                                     &dst_shadow_surf));
+            assert(compute || !compute_queue);
 
             blorp_copy(&batch, &src->surf, src->level, src->offset.z,
                        &dst_shadow_surf, dst->level, dst->offset.z,
@@ -830,9 +842,13 @@ void anv_CmdCopyBuffer(
    struct blorp_batch batch;
    blorp_batch_init(&cmd_buffer->device->blorp, &batch, cmd_buffer, 0);
 
+   const bool compute_queue =
+      cmd_buffer->pool->queue_family == ANV_COMPUTE_QUEUE_FAMILY;
+
    const bool compute =
-      unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+      unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                blorp_buffer_copy_supports_compute(&cmd_buffer->device->blorp));
+   assert(compute || !compute_queue);
 
    for (unsigned r = 0; r < regionCount; r++) {
       struct blorp_address src = {
@@ -880,9 +896,13 @@ void anv_CmdUpdateBuffer(
     */
    cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT;
 
+   const bool compute_queue =
+      cmd_buffer->pool->queue_family == ANV_COMPUTE_QUEUE_FAMILY;
+
    const bool compute =
-      unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+      unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                blorp_buffer_copy_supports_compute(&cmd_buffer->device->blorp));
+   assert(compute || !compute_queue);
 
    while (dataSize) {
       const uint32_t copy_size = MIN2(dataSize, max_update_size);
@@ -930,6 +950,9 @@ void anv_CmdFillBuffer(
    struct blorp_batch batch;
    blorp_batch_init(&cmd_buffer->device->blorp, &batch, cmd_buffer, 0);
 
+   const bool compute_queue =
+      cmd_buffer->pool->queue_family == ANV_COMPUTE_QUEUE_FAMILY;
+
    fillSize = anv_buffer_get_range(dst_buffer, dstOffset, fillSize);
 
    /* From the Vulkan spec:
@@ -963,9 +986,10 @@ void anv_CmdFillBuffer(
                                     &surf, &isl_surf);
 
       const bool compute =
-         unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+         unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                   blorp_clear_supports_compute(batch.blorp, false, false,
                                                surf.aux_usage));
+      assert(compute || !compute_queue);
 
       blorp_clear(&batch, &surf, isl_format, ISL_SWIZZLE_IDENTITY,
                   0, 0, 1, 0, 0, MAX_SURFACE_DIM, MAX_SURFACE_DIM,
@@ -985,9 +1009,10 @@ void anv_CmdFillBuffer(
                                     &surf, &isl_surf);
 
       const bool compute =
-         unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+         unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                   blorp_clear_supports_compute(batch.blorp, false, false,
                                                surf.aux_usage));
+      assert(compute || !compute_queue);
 
       blorp_clear(&batch, &surf, isl_format, ISL_SWIZZLE_IDENTITY,
                   0, 0, 1, 0, 0, MAX_SURFACE_DIM, height, color, NULL,
@@ -1005,9 +1030,10 @@ void anv_CmdFillBuffer(
                                     &surf, &isl_surf);
 
       const bool compute =
-         unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+         unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                   blorp_clear_supports_compute(batch.blorp, false, false,
                                                surf.aux_usage));
+      assert(compute || !compute_queue);
 
       blorp_clear(&batch, &surf, isl_format, ISL_SWIZZLE_IDENTITY,
                   0, 0, 1, 0, 0, width, 1, color, NULL, compute);
@@ -1546,10 +1572,14 @@ anv_image_copy_to_shadow(struct anv_cmd_buffer *cmd_buffer,
    get_blorp_surf_for_anv_shadow_image(cmd_buffer->device,
                                        image, aspect, &shadow_surf);
 
+   const bool compute_queue =
+      cmd_buffer->pool->queue_family == ANV_COMPUTE_QUEUE_FAMILY;
+
    const bool compute =
-      unlikely((INTEL_DEBUG & DEBUG_BLOCS) &&
+      unlikely((compute_queue || INTEL_DEBUG & DEBUG_BLOCS) &&
                blorp_copy_supports_compute(&cmd_buffer->device->blorp,
                                            &surf));
+   assert(compute || !compute_queue);
 
    for (uint32_t l = 0; l < level_count; l++) {
       const uint32_t level = base_level + l;

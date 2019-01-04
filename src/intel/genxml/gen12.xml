@@ -1401,6 +1401,35 @@
     <field name="AMFS MOCS Mask" start="80" end="86" type="uint"/>
   </instruction>
 
+  <instruction name="3DSTATE_3D_MODE_HP" bias="2" length="5">
+    <field name="DWord Length" start="0" end="7" type="uint" default="0"/>
+    <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="30"/>
+    <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
+    <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
+    <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="Cross Slice Hashing Mode" start="32" end="33" type="uint">
+      <value name="Normal Mode" value="0"/>
+      <value name="Cross Slice Hashing Disable" value="1"/>
+      <value name="32X32 hashing" value="3"/>
+    </field>
+    <field name="Subslice Hashing Mode" start="34" end="35" type="uint">
+      <value name="8x8 hashing [Default]" value="0"/>
+      <value name="16x16 hashing" value="3"/>
+    </field>
+    <field name="3D Scoreboard Hashing Mode" start="36" end="36" type="uint">
+      <value name="Scoreboard address calculation optimized for Subslice Hashing Mode" value="0"/>
+      <value name="Scoreboard address calculation not optimized " value="1"/>
+    </field>
+    <field name="Subslice Hashing Table Enable" start="37" end="37" type="bool"/>
+    <field name="Slice Hashing Table Enable" start="38" end="38" type="bool"/>
+    <field name="PTBR Mode Enable" start="39" end="39" type="bool"/>
+    <field name="Mask Bits" start="48" end="63" type="uint"/>
+    <field name="AMFS MOCS" start="64" end="70" type="uint"/>
+    <field name="State Cache redirect to CS section enable" start="73" end="73" type="bool"/>
+    <field name="AMFS MOCS Mask" start="80" end="86" type="uint"/>
+    <field name="State Cache redirect to CS section enable Mask" start="89" end="89" type="bool"/>
+  </instruction>
+
   <instruction name="3DSTATE_AA_LINE_PARAMETERS" bias="2" length="3" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="10"/>

@@ -185,6 +185,28 @@ namespace {
       }
    }
 
+   unsigned
+   has_invalid_exec_type(const gen_device_info *devinfo, const fs_inst *inst)
+   {
+      switch (inst->opcode) {
+      case SHADER_OPCODE_QUAD_SWIZZLE:
+         return has_dst_aligned_region_restriction(devinfo, inst) ?
+                0x1 : 0;
+
+      case SHADER_OPCODE_BROADCAST:
+      case SHADER_OPCODE_MOV_INDIRECT:
+         return (((devinfo->gen == 7 && !devinfo->is_haswell) ||
+                  devinfo->is_cherryview || gen_device_info_is_9lp(devinfo) ||
+                  devinfo->is_arctic_sound) && type_sz(inst->src[0].type) > 4) ||
+                (devinfo->is_arctic_sound &&
+                 brw_reg_type_is_floating_point(inst->src[0].type)) ?
+                0x1 : 0;
+
+      default:
+         return 0;
+      }
+   }
+
    /*
     * Return whether the instruction has unsupported source modifiers
     * specified for the i-th source region.
@@ -193,8 +215,11 @@ namespace {
    has_invalid_src_modifiers(const gen_device_info *devinfo, const fs_inst *inst,
                              unsigned i)
    {
-      return !inst->can_do_source_mods(devinfo) &&
-             (inst->src[i].negate || inst->src[i].abs);
+      return (!inst->can_do_source_mods(devinfo) &&
+              (inst->src[i].negate || inst->src[i].abs)) ||
+             ((has_invalid_exec_type(devinfo, inst) & (1u << i)) &&
+              (inst->src[i].negate || inst->src[i].abs ||
+               inst->src[i].type != get_exec_type(inst)));
    }
 
    /*
@@ -211,20 +236,26 @@ namespace {
          return inst->dst.type != get_exec_type(inst);
       case SHADER_OPCODE_BROADCAST:
       case SHADER_OPCODE_MOV_INDIRECT:
-         /* The source and destination types of these may be hard-coded to
-          * integer at codegen time due to hardware limitations of 64-bit
-          * types.
+      case SHADER_OPCODE_QUAD_SWIZZLE:
+         /* FIXME: We assume the opcodes not explicitly mentioned before just
+          * work fine with arbitrary conversions, unless they need to be
+          * bit-cast.
           */
-         return ((devinfo->gen == 7 && !devinfo->is_haswell) ||
-                 devinfo->is_cherryview || gen_device_info_is_9lp(devinfo)) &&
-                type_sz(inst->src[0].type) > 4 &&
-                inst->dst.type != inst->src[0].type;
       default:
-         /* FIXME: We assume the opcodes don't explicitly mentioned before
-          * just work fine with arbitrary conversions.
-          */
-         return false;
+         return has_invalid_exec_type(devinfo, inst) &&
+                inst->dst.type != get_exec_type(inst);
       }
+   }
+
+   /*
+    * Return whether the instruction has unsupported destination modifiers.
+    */
+   bool
+   has_invalid_dst_modifiers(const gen_device_info *devinfo, const fs_inst *inst)
+   {
+      return (has_invalid_exec_type(devinfo, inst) &&
+              (inst->saturate || inst->conditional_mod)) ||
+             has_invalid_conversion(devinfo, inst);
    }
 
    /**
@@ -417,6 +448,25 @@ namespace {
       return true;
    }
 
+   bool
+   lower_exec_type(fs_visitor *v, bblock_t *block, fs_inst *inst)
+   {
+      assert(inst->dst.type == get_exec_type(inst));
+      const unsigned mask = has_invalid_exec_type(v->devinfo, inst);
+      const brw_reg_type raw_type = brw_int_type(type_sz(inst->dst.type), false);
+
+      for (unsigned i = 0; i < inst->sources; i++) {
+         if (mask & (1u << i)) {
+            assert(inst->src[i].type == inst->dst.type);
+            inst->src[i].type = raw_type;
+         }
+      }
+
+      inst->dst.type = raw_type;
+
+      return true;
+   }
+
    /**
     * Legalize the source and destination regioning controls of the specified
     * instruction.
@@ -427,7 +477,7 @@ namespace {
       const gen_device_info *devinfo = v->devinfo;
       bool progress = false;
 
-      if (has_invalid_conversion(devinfo, inst))
+      if (has_invalid_dst_modifiers(devinfo, inst))
          progress |= lower_dst_modifiers(v, block, inst);
 
       if (has_invalid_dst_region(devinfo, inst))
@@ -440,6 +490,9 @@ namespace {
          if (has_invalid_src_region(devinfo, inst, i))
             progress |= lower_src_region(v, block, inst, i);
       }
+
+      if (has_invalid_exec_type(devinfo, inst))
+         progress |= lower_exec_type(v, block, inst);
 
       return progress;
    }

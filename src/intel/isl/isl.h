@@ -376,6 +376,7 @@ enum isl_format {
 
    /* Formats for auxiliary surfaces */
    ISL_FORMAT_HIZ,
+   ISL_FORMAT_ATS_HIZ,
    ISL_FORMAT_MCS_2X,
    ISL_FORMAT_MCS_4X,
    ISL_FORMAT_MCS_8X,

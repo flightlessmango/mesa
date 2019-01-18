@@ -509,7 +509,11 @@ anv_physical_device_init(struct anv_physical_device *device,
     */
    device->has_bindless_samplers = device->info.gen >= 8;
 
+
    device->has_mem_available = get_available_system_memory() != 0;
+
+   device->has_mmap_offset =
+      anv_gem_get_param(fd, I915_PARAM_MMAP_OFFSET_VERSION) > 0;
 
    /* Starting with Gen10, the timestamp frequency of the command streamer may
     * vary from one part to another. We can query the value from the kernel.

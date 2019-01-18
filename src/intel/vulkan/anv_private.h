@@ -970,6 +970,8 @@ struct anv_physical_device {
     /** True if we can use bindless access for samplers */
     bool                                        has_bindless_samplers;
 
+    bool                                        has_mmap_offset;
+
     struct anv_device_extension_table           supported_extensions;
     struct anv_physical_device_dispatch_table   dispatch;
 

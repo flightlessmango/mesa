@@ -1469,7 +1469,9 @@ anv_image_fill_surface_state(struct anv_device *device,
          state_inout->clear_address.offset |= *clear_addr_dw & 0x3f;
       }
 
-      if (device->info.gen >= 12 && aux_usage != ISL_AUX_USAGE_NONE) {
+      if (device->info.gen >= 12 &&
+          !device->info.is_arctic_sound &&
+          aux_usage != ISL_AUX_USAGE_NONE) {
          gen_aux_map_add_image(device->aux_map_ctx, isl_surf,
                                anv_address_physical(state_inout->address),
                                anv_address_physical(aux_address));

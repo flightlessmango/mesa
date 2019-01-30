@@ -574,6 +574,7 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
       }
 
       if (cmd_buffer->device->info.gen >= 12 &&
+          !cmd_buffer->device->info.is_arctic_sound &&
           image.surf.aux_usage != ISL_AUX_USAGE_NONE) {
          uint64_t paddr =
             anv_address_physical(blorp_address_to_anv(image.surf.addr));

@@ -114,7 +114,10 @@ isl_gen12_choose_image_alignment_el(const struct isl_device *dev,
          const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
          const uint32_t bs = fmtl-> bpb / 8;
          if (isl_surf_usage_is_depth(info->usage)) {
-            *image_align_el = isl_extent3d(8, 4, 1);
+            *image_align_el =
+               info->format != ISL_FORMAT_R16_UNORM ?
+               isl_extent3d(8, 4, 1) :
+               isl_extent3d(8, 8, 1);
          } else if (isl_surf_usage_is_stencil(info->usage) || info->format == ISL_FORMAT_R8_UINT) {
             *image_align_el = isl_extent3d(16, 8, 1);
          } else if (isl_is_pow2(bs)) {

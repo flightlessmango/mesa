@@ -120,6 +120,7 @@ brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
       assert(!dest.negate && !dest.abs);
       brw_inst_set_dst_reg_file(devinfo, inst, dest.file);
       brw_inst_set_dst_da_reg_nr(devinfo, inst, dest.nr);
+      assert(brw_inst_send_rta_index(devinfo, inst) == 0);
 
    } else if (brw_inst_opcode(devinfo, inst) == BRW_OPCODE_SENDS ||
               brw_inst_opcode(devinfo, inst) == BRW_OPCODE_SENDSC) {

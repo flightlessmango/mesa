@@ -5765,6 +5765,33 @@ iris_upload_render_state(struct iris_context *ice,
 }
 
 static void
+iris_load_indirect_location(struct iris_context *ice,
+                            struct iris_batch *batch,
+                            const struct pipe_grid_info *grid)
+{
+#define GPGPU_DISPATCHDIMX 0x2500
+#define GPGPU_DISPATCHDIMY 0x2504
+#define GPGPU_DISPATCHDIMZ 0x2508
+
+   assert(grid->indirect);
+
+   struct iris_state_ref *grid_size = &ice->state.grid_size;
+   struct iris_bo *bo = iris_resource_bo(grid_size->res);
+   iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
+      lrm.RegisterAddress = GPGPU_DISPATCHDIMX;
+      lrm.MemoryAddress = ro_bo(bo, grid_size->offset + 0);
+   }
+   iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
+      lrm.RegisterAddress = GPGPU_DISPATCHDIMY;
+      lrm.MemoryAddress = ro_bo(bo, grid_size->offset + 4);
+   }
+   iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
+      lrm.RegisterAddress = GPGPU_DISPATCHDIMZ;
+      lrm.MemoryAddress = ro_bo(bo, grid_size->offset + 8);
+   }
+}
+
+static void
 iris_upload_gpgpu_walker(struct iris_context *ice,
                          struct iris_batch *batch,
                          const struct pipe_grid_info *grid)
@@ -5873,26 +5900,8 @@ iris_upload_gpgpu_walker(struct iris_context *ice,
    else
       right_mask = ~0u >> (32 - cs_prog_data->simd_size);
 
-#define GPGPU_DISPATCHDIMX 0x2500
-#define GPGPU_DISPATCHDIMY 0x2504
-#define GPGPU_DISPATCHDIMZ 0x2508
-
-   if (grid->indirect) {
-      struct iris_state_ref *grid_size = &ice->state.grid_size;
-      struct iris_bo *bo = iris_resource_bo(grid_size->res);
-      iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
-         lrm.RegisterAddress = GPGPU_DISPATCHDIMX;
-         lrm.MemoryAddress = ro_bo(bo, grid_size->offset + 0);
-      }
-      iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
-         lrm.RegisterAddress = GPGPU_DISPATCHDIMY;
-         lrm.MemoryAddress = ro_bo(bo, grid_size->offset + 4);
-      }
-      iris_emit_cmd(batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
-         lrm.RegisterAddress = GPGPU_DISPATCHDIMZ;
-         lrm.MemoryAddress = ro_bo(bo, grid_size->offset + 8);
-      }
-   }
+   if (grid->indirect)
+      iris_load_indirect_location(ice, batch, grid);
 
    iris_emit_cmd(batch, GENX(GPGPU_WALKER), ggw) {
       ggw.IndirectParameterEnable    = grid->indirect != NULL;

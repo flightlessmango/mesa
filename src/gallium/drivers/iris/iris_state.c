@@ -110,6 +110,15 @@
 #include "iris_genx_macros.h"
 #include "intel/common/gen_guardband.h"
 
+#define GET_COMPUTE_IDD_LENGTH(struc) __genxml_cmd_length(struc)
+#if GEN_GEN > 12
+#define COMPUTE_IDD_STRUCT GENX(INTERFACE_DESCRIPTOR_DATA)
+#define COMPUTE_IDD_STRUCT_length GET_COMPUTE_IDD_LENGTH(GENX(INTERFACE_DESCRIPTOR_DATA))
+#elif GEN_GEN == 12
+#define COMPUTE_IDD_STRUCT GENX(INTERFACE_DESCRIPTOR_DATA_HP)
+#define COMPUTE_IDD_STRUCT_length GET_COMPUTE_IDD_LENGTH(GENX(INTERFACE_DESCRIPTOR_DATA_HP))
+#endif
+
 #if GEN_GEN == 8
 #define MOCS_PTE 0x18
 #define MOCS_WB 0x78
@@ -3936,16 +3945,34 @@ iris_store_cs_state(struct iris_context *ice,
    struct brw_cs_prog_data *cs_prog_data = (void *) shader->prog_data;
    void *map = shader->derived_data;
 
-   iris_pack_state(GENX(INTERFACE_DESCRIPTOR_DATA), map, desc) {
-      desc.KernelStartPointer = KSP(shader);
-      desc.ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs;
-      desc.NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads;
-      desc.SharedLocalMemorySize =
-         encode_slm_size(GEN_GEN, prog_data->total_shared);
-      desc.BarrierEnable = cs_prog_data->uses_barrier;
-      desc.CrossThreadConstantDataReadLength =
-         cs_prog_data->push.cross_thread.regs;
+#if GEN_GEN >= 12
+   if (GEN_GEN > 12 || devinfo->is_arctic_sound) {
+      assert(cs_prog_data->push.per_thread.regs == 0);
+      assert(cs_prog_data->push.cross_thread.regs == 0);
+      iris_pack_state(COMPUTE_IDD_STRUCT, map, desc) {
+         desc.KernelStartPointer = KSP(shader);
+         desc.NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads;
+         desc.SharedLocalMemorySize =
+            encode_slm_size(GEN_GEN, prog_data->total_shared);
+         desc.BarrierEnable = cs_prog_data->uses_barrier;
+      }
    }
+#endif
+
+#if GEN_GEN <= 12
+   if (GEN_GEN < 12 || !devinfo->is_arctic_sound) {
+      iris_pack_state(GENX(INTERFACE_DESCRIPTOR_DATA), map, desc) {
+         desc.KernelStartPointer = KSP(shader);
+         desc.ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs;
+         desc.NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads;
+         desc.SharedLocalMemorySize =
+            encode_slm_size(GEN_GEN, prog_data->total_shared);
+         desc.BarrierEnable = cs_prog_data->uses_barrier;
+         desc.CrossThreadConstantDataReadLength =
+            cs_prog_data->push.cross_thread.regs;
+      }
+   }
+#endif
 }
 
 static unsigned
@@ -5791,6 +5818,76 @@ iris_load_indirect_location(struct iris_context *ice,
    }
 }
 
+#if GEN_GEN >= 12
+static void
+iris_upload_compute_walker(struct iris_context *ice,
+                           struct iris_batch *batch,
+                           const struct pipe_grid_info *grid)
+{
+   const uint64_t dirty = ice->state.dirty;
+   struct iris_screen *screen = batch->screen;
+   const struct gen_device_info *devinfo = &screen->devinfo;
+   struct iris_binder *binder = &ice->state.binder;
+   struct iris_shader_state *shs = &ice->state.shaders[MESA_SHADER_COMPUTE];
+   struct iris_compiled_shader *shader =
+      ice->shaders.prog[MESA_SHADER_COMPUTE];
+   struct brw_stage_prog_data *prog_data = shader->prog_data;
+   struct brw_cs_prog_data *cs_prog_data = (void *) prog_data;
+
+   if (dirty & IRIS_DIRTY_CS) {
+      iris_emit_cmd(batch, GENX(CFE_STATE), cfe) {
+         if (prog_data->total_scratch) {
+            struct iris_bo *bo =
+               iris_get_scratch_space(ice, prog_data->total_scratch,
+                                      MESA_SHADER_COMPUTE);
+            cfe.PerThreadScratchSpace = ffs(prog_data->total_scratch) - 11;
+            cfe.ScratchSpaceBasePointer = rw_bo(bo, 0);
+         }
+
+         cfe.MaximumNumberofThreads =
+            devinfo->max_cs_threads * screen->subslice_total - 1;
+      }
+   }
+
+   if (grid->indirect)
+      iris_load_indirect_location(ice, batch, grid);
+
+   const unsigned simd_size = cs_prog_data->simd_size;
+   unsigned group_size = cs_prog_data->local_size[0] *
+      cs_prog_data->local_size[1] * cs_prog_data->local_size[2];
+
+   uint32_t last_mask = 0xffffffffu >> (32 - simd_size);
+   const unsigned last_non_aligned = group_size & (simd_size - 1);
+   if (last_non_aligned != 0)
+      last_mask >>= (simd_size - last_non_aligned);
+
+   iris_emit_cmd(batch, GENX(COMPUTE_WALKER), cw) {
+      cw.IndirectParameterEnable        = grid->indirect;
+      cw.SIMDSize                       = cs_prog_data->simd_size / 16;
+      cw.LocalXMaximum                  = cs_prog_data->local_size[0] - 1;
+      cw.LocalYMaximum                  = cs_prog_data->local_size[1] - 1;
+      cw.LocalZMaximum                  = cs_prog_data->local_size[2] - 1;
+      cw.ThreadGroupIDXDimension        = grid->grid[0];
+      cw.ThreadGroupIDYDimension        = grid->grid[1];
+      cw.ThreadGroupIDZDimension        = grid->grid[2];
+      cw.ExecutionMask                  = last_mask;
+
+      uint32_t *desc = (uint32_t*)&cw.InterfaceDescriptor;
+      iris_pack_state(COMPUTE_IDD_STRUCT, desc, idd) {
+         idd.SamplerStatePointer = shs->sampler_table.offset;
+         idd.BindingTablePointer = binder->bt_offset[MESA_SHADER_COMPUTE];
+      }
+
+      for (int i = 0; i < COMPUTE_IDD_STRUCT_length; i++)
+         desc[i] |= ((uint32_t *) shader->derived_data)[i];
+
+      assert(cs_prog_data->push.total.regs == 0);
+   }
+
+}
+#endif
+
+#if GEN_GEN <= 12
 static void
 iris_upload_gpgpu_walker(struct iris_context *ice,
                          struct iris_batch *batch,
@@ -5918,6 +6015,7 @@ iris_upload_gpgpu_walker(struct iris_context *ice,
 
    iris_emit_cmd(batch, GENX(MEDIA_STATE_FLUSH), msf);
 }
+#endif
 
 static void
 iris_upload_compute_state(struct iris_context *ice,
@@ -5955,7 +6053,15 @@ iris_upload_compute_state(struct iris_context *ice,
    genX(iris_upload_aux_map_state)(ice, batch);
 #endif
 
-   iris_upload_gpgpu_walker(ice, batch, grid);
+   const bool is_arctic_sound = batch->screen->devinfo.is_arctic_sound;
+#if GEN_GEN >= 12
+   if (GEN_GEN > 12 || is_arctic_sound)
+      iris_upload_compute_walker(ice, batch, grid);
+#endif
+#if GEN_GEN <= 12
+   if (GEN_GEN < 12 || !is_arctic_sound)
+      iris_upload_gpgpu_walker(ice, batch, grid);
+#endif
 
    if (!batch->contains_draw) {
       iris_restore_compute_saved_bos(ice, batch, grid);

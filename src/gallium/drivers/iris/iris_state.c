@@ -5765,9 +5765,9 @@ iris_upload_render_state(struct iris_context *ice,
 }
 
 static void
-iris_upload_compute_state(struct iris_context *ice,
-                          struct iris_batch *batch,
-                          const struct pipe_grid_info *grid)
+iris_upload_gpgpu_walker(struct iris_context *ice,
+                         struct iris_batch *batch,
+                         const struct pipe_grid_info *grid)
 {
    const uint64_t dirty = ice->state.dirty;
    struct iris_screen *screen = batch->screen;
@@ -5778,32 +5778,6 @@ iris_upload_compute_state(struct iris_context *ice,
       ice->shaders.prog[MESA_SHADER_COMPUTE];
    struct brw_stage_prog_data *prog_data = shader->prog_data;
    struct brw_cs_prog_data *cs_prog_data = (void *) prog_data;
-
-   /* Always pin the binder.  If we're emitting new binding table pointers,
-    * we need it.  If not, we're probably inheriting old tables via the
-    * context, and need it anyway.  Since true zero-bindings cases are
-    * practically non-existent, just pin it and avoid last_res tracking.
-    */
-   iris_use_pinned_bo(batch, ice->state.binder.bo, false);
-
-   if ((dirty & IRIS_DIRTY_CONSTANTS_CS) && shs->sysvals_need_upload)
-      upload_sysvals(ice, MESA_SHADER_COMPUTE);
-
-   if (dirty & IRIS_DIRTY_BINDINGS_CS)
-      iris_populate_binding_table(ice, batch, MESA_SHADER_COMPUTE, false);
-
-   if (dirty & IRIS_DIRTY_SAMPLER_STATES_CS)
-      iris_upload_sampler_states(ice, MESA_SHADER_COMPUTE);
-
-   iris_use_optional_res(batch, shs->sampler_table.res, false);
-   iris_use_pinned_bo(batch, iris_resource_bo(shader->assembly.res), false);
-
-   if (ice->state.need_border_colors)
-      iris_use_pinned_bo(batch, ice->state.border_color_pool.bo, false);
-
-#if GEN_GEN >= 12
-   genX(iris_upload_aux_map_state)(ice, batch);
-#endif
 
    if (dirty & IRIS_DIRTY_CS) {
       /* The MEDIA_VFE_STATE documentation for Gen8+ says:
@@ -5934,6 +5908,45 @@ iris_upload_compute_state(struct iris_context *ice,
    }
 
    iris_emit_cmd(batch, GENX(MEDIA_STATE_FLUSH), msf);
+}
+
+static void
+iris_upload_compute_state(struct iris_context *ice,
+                          struct iris_batch *batch,
+                          const struct pipe_grid_info *grid)
+{
+   const uint64_t dirty = ice->state.dirty;
+   struct iris_shader_state *shs = &ice->state.shaders[MESA_SHADER_COMPUTE];
+   struct iris_compiled_shader *shader =
+      ice->shaders.prog[MESA_SHADER_COMPUTE];
+
+   /* Always pin the binder.  If we're emitting new binding table pointers,
+    * we need it.  If not, we're probably inheriting old tables via the
+    * context, and need it anyway.  Since true zero-bindings cases are
+    * practically non-existent, just pin it and avoid last_res tracking.
+    */
+   iris_use_pinned_bo(batch, ice->state.binder.bo, false);
+
+   if ((dirty & IRIS_DIRTY_CONSTANTS_CS) && shs->sysvals_need_upload)
+      upload_sysvals(ice, MESA_SHADER_COMPUTE);
+
+   if (dirty & IRIS_DIRTY_BINDINGS_CS)
+      iris_populate_binding_table(ice, batch, MESA_SHADER_COMPUTE, false);
+
+   if (dirty & IRIS_DIRTY_SAMPLER_STATES_CS)
+      iris_upload_sampler_states(ice, MESA_SHADER_COMPUTE);
+
+   iris_use_optional_res(batch, shs->sampler_table.res, false);
+   iris_use_pinned_bo(batch, iris_resource_bo(shader->assembly.res), false);
+
+   if (ice->state.need_border_colors)
+      iris_use_pinned_bo(batch, ice->state.border_color_pool.bo, false);
+
+#if GEN_GEN >= 12
+   genX(iris_upload_aux_map_state)(ice, batch);
+#endif
+
+   iris_upload_gpgpu_walker(ice, batch, grid);
 
    if (!batch->contains_draw) {
       iris_restore_compute_saved_bos(ice, batch, grid);

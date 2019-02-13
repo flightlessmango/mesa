@@ -146,6 +146,7 @@ struct iris_bufmgr {
    struct util_vma_heap vma_allocator[IRIS_MEMZONE_COUNT];
 
    bool has_llc:1;
+   bool has_mmap_offset:1;
    bool bo_reuse:1;
 
    struct gen_aux_map_context *aux_map_ctx;
@@ -923,9 +924,45 @@ iris_bo_gem_mmap(struct pipe_debug_callback *dbg, struct iris_bo *bo, bool wc)
 }
 
 static void *
+iris_bo_gem_mmap_offset(struct pipe_debug_callback *dbg, struct iris_bo *bo,
+                        bool wc)
+{
+   struct iris_bufmgr *bufmgr = bo->bufmgr;
+
+   struct drm_i915_gem_mmap_offset mmap_arg = {
+      .handle = bo->gem_handle,
+      .flags = wc ? I915_MMAP_OFFSET_WC : I915_MMAP_OFFSET_WB,
+   };
+
+   /* Get the fake offset back */
+   int ret = gen_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP_OFFSET, &mmap_arg);
+   if (ret != 0) {
+      DBG("%s:%d: Error preparing buffer %d (%s): %s .\n",
+          __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
+      return NULL;
+   }
+
+   /* And map it */
+   void *map = mmap(0, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                    bufmgr->fd, mmap_arg.offset);
+   if (map == MAP_FAILED) {
+      DBG("%s:%d: Error mapping buffer %d (%s): %s .\n",
+          __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
+      return NULL;
+   }
+
+   return map;
+}
+
+static void *
 iris_bo_gem_mmap_internal(struct pipe_debug_callback *dbg, struct iris_bo *bo, bool wc)
 {
-   return iris_bo_gem_mmap(dbg, bo, wc);
+   struct iris_bufmgr *bufmgr = bo->bufmgr;
+
+   if (bufmgr->has_mmap_offset)
+      return iris_bo_gem_mmap_offset(dbg, bo, wc);
+   else
+      return iris_bo_gem_mmap(dbg, bo, wc);
 }
 
 static void *
@@ -1579,6 +1616,18 @@ iris_gtt_size(int fd)
    return 0;
 }
 
+static int
+gem_param(int fd, int name)
+{
+   int v = -1; /* No param uses (yet) the sign bit, reserve it for errors */
+
+   struct drm_i915_getparam gp = { .param = name, .value = &v };
+   if (gen_ioctl(fd, DRM_IOCTL_I915_GETPARAM, &gp))
+      return -1;
+
+   return v;
+}
+
 struct gen_aux_map_buffer {
    struct gen_buffer base;
    struct list_head link;
@@ -1654,6 +1703,7 @@ iris_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
 
    bufmgr->has_llc = devinfo->has_llc;
    bufmgr->bo_reuse = bo_reuse;
+   bufmgr->has_mmap_offset = gem_param(fd, I915_PARAM_MMAP_OFFSET_VERSION) > 0;
 
    STATIC_ASSERT(IRIS_MEMZONE_SHADER_START == 0ull);
    const uint64_t _4GB = 1ull << 32;

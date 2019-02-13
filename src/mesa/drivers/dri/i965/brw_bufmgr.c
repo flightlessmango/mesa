@@ -771,7 +771,8 @@ brw_bo_gem_create_from_name(struct brw_bufmgr *bufmgr,
    bo->kflags = bufmgr->initial_kflags;
 
    if (bo->kflags & EXEC_OBJECT_PINNED)
-      bo->gtt_offset = vma_alloc(bufmgr, BRW_MEMZONE_OTHER, bo->size, 1);
+      bo->gtt_offset = vma_alloc(bufmgr, BRW_MEMZONE_OTHER, bo->size,
+                                 64 * 1024);
 
    _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
    _mesa_hash_table_insert(bufmgr->name_table, &bo->global_name, bo);
@@ -1513,7 +1514,8 @@ brw_bo_gem_create_from_prime_internal(struct brw_bufmgr *bufmgr, int prime_fd,
 
    if (bo->kflags & EXEC_OBJECT_PINNED) {
       assert(bo->size > 0);
-      bo->gtt_offset = vma_alloc(bufmgr, BRW_MEMZONE_OTHER, bo->size, 1);
+      bo->gtt_offset = vma_alloc(bufmgr, BRW_MEMZONE_OTHER, bo->size,
+                                 64 * 1024);
    }
 
    if (tiling_mode < 0) {

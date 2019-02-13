@@ -516,6 +516,7 @@ bo_alloc_internal(struct iris_bufmgr *bufmgr,
 
    if (bo->gtt_offset == 0ull) {
       mtx_lock(&bufmgr->lock);
+      alignment = MIN2(alignment, 64 * 1024);
       bo->gtt_offset = vma_alloc(bufmgr, memzone, bo->size, alignment);
       mtx_unlock(&bufmgr->lock);
 
@@ -615,7 +616,7 @@ iris_bo_create_userptr(struct iris_bufmgr *bufmgr, const char *name,
    bo->kflags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_PINNED;
 
    mtx_lock(&bufmgr->lock);
-   bo->gtt_offset = vma_alloc(bufmgr, memzone, size, 1);
+   bo->gtt_offset = vma_alloc(bufmgr, memzone, size, 64 * 1024);
    mtx_unlock(&bufmgr->lock);
 
    if (bo->gtt_offset == 0ull)
@@ -690,7 +691,7 @@ iris_bo_gem_create_from_name(struct iris_bufmgr *bufmgr,
    bo->reusable = false;
    bo->external = true;
    bo->kflags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_PINNED;
-   bo->gtt_offset = vma_alloc(bufmgr, IRIS_MEMZONE_OTHER, bo->size, 1);
+   bo->gtt_offset = vma_alloc(bufmgr, IRIS_MEMZONE_OTHER, bo->size, 64 * 1024);
 
    _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
    _mesa_hash_table_insert(bufmgr->name_table, &bo->global_name, bo);
@@ -1328,7 +1329,7 @@ iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd)
    bo->reusable = false;
    bo->external = true;
    bo->kflags = EXEC_OBJECT_SUPPORTS_48B_ADDRESS | EXEC_OBJECT_PINNED;
-   bo->gtt_offset = vma_alloc(bufmgr, IRIS_MEMZONE_OTHER, bo->size, 1);
+   bo->gtt_offset = vma_alloc(bufmgr, IRIS_MEMZONE_OTHER, bo->size, 64 * 1024);
    bo->gem_handle = handle;
    _mesa_hash_table_insert(bufmgr->handle_table, &bo->gem_handle, bo);
 

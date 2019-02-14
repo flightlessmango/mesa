@@ -3945,20 +3945,6 @@ iris_store_cs_state(struct iris_context *ice,
    struct brw_cs_prog_data *cs_prog_data = (void *) shader->prog_data;
    void *map = shader->derived_data;
 
-#if GEN_GEN >= 12
-   if (GEN_GEN > 12 || devinfo->is_arctic_sound) {
-      assert(cs_prog_data->push.per_thread.regs == 0);
-      assert(cs_prog_data->push.cross_thread.regs == 0);
-      iris_pack_state(COMPUTE_IDD_STRUCT, map, desc) {
-         desc.KernelStartPointer = KSP(shader);
-         desc.NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads;
-         desc.SharedLocalMemorySize =
-            encode_slm_size(GEN_GEN, prog_data->total_shared);
-         desc.BarrierEnable = cs_prog_data->uses_barrier;
-      }
-   }
-#endif
-
 #if GEN_GEN <= 12
    if (GEN_GEN < 12 || !devinfo->is_arctic_sound) {
       iris_pack_state(GENX(INTERFACE_DESCRIPTOR_DATA), map, desc) {
@@ -5872,14 +5858,15 @@ iris_upload_compute_walker(struct iris_context *ice,
       cw.ThreadGroupIDZDimension        = grid->grid[2];
       cw.ExecutionMask                  = last_mask;
 
-      uint32_t *desc = (uint32_t*)&cw.InterfaceDescriptor;
-      iris_pack_state(COMPUTE_IDD_STRUCT, desc, idd) {
-         idd.SamplerStatePointer = shs->sampler_table.offset;
-         idd.BindingTablePointer = binder->bt_offset[MESA_SHADER_COMPUTE];
-      }
-
-      for (int i = 0; i < COMPUTE_IDD_STRUCT_length; i++)
-         desc[i] |= ((uint32_t *) shader->derived_data)[i];
+      cw.InterfaceDescriptor = (struct COMPUTE_IDD_STRUCT) {
+         .KernelStartPointer = KSP(shader),
+         .NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads,
+         .SharedLocalMemorySize =
+            encode_slm_size(GEN_GEN, prog_data->total_shared),
+         .BarrierEnable = cs_prog_data->uses_barrier,
+         .SamplerStatePointer = shs->sampler_table.offset,
+         .BindingTablePointer = binder->bt_offset[MESA_SHADER_COMPUTE],
+      };
 
       assert(cs_prog_data->push.total.regs == 0);
    }

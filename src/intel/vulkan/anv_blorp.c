@@ -51,9 +51,10 @@ anv_blorp_unmap(const struct blorp_context *blorp,
                 const struct blorp_address *blorp_addr)
 {
    struct anv_bo *bo = blorp_addr->buffer;
+   struct anv_device *device = blorp->driver_ctx;
 
    if (bo->map) {
-      anv_gem_munmap(bo->map, bo->size);
+      anv_gem_munmap(device, bo->map, bo->size);
       bo->map = NULL;
    }
 }

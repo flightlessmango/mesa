@@ -490,7 +490,7 @@ anv_block_pool_finish(struct anv_block_pool *pool)
 
    u_vector_foreach(cleanup, &pool->mmap_cleanups) {
       if (use_softpin)
-         anv_gem_munmap(cleanup->map, cleanup->size);
+         anv_gem_munmap(pool->device, cleanup->map, cleanup->size);
       else
          munmap(cleanup->map, cleanup->size);
 
@@ -1380,7 +1380,7 @@ anv_bo_pool_finish(struct anv_bo_pool *pool)
       while (link != NULL) {
          struct bo_pool_bo_link link_copy = VG_NOACCESS_READ(link);
 
-         anv_gem_munmap(link_copy.bo.map, link_copy.bo.size);
+         anv_gem_munmap(pool->device, link_copy.bo.map, link_copy.bo.size);
          anv_vma_free(pool->device, &link_copy.bo);
          anv_gem_close(pool->device, link_copy.bo.gem_handle);
          link = link_copy.next;
@@ -1957,7 +1957,7 @@ anv_bo_cache_release(struct anv_device *device,
    _mesa_hash_table_remove(cache->bo_map, entry);
 
    if (bo->bo.map)
-      anv_gem_munmap(bo->bo.map, bo->bo.size);
+      anv_gem_munmap(device, bo->bo.map, bo->bo.size);
 
    anv_vma_free(device, &bo->bo);
 

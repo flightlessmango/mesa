@@ -2244,7 +2244,7 @@ anv_device_init_trivial_batch(struct anv_device *device)
    if (!device->info.has_llc)
       gen_clflush_range(map, batch.next - map);
 
-   anv_gem_munmap(map, device->trivial_batch_bo.size);
+   anv_gem_munmap(device, map, device->trivial_batch_bo.size);
 }
 
 VkResult anv_EnumerateDeviceExtensionProperties(
@@ -2351,7 +2351,7 @@ anv_device_init_hiz_clear_value_bo(struct anv_device *device)
    hiz_clear.f32[0] = ANV_HZ_FC_VAL;
 
    memcpy(map, hiz_clear.u32, sizeof(hiz_clear.u32));
-   anv_gem_munmap(map, device->hiz_clear_bo.size);
+   anv_gem_munmap(device, map, device->hiz_clear_bo.size);
 }
 
 static bool
@@ -2850,7 +2850,8 @@ VkResult anv_CreateDevice(
          anv_queue_finish(&device->queue[i]);
    }
    anv_scratch_pool_finish(device, &device->scratch_pool);
-   anv_gem_munmap(device->workaround_bo.map, device->workaround_bo.size);
+   anv_gem_munmap(device, device->workaround_bo.map,
+                  device->workaround_bo.size);
    anv_gem_close(device, device->workaround_bo.gem_handle);
  fail_surface_aux_map_pool:
    if (device->info.gen >= 12) {
@@ -2916,7 +2917,8 @@ void anv_DestroyDevice(
 
    anv_scratch_pool_finish(device, &device->scratch_pool);
 
-   anv_gem_munmap(device->workaround_bo.map, device->workaround_bo.size);
+   anv_gem_munmap(device, device->workaround_bo.map,
+                  device->workaround_bo.size);
    anv_vma_free(device, &device->workaround_bo);
    anv_gem_close(device, device->workaround_bo.gem_handle);
 
@@ -3613,12 +3615,13 @@ void anv_UnmapMemory(
     VkDevice                                    _device,
     VkDeviceMemory                              _memory)
 {
+   ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_device_memory, mem, _memory);
 
    if (mem == NULL || mem->host_ptr)
       return;
 
-   anv_gem_munmap(mem->map, mem->map_size);
+   anv_gem_munmap(device, mem->map, mem->map_size);
 
    mem->map = NULL;
    mem->map_size = 0;

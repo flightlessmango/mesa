@@ -260,7 +260,9 @@ genX(emit_vertex_buffer_state)(struct brw_context *brw,
 #endif
 #endif
 
-#if GEN_GEN == 11
+#if GEN_GEN == 12
+      .MOCS = TGL_MOCS_WB,
+#elif GEN_GEN == 11
       .MOCS = ICL_MOCS_WB,
 #elif GEN_GEN == 10
       .MOCS = CNL_MOCS_WB,

@@ -249,8 +249,8 @@ CHIPSET(0x4571, ehl_4x8, "Intel(R) HD Graphics (Elkhart Lake 4x8)")
 CHIPSET(0x4551, ehl_4x4, "Intel(R) HD Graphics (Elkhart Lake 4x4)")
 CHIPSET(0x4541, ehl_2x4, "Intel(R) HD Graphics (Elkhart Lake 2x4)")
 #endif
-#if !defined(IRIS) || IRIS == 0 || IRIS == 1
-/* First try to load iris, then try i965 */
+#if !defined(IRIS) || IRIS == 1
+/* Only try to load iris. Do not attempt i965. */
 CHIPSET(0x9A40, tgl_1x6x16, "Intel(R) HD Graphics (Tigerlake 1x6x16 GT2)")
 CHIPSET(0x9A49, tgl_1x6x16, "Intel(R) HD Graphics (Tigerlake 1x6x16 GT2)")
 CHIPSET(0x9A59, tgl_1x6x16, "Intel(R) HD Graphics (Tigerlake 1x6x16 GT2)")

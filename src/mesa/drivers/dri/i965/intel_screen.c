@@ -338,6 +338,7 @@ uint64_t supported_modifiers[] = {
    I915_FORMAT_MOD_X_TILED,
    I915_FORMAT_MOD_Y_TILED,
    I915_FORMAT_MOD_Y_TILED_CCS,
+   I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS,
 };
 
 static bool
@@ -388,6 +389,9 @@ modifier_is_supported(const struct gen_device_info *devinfo,
 
    case I915_FORMAT_MOD_Y_TILED_CCS:
       return devinfo->gen >= 9 && devinfo->gen < 12;
+
+   case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+      return devinfo->gen == 12 && !devinfo->is_arctic_sound;
 
    default:
       return false;
@@ -651,6 +655,7 @@ enum modifier_priority {
    MODIFIER_PRIORITY_X,
    MODIFIER_PRIORITY_Y,
    MODIFIER_PRIORITY_Y_CCS,
+   MODIFIER_PRIORITY_Y_GEN12_RC_CCS,
 };
 
 const uint64_t priority_to_modifier[] = {
@@ -659,6 +664,7 @@ const uint64_t priority_to_modifier[] = {
    [MODIFIER_PRIORITY_X] = I915_FORMAT_MOD_X_TILED,
    [MODIFIER_PRIORITY_Y] = I915_FORMAT_MOD_Y_TILED,
    [MODIFIER_PRIORITY_Y_CCS] = I915_FORMAT_MOD_Y_TILED_CCS,
+   [MODIFIER_PRIORITY_Y_GEN12_RC_CCS] = I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS,
 };
 
 static uint64_t
@@ -674,6 +680,9 @@ select_best_modifier(struct gen_device_info *devinfo,
          continue;
 
       switch (modifiers[i]) {
+      case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+         prio = MAX2(prio, MODIFIER_PRIORITY_Y_GEN12_RC_CCS);
+         break;
       case I915_FORMAT_MOD_Y_TILED_CCS:
          prio = MAX2(prio, MODIFIER_PRIORITY_Y_CCS);
          break;

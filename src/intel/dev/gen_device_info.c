@@ -1009,6 +1009,18 @@ static const struct gen_device_info gen_device_info_ehl_2x4 = {
    .simulator_id = 28,
 };
 
+#define GEN12_URB_MIN_MAX_ENTRIES                   \
+   .min_entries = {                                 \
+      [MESA_SHADER_VERTEX]    = 64,                 \
+      [MESA_SHADER_TESS_EVAL] = 34,                 \
+   },                                               \
+      .max_entries = {                              \
+      [MESA_SHADER_VERTEX]    = 3576,               \
+      [MESA_SHADER_TESS_CTRL] = 1548,               \
+      [MESA_SHADER_TESS_EVAL] = 3576,               \
+      [MESA_SHADER_GEOMETRY]  = 1548,               \
+   }
+
 #define GEN12_HW_INFO                               \
    .gen = 12,                                       \
    .has_pln = false,                                \
@@ -1020,16 +1032,7 @@ static const struct gen_device_info gen_device_info_ehl_2x4 = {
    .max_cs_threads = 56,                            \
    .urb = {                                         \
       .size = 1536,                                 \
-      .min_entries = {                              \
-         [MESA_SHADER_VERTEX]    = 64,              \
-         [MESA_SHADER_TESS_EVAL] = 34,              \
-      },                                            \
-      .max_entries = {                              \
-         [MESA_SHADER_VERTEX]    = 3576,            \
-         [MESA_SHADER_TESS_CTRL] = 1548,            \
-         [MESA_SHADER_TESS_EVAL] = 3576,            \
-         [MESA_SHADER_GEOMETRY]  = 1548,            \
-      },                                            \
+      GEN12_URB_MIN_MAX_ENTRIES,                    \
    }
 
 #define GEN12_FEATURES(_gt, _slices, _subslices, _l3)   \

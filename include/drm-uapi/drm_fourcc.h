@@ -411,6 +411,26 @@ extern "C" {
 #define I915_FORMAT_MOD_Yf_TILED_CCS	fourcc_mod_code(INTEL, 5)
 
 /*
+ * Intel color control surfaces (CCS) for Gen-12 render compression.
+ *
+ * The main surface is Y-tiled and is at plane index 0 whereas CCS is linear
+ * and at index 1. A CCS cache line corresponds to an area of 4x1 tiles in the
+ * main surface. The main surface pitch is required to be a multiple of 4 tile
+ * widths.
+ */
+#define I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS fourcc_mod_code(INTEL, 6)
+
+/*
+ * Intel color control surfaces (CCS) for Gen-12 media compression.
+ *
+ * The main surface is Y-tiled and is at plane index 0 whereas CCS is linear
+ * and at index 1. A CCS cache line corresponds to an area of 4x1 tiles in the
+ * main surface. The main surface pitch is required to be a multiple of 4 tile
+ * widths.
+ */
+#define I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS fourcc_mod_code(INTEL, 7)
+
+/*
  * Tiled, NV12MT, grouped in 64 (pixels) x 32 (lines) -sized macroblocks
  *
  * Macroblocks are laid in a Z-shape, and each pixel data is following the

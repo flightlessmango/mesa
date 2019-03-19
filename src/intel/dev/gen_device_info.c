@@ -1031,7 +1031,7 @@ static const struct gen_device_info gen_device_info_ehl_2x4 = {
    .max_tes_threads = 546,                          \
    .max_cs_threads = 56,                            \
    .urb = {                                         \
-      .size = 1536,                                 \
+      .size = 256,                                  \
       GEN12_URB_MIN_MAX_ENTRIES,                    \
    }
 

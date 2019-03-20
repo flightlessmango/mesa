@@ -390,6 +390,11 @@ enum isl_format {
    ISL_FORMAT_GEN9_CCS_32BPP,
    ISL_FORMAT_GEN9_CCS_64BPP,
    ISL_FORMAT_GEN9_CCS_128BPP,
+   ISL_FORMAT_GEN12_CCS_8BPP,
+   ISL_FORMAT_GEN12_CCS_16BPP,
+   ISL_FORMAT_GEN12_CCS_32BPP,
+   ISL_FORMAT_GEN12_CCS_64BPP,
+   ISL_FORMAT_GEN12_CCS_128BPP,
 
    /* An upper bound on the supported format enumerations */
    ISL_NUM_FORMATS,
@@ -468,6 +473,7 @@ enum isl_tiling {
    ISL_TILING_S,  /**< 64K tiling. The 'S' means "sixty-four". */
    ISL_TILING_HIZ, /**< Tiling format for HiZ surfaces */
    ISL_TILING_CCS, /**< Tiling format for CCS surfaces */
+   ISL_TILING_GEN12_CCS, /**< Tiling format for Gen12 CCS surfaces */
 };
 
 /**
@@ -485,6 +491,7 @@ typedef uint32_t isl_tiling_flags_t;
 #define ISL_TILING_S_BIT                  (1u << ISL_TILING_S)
 #define ISL_TILING_HIZ_BIT                (1u << ISL_TILING_HIZ)
 #define ISL_TILING_CCS_BIT                (1u << ISL_TILING_CCS)
+#define ISL_TILING_GEN12_CCS_BIT          (1u << ISL_TILING_GEN12_CCS)
 #define ISL_TILING_ANY_MASK               (~0u)
 #define ISL_TILING_NON_LINEAR_MASK        (~ISL_TILING_LINEAR_BIT)
 

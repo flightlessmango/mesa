@@ -299,6 +299,12 @@ close_and_return:
 }
 
 bool
+anv_gem_has_context_engines(int fd)
+{
+   return !anv_gem_set_context_param(fd, 0, I915_CONTEXT_PARAM_ENGINES, 0);
+}
+
+bool
 anv_gem_has_context_priority(int fd)
 {
    return !anv_gem_set_context_param(fd, 0, I915_CONTEXT_PARAM_PRIORITY,

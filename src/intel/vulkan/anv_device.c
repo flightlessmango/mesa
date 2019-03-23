@@ -613,6 +613,7 @@ anv_physical_device_init(struct anv_physical_device *device,
    device->local_fd = fd;
 
    anv_init_engine_info(device);
+   int num_compute = anv_gem_count_engines(device, I915_ENGINE_CLASS_COMPUTE);
 
    uint32_t num_families = 0;
    for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
@@ -622,7 +623,7 @@ anv_physical_device_init(struct anv_physical_device *device,
          device->queue_map[num_families++] = i;
          break;
       case ANV_COMPUTE_QUEUE_FAMILY:
-         if (device->info.gen >= 12)
+         if (num_compute > 0)
             device->queue_map[num_families++] = i;
          break;
       }

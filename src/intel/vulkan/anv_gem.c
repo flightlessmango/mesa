@@ -638,3 +638,31 @@ anv_i915_query(int fd, uint64_t query_id, void *buffer,
    *buffer_len = item.length;
    return ret;
 }
+
+void
+anv_init_engine_info(struct anv_physical_device *device)
+{
+   device->engine_info = NULL;
+
+   if (!device->has_context_engines)
+      return;
+
+   int32_t length = 0;
+   int ret = anv_i915_query(device->local_fd, DRM_I915_QUERY_ENGINE_INFO, NULL,
+                            &length);
+   assert(ret == 0);
+
+   if (ret == -1 && errno == EINVAL)
+      return;
+
+   struct drm_i915_query_engine_info *info = calloc(1, length);
+   ret = anv_i915_query(device->local_fd, DRM_I915_QUERY_ENGINE_INFO, info,
+                        &length);
+   assert(ret == 0);
+
+   if (ret != 0) {
+      free(info);
+   } else {
+      device->engine_info = info;
+   }
+}

@@ -246,6 +246,12 @@ anv_i915_query(int fd, uint64_t query_id, void *buffer,
    unreachable("Unused");
 }
 
+void
+anv_init_engine_info(struct anv_physical_device *device)
+{
+   unreachable("Unused");
+}
+
 int
 anv_gem_syncobj_wait(struct anv_device *device,
                      uint32_t *handles, uint32_t num_handles,

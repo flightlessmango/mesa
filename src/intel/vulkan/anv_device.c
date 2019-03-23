@@ -612,6 +612,8 @@ anv_physical_device_init(struct anv_physical_device *device,
 
    device->local_fd = fd;
 
+   anv_init_engine_info(device);
+
    return VK_SUCCESS;
 
 fail:

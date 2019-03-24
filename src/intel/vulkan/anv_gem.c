@@ -311,24 +311,117 @@ anv_gem_has_context_priority(int fd)
                                      GEN_CONTEXT_MEDIUM_PRIORITY);
 }
 
-int
-anv_gem_create_context(struct anv_device *device)
+static int
+create_context(struct anv_device *device)
 {
-   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
-      /* We need GEM_CONTEXT_CREATE_EXT support, but it'll be added later */
-      if (device->num_queues[i] > 1 ||
-          (i != ANV_RENDER_QUEUE_FAMILY && device->num_queues[i] > 0))
-         return -1;
-   }
-
    struct drm_i915_gem_context_create create = { 0 };
 
    int ret = gen_ioctl(device->fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE, &create);
    if (ret == -1)
       return -1;
 
-   device->queue->exec_flags = I915_EXEC_RENDER;
+   device->queue[0].exec_flags = I915_EXEC_RENDER;
    return create.ctx_id;
+}
+
+static enum drm_i915_gem_engine_class
+anv_queue_family_to_engine_class(enum anv_queue_family family)
+{
+   switch (family) {
+   case ANV_RENDER_QUEUE_FAMILY:
+      return I915_ENGINE_CLASS_RENDER;
+   case ANV_COMPUTE_QUEUE_FAMILY:
+      return I915_ENGINE_CLASS_COMPUTE;
+   default:
+      return I915_ENGINE_CLASS_INVALID;
+   }
+}
+
+static int
+create_context_ext(struct anv_device *device)
+{
+   struct drm_i915_query_engine_info *info =
+      device->instance->physicalDevice.engine_info;
+   if (!info)
+      return -1;
+
+   uint32_t num_queues = 0;
+   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
+      num_queues += device->num_queues[i];
+
+   const size_t queue_inst_sz = 2 * sizeof(__u16); /* 1 class, 1 instance */
+   const size_t engines_param_size =
+      sizeof(__u64) /* extensions */ + num_queues * queue_inst_sz;
+
+   void *engines_param = malloc(engines_param_size);
+   assert(engines_param);
+   *(__u64*)engines_param = 0;
+   __u16 *class_inst_ptr = (__u16*)(((__u64*)engines_param) + 1);
+
+   /* For each queue, we look for the next instance that matches the class we
+    * need.
+    */
+   uint32_t engine_num[ANV_MAX_QUEUE_FAMILIES] = { 0 };
+   for (uint32_t i = 0; i < num_queues; i++) {
+      enum anv_queue_family family = device->queue[i].queue_family;
+      enum drm_i915_gem_engine_class engine_class =
+         anv_queue_family_to_engine_class(family);
+      int pos = -1;
+      while (engine_num[family] < info->num_engines) {
+         int engine = engine_num[family]++;
+         if (info->engines[engine].engine_class == engine_class) {
+            pos = engine;
+            break;
+         }
+      }
+      assert(pos >= 0 && pos < info->num_engines);
+      *class_inst_ptr++ = engine_class;
+      *class_inst_ptr++ = info->engines[pos].engine_instance;
+
+      /* Instead of I915_EXEC_RENDER, we use the engine slot. */
+      device->queue[i].exec_flags = i;
+   }
+
+   assert((uintptr_t)engines_param + engines_param_size ==
+          (uintptr_t)class_inst_ptr);
+
+   struct drm_i915_gem_context_create_ext_setparam set_engines = {
+      .base = {
+         .name = I915_CONTEXT_CREATE_EXT_SETPARAM,
+      },
+      .param = {
+	 .param = I915_CONTEXT_PARAM_ENGINES,
+         .value = (uintptr_t)engines_param,
+         .size = engines_param_size,
+      }
+   };
+   struct drm_i915_gem_context_create_ext create = {
+      .flags = I915_CONTEXT_CREATE_FLAGS_USE_EXTENSIONS,
+      .extensions = (uintptr_t)&set_engines,
+   };
+   int ret = gen_ioctl(device->fd, DRM_IOCTL_I915_GEM_CONTEXT_CREATE_EXT, &create);
+   free(engines_param);
+   if (ret == -1)
+      return -1;
+
+   return create.ctx_id;
+}
+
+int
+anv_gem_create_context(struct anv_device *device)
+{
+   bool require_ext = false;
+   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
+      require_ext = require_ext ||
+         device->num_queues[i] > 1 ||
+         (i != ANV_RENDER_QUEUE_FAMILY && device->num_queues[i] > 0);
+   }
+
+   int ret = create_context_ext(device);
+   if (ret != -1 || require_ext)
+      return ret;
+   else
+      return create_context(device);
 }
 
 int

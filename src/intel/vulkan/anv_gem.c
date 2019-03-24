@@ -666,3 +666,18 @@ anv_init_engine_info(struct anv_physical_device *device)
       device->engine_info = info;
    }
 }
+
+int
+anv_gem_count_engines(struct anv_physical_device *device, uint16_t engine_class)
+{
+   if (!device->engine_info)
+      return -1;
+
+   struct drm_i915_query_engine_info *info = device->engine_info;
+   int count = 0;
+   for (int i = 0; i < info->num_engines; i++) {
+      if (info->engines[i].engine_class == engine_class)
+         count++;
+   }
+   return count;
+}

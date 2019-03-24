@@ -253,6 +253,12 @@ anv_init_engine_info(struct anv_physical_device *device)
 }
 
 int
+anv_gem_count_engines(struct anv_physical_device *device, uint16_t engine_class)
+{
+   unreachable("Unused");
+}
+
+int
 anv_gem_syncobj_wait(struct anv_device *device,
                      uint32_t *handles, uint32_t num_handles,
                      int64_t abs_timeout_ns, bool wait_all)

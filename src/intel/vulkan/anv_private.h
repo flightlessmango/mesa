@@ -1277,6 +1277,8 @@ int anv_gem_syncobj_wait(struct anv_device *device,
 int anv_i915_query(int fd, uint64_t query_id, void *buffer,
                    int32_t *buffer_len);
 void anv_init_engine_info(struct anv_physical_device *device);
+int anv_gem_count_engines(struct anv_physical_device *device,
+                          uint16_t engine_class);
 
 bool anv_vma_alloc(struct anv_device *device, struct anv_bo *bo);
 void anv_vma_free(struct anv_device *device, struct anv_bo *bo);

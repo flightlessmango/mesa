@@ -1502,7 +1502,8 @@ intel_alloc_aux_buffer(struct brw_context *brw,
     * trying to recalculate based on different format block sizes.
     */
    buf->bo = brw_bo_alloc_tiled(brw->bufmgr, "aux-miptree", size,
-                                BRW_MEMZONE_OTHER, I915_TILING_Y,
+                                BRW_MEMZONE_OTHER,
+                                isl_tiling_to_i915_tiling(aux_surf->tiling),
                                 aux_surf->row_pitch_B, alloc_flags);
    if (!buf->bo) {
       free(buf);

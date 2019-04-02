@@ -156,6 +156,15 @@ static const struct gen_l3_config tgl_l3_configs[] = {
    {{  0 }}
 };
 
+/**
+ * DG1 validated L3 configurations.  \sa dg1_l3_configs.
+ */
+static const struct gen_l3_config dg1_l3_configs[] = {
+   /* SLM URB  ALL   DC   RO  IS   C   T */
+   {{  0,  0,  512,   0,   0,  0,  0,  0 }},
+   {{  0 }}
+};
+
 static inline bool
 is_sentinel(const struct gen_l3_config *cfg)
 {
@@ -186,6 +195,7 @@ check_all_l3_config_sentinals(void)
    CHECK_ONE_SENTINAL(cnl_l3_configs);
    CHECK_ONE_SENTINAL(icl_l3_configs);
    CHECK_ONE_SENTINAL(tgl_l3_configs);
+   CHECK_ONE_SENTINAL(dg1_l3_configs);
 }
 
 /**
@@ -215,7 +225,10 @@ get_l3_configs(const struct gen_device_info *devinfo)
       return icl_l3_configs;
 
    case 12:
-      return tgl_l3_configs;
+      if (devinfo->is_dg1)
+         return dg1_l3_configs;
+      else
+         return tgl_l3_configs;
 
    default:
       unreachable("Not implemented");

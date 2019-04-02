@@ -1059,7 +1059,7 @@ static const struct gen_device_info gen_device_info_dg1_1x6x16 = {
    GEN12_FEATURES(2, 1, dual_subslices(6), 8),
    .is_dg1 = true,
    .urb.size = 768,
-   .simulator_id = 22, /* FIXME */
+   .simulator_id = 30,
 };
 
 #define GEN12_5_FEATURES(_gt, _slices, _dual_subslices, _l3)    \

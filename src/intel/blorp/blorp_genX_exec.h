@@ -29,6 +29,8 @@
 #include "common/gen_sample_positions.h"
 #include "genxml/gen_macros.h"
 
+#include "util/format_srgb.h"
+
 /**
  * This file provides the blorp pipeline setup and execution functionality.
  * It defines the following function:

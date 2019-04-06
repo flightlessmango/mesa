@@ -314,6 +314,7 @@ anv_gem_create_context(struct anv_device *device)
    if (ret == -1)
       return -1;
 
+   device->queue->exec_flags = I915_EXEC_RENDER;
    return create.ctx_id;
 }
 

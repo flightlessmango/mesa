@@ -160,8 +160,8 @@ anv_gem_get_aperture(int fd, uint64_t *size)
 }
 
 int
-anv_gem_gpu_get_reset_stats(struct anv_device *device,
-                            uint32_t *active, uint32_t *pending)
+anv_gem_gpu_get_reset_stats(struct anv_queue *queue, uint32_t *active,
+                            uint32_t *pending)
 {
    unreachable("Unused");
 }

@@ -329,7 +329,7 @@ genX(init_device_state)(struct anv_device *device)
 
    assert(batch.next <= batch.end);
 
-   return anv_device_submit_simple_batch(device, &batch);
+   return anv_device_submit_simple_batch(&device->queue, &batch);
 }
 
 static uint32_t

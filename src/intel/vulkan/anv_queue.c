@@ -56,7 +56,7 @@ anv_device_execbuf(struct anv_device *device,
 }
 
 VkResult
-anv_device_submit_simple_batch(struct anv_device *device,
+anv_device_submit_simple_batch(struct anv_queue *queue,
                                struct anv_batch *batch)
 {
    struct drm_i915_gem_execbuffer2 execbuf;
@@ -64,6 +64,7 @@ anv_device_submit_simple_batch(struct anv_device *device,
    struct anv_bo bo, *exec_bos[1];
    VkResult result = VK_SUCCESS;
    uint32_t size;
+   struct anv_device *device = queue->device;
 
    /* Kernel driver requires 8 byte aligned batch length */
    size = align_u32(batch->next - batch->start, 8);
@@ -95,7 +96,7 @@ anv_device_submit_simple_batch(struct anv_device *device,
    execbuf.DR4 = 0;
 
    execbuf.flags =
-      I915_EXEC_HANDLE_LUT | I915_EXEC_NO_RELOC | I915_EXEC_RENDER;
+      I915_EXEC_HANDLE_LUT | I915_EXEC_NO_RELOC | queue->exec_flags;
    execbuf.rsvd1 = device->context_id;
    execbuf.rsvd2 = 0;
 
@@ -167,7 +168,8 @@ VkResult anv_QueueSubmit(
        * come up with something more efficient but this shouldn't be a
        * common case.
        */
-      result = anv_cmd_buffer_execbuf(device, NULL, NULL, 0, NULL, 0, fence);
+      result = anv_cmd_buffer_execbuf(device, queue, NULL, NULL, 0, NULL, 0,
+                                      fence);
       goto out;
    }
 
@@ -181,7 +183,7 @@ VkResult anv_QueueSubmit(
           * come up with something more efficient but this shouldn't be a
           * common case.
           */
-         result = anv_cmd_buffer_execbuf(device, NULL,
+         result = anv_cmd_buffer_execbuf(device, queue, NULL,
                                          pSubmits[i].pWaitSemaphores,
                                          pSubmits[i].waitSemaphoreCount,
                                          pSubmits[i].pSignalSemaphores,
@@ -218,7 +220,7 @@ VkResult anv_QueueSubmit(
             num_out_semaphores = pSubmits[i].signalSemaphoreCount;
          }
 
-         result = anv_cmd_buffer_execbuf(device, cmd_buffer,
+         result = anv_cmd_buffer_execbuf(device, queue, cmd_buffer,
                                          in_semaphores, num_in_semaphores,
                                          out_semaphores, num_out_semaphores,
                                          execbuf_fence);

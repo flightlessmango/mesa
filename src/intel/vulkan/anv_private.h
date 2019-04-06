@@ -1029,6 +1029,8 @@ struct anv_queue {
 
     struct anv_device *                         device;
 
+    uint32_t                                    exec_flags;
+
     VkDeviceQueueCreateFlags                    flags;
 };
 
@@ -1246,7 +1248,7 @@ int anv_gem_get_param(int fd, uint32_t param);
 int anv_gem_get_tiling(struct anv_device *device, uint32_t gem_handle);
 bool anv_gem_get_bit6_swizzle(int fd, uint32_t tiling);
 int anv_gem_get_aperture(int fd, uint64_t *size);
-int anv_gem_gpu_get_reset_stats(struct anv_device *device,
+int anv_gem_gpu_get_reset_stats(struct anv_queue *queue,
                                 uint32_t *active, uint32_t *pending);
 int anv_gem_handle_to_fd(struct anv_device *device, uint32_t gem_handle);
 int anv_gem_reg_read(struct anv_device *device,
@@ -1334,7 +1336,7 @@ void *anv_batch_emit_dwords(struct anv_batch *batch, int num_dwords);
 void anv_batch_emit_batch(struct anv_batch *batch, struct anv_batch *other);
 uint64_t anv_batch_emit_reloc(struct anv_batch *batch,
                               void *location, struct anv_bo *bo, uint32_t offset);
-VkResult anv_device_submit_simple_batch(struct anv_device *device,
+VkResult anv_device_submit_simple_batch(struct anv_queue *queue,
                                         struct anv_batch *batch);
 
 static inline VkResult
@@ -2537,6 +2539,7 @@ void anv_cmd_buffer_add_secondary(struct anv_cmd_buffer *primary,
                                   struct anv_cmd_buffer *secondary);
 void anv_cmd_buffer_prepare_execbuf(struct anv_cmd_buffer *cmd_buffer);
 VkResult anv_cmd_buffer_execbuf(struct anv_device *device,
+                                struct anv_queue *queue,
                                 struct anv_cmd_buffer *cmd_buffer,
                                 const VkSemaphore *in_semaphores,
                                 uint32_t num_in_semaphores,

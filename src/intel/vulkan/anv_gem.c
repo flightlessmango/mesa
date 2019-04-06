@@ -373,14 +373,15 @@ anv_gem_get_aperture(int fd, uint64_t *size)
 }
 
 int
-anv_gem_gpu_get_reset_stats(struct anv_device *device,
+anv_gem_gpu_get_reset_stats(struct anv_queue *queue,
                             uint32_t *active, uint32_t *pending)
 {
    struct drm_i915_reset_stats stats = {
-      .ctx_id = device->context_id,
+      .ctx_id = queue->device->context_id,
    };
 
-   int ret = gen_ioctl(device->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats);
+   int ret = gen_ioctl(queue->device->fd, DRM_IOCTL_I915_GET_RESET_STATS,
+                       &stats);
    if (ret == 0) {
       *active = stats.batch_active;
       *pending = stats.batch_pending;

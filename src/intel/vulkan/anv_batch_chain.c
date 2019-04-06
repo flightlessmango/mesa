@@ -1371,7 +1371,8 @@ relocate_cmd_buffer(struct anv_cmd_buffer *cmd_buffer,
 }
 
 static VkResult
-setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
+setup_execbuf_for_cmd_buffer(struct anv_queue *queue,
+                             struct anv_execbuf *execbuf,
                              struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_batch *batch = &cmd_buffer->batch;
@@ -1515,7 +1516,7 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
       .num_cliprects = 0,
       .DR1 = 0,
       .DR4 = 0,
-      .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER,
+      .flags = I915_EXEC_HANDLE_LUT | queue->exec_flags,
       .rsvd1 = cmd_buffer->device->context_id,
       .rsvd2 = 0,
    };
@@ -1564,8 +1565,9 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
 }
 
 static VkResult
-setup_empty_execbuf(struct anv_execbuf *execbuf, struct anv_device *device)
+setup_empty_execbuf(struct anv_queue *queue, struct anv_execbuf *execbuf)
 {
+   struct anv_device *device = queue->device;
    VkResult result = anv_execbuf_add_bo(execbuf, &device->trivial_batch_bo,
                                         NULL, 0, &device->alloc);
    if (result != VK_SUCCESS)
@@ -1576,7 +1578,7 @@ setup_empty_execbuf(struct anv_execbuf *execbuf, struct anv_device *device)
       .buffer_count = execbuf->bo_count,
       .batch_start_offset = 0,
       .batch_len = 8, /* GEN7_MI_BATCH_BUFFER_END and NOOP */
-      .flags = I915_EXEC_HANDLE_LUT | I915_EXEC_RENDER,
+      .flags = I915_EXEC_HANDLE_LUT | queue->exec_flags,
       .rsvd1 = device->context_id,
       .rsvd2 = 0,
    };
@@ -1586,6 +1588,7 @@ setup_empty_execbuf(struct anv_execbuf *execbuf, struct anv_device *device)
 
 VkResult
 anv_cmd_buffer_execbuf(struct anv_device *device,
+                       struct anv_queue *queue,
                        struct anv_cmd_buffer *cmd_buffer,
                        const VkSemaphore *in_semaphores,
                        uint32_t num_in_semaphores,
@@ -1740,9 +1743,9 @@ anv_cmd_buffer_execbuf(struct anv_device *device,
          device->cmd_buffer_being_decoded = NULL;
       }
 
-      result = setup_execbuf_for_cmd_buffer(&execbuf, cmd_buffer);
+      result = setup_execbuf_for_cmd_buffer(queue, &execbuf, cmd_buffer);
    } else {
-      result = setup_empty_execbuf(&execbuf, device);
+      result = setup_empty_execbuf(queue, &execbuf);
    }
 
    if (result != VK_SUCCESS)

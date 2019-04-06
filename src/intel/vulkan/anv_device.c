@@ -2542,6 +2542,7 @@ VkResult anv_CreateDevice(
     * is returned.
     */
    if (physical_device->has_context_priority) {
+      struct anv_queue *queue = &device->queue;
       int err = anv_gem_set_context_param(device->fd, device->context_id,
                                           I915_CONTEXT_PARAM_PRIORITY,
                                           vk_priority_to_gen(priority));
@@ -2889,7 +2890,7 @@ anv_device_query_status(struct anv_device *device)
       return VK_ERROR_DEVICE_LOST;
 
    uint32_t active, pending;
-   int ret = anv_gem_gpu_get_reset_stats(device, &active, &pending);
+   int ret = anv_gem_gpu_get_reset_stats(&device->queue, &active, &pending);
    if (ret == -1) {
       /* We don't know the real error. */
       return anv_device_set_lost(device, "get_reset_stats failed: %m");
@@ -2964,7 +2965,7 @@ VkResult anv_DeviceWaitIdle(
    anv_batch_emit(&batch, GEN7_MI_BATCH_BUFFER_END, bbe);
    anv_batch_emit(&batch, GEN7_MI_NOOP, noop);
 
-   return anv_device_submit_simple_batch(device, &batch);
+   return anv_device_submit_simple_batch(&device->queue, &batch);
 }
 
 bool

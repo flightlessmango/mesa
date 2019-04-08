@@ -798,7 +798,7 @@ brw_upload_aux_map_state(struct brw_context *brw)
 {
    void *aux_map_ctx = brw_bufmgr_get_aux_map_context(brw->bufmgr);
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   assert(aux_map_ctx || devinfo->gen < 12);
+   assert(aux_map_ctx || devinfo->gen < 12 || devinfo->is_arctic_sound);
    if (!aux_map_ctx)
       return;
    uint64_t aux_map_state_num = gen_aux_map_get_state_num(aux_map_ctx);

@@ -1892,7 +1892,7 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
 
    list_inithead(&bufmgr->unref_requests);
 
-   if (devinfo->gen >= 12) {
+   if (devinfo->gen >= 12 && !devinfo->is_arctic_sound) {
       bufmgr->aux_map_ctx = gen_aux_map_init(bufmgr, &aux_map_allocator,
                                              devinfo);
       assert(bufmgr->aux_map_ctx);

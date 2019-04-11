@@ -1065,7 +1065,7 @@ static const struct gen_device_info gen_device_info_tgl_1x6x16 = {
    .num_subslices = _dual_subslices
 
 static const struct gen_device_info gen_device_info_tgl_2x4x16 = {
-   GEN12_5_FEATURES(2, 2, subslices(4), 8),
+   GEN12_5_FEATURES(2, 2, subslices(4, 4), 8),
    .is_arctic_sound = true,
    .urb = {
       .size = 600,

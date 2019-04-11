@@ -1069,6 +1069,16 @@ gen_device_info_set_eu_mask(struct gen_device_info *devinfo,
    }
 }
 
+static void
+adjust_for_dual_subslices(struct gen_device_info *devinfo)
+{
+   if (devinfo->gen < 12)
+      return;
+   for (int i = 0; i < devinfo->num_slices; i++) {
+      devinfo->num_subslices[i] = 2 * devinfo->num_subslices[i];
+   }
+}
+
 /* Generate slice/subslice/eu masks from number of
  * slices/subslices/eu_per_subslices in the per generation/gt gen_device_info
  * structure.
@@ -1277,6 +1287,7 @@ gen_get_device_info_from_pci_id(int pci_id,
       return false;
    }
 
+   adjust_for_dual_subslices(devinfo);
    fill_masks(devinfo);
 
    /* From the Skylake PRM, 3DSTATE_PS::Scratch Space Base Pointer:

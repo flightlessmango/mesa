@@ -1031,41 +1031,27 @@ static const struct gen_device_info gen_device_info_ehl_2x4 = {
    .max_tes_threads = 546,                          \
    .max_cs_threads = 56,                            \
    .urb = {                                         \
-      .size = 256,                                  \
       GEN12_URB_MIN_MAX_ENTRIES,                    \
    }
 
-#define GEN12_FEATURES(_gt, _slices, _subslices, _l3)   \
-   GEN8_FEATURES,                                       \
-   GEN12_HW_INFO,                                       \
-   .has_64bit_types = false,                            \
-   .has_integer_dword_mul = false,                      \
-   .gt = _gt, .num_slices = _slices, .l3_banks = _l3,   \
-   .num_subslices = _subslices
+#define GEN12_FEATURES(_gt, _slices, _dual_subslices, _l3)      \
+   GEN8_FEATURES,                                               \
+   GEN12_HW_INFO,                                               \
+   .has_64bit_types = false,                                    \
+   .has_integer_dword_mul = false,                              \
+   .gt = _gt, .num_slices = _slices, .l3_banks = _l3,           \
+   .simulator_id = 22,                                          \
+   .urb.size = (_gt) == 2 ? 512 : 256,                          \
+   .num_subslices = _dual_subslices
 
-static const struct gen_device_info gen_device_info_tgl_6x16 = {
-   GEN12_FEATURES(2, 1, subslices(6), 8),
-   .simulator_id = 22,
+#define dual_subslices(args...) { args, }
+
+static const struct gen_device_info gen_device_info_tgl_1x2x16 = {
+   GEN12_FEATURES(1, 1, dual_subslices(2), 8),
 };
 
-static const struct gen_device_info gen_device_info_tgl_5x16 = {
-   GEN12_FEATURES(2, 1, subslices(5), 8),
-   .simulator_id = 22,
-};
-
-static const struct gen_device_info gen_device_info_tgl_4x16 = {
-   GEN12_FEATURES(2, 1, subslices(4), 8),
-   .simulator_id = 22,
-};
-
-static const struct gen_device_info gen_device_info_tgl_3x16 = {
-   GEN12_FEATURES(2, 1, subslices(3), 8),
-   .simulator_id = 22,
-};
-
-static const struct gen_device_info gen_device_info_tgl_2x16 = {
-   GEN12_FEATURES(1, 1, subslices(2), 8),
-   .simulator_id = 22,
+static const struct gen_device_info gen_device_info_tgl_1x6x16 = {
+   GEN12_FEATURES(2, 1, dual_subslices(6), 8),
 };
 
 static void

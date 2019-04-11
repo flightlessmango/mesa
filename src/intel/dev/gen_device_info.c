@@ -1054,19 +1054,23 @@ static const struct gen_device_info gen_device_info_tgl_1x6x16 = {
    GEN12_FEATURES(2, 1, dual_subslices(6), 8),
 };
 
-#define GEN12_5_FEATURES(_gt, _slices, _subslices, _l3) \
-   GEN8_FEATURES,                                       \
-   GEN12_HW_INFO,                                       \
-   .has_llc = false,                                    \
-   .has_64bit_types = true,                             \
-   .has_integer_dword_mul = true,                       \
-   .gt = _gt, .num_slices = _slices, .l3_banks = _l3,   \
-   .num_subslices = _subslices
+#define GEN12_5_FEATURES(_gt, _slices, _dual_subslices, _l3)    \
+   GEN8_FEATURES,                                               \
+   GEN12_HW_INFO,                                               \
+   .has_llc = false,                                            \
+   .has_64bit_types = true,                                     \
+   .has_integer_dword_mul = true,                               \
+   .gt = _gt, .num_slices = _slices, .l3_banks = _l3,           \
+   .simulator_id = 29,                                          \
+   .num_subslices = _dual_subslices
 
 static const struct gen_device_info gen_device_info_tgl_2x4x16 = {
    GEN12_5_FEATURES(2, 2, subslices(4), 8),
    .is_arctic_sound = true,
-   .simulator_id = 29,
+   .urb = {
+      .size = 600,
+      GEN12_URB_MIN_MAX_ENTRIES,
+   },
 };
 
 static void

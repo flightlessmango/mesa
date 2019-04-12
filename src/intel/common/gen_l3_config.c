@@ -162,6 +162,32 @@ is_sentinel(const struct gen_l3_config *cfg)
    return cfg->n[GEN_L3P_URB] == 0;
 }
 
+static bool
+check_sentinal(const struct gen_l3_config *cfg, int num_configs)
+{
+   for (int i = 0; i < num_configs; i++) {
+      bool expect_sentinal = i + 1 == num_configs;
+      if (is_sentinel(&cfg[i]) != expect_sentinal)
+         return false;
+   }
+   return true;
+}
+
+static void
+check_all_l3_config_sentinals(void)
+{
+#define CHECK_ONE_SENTINAL(cfg_list) \
+         assert(check_sentinal(cfg_list, ARRAY_SIZE(cfg_list)))
+   CHECK_ONE_SENTINAL(ivb_l3_configs);
+   CHECK_ONE_SENTINAL(vlv_l3_configs);
+   CHECK_ONE_SENTINAL(bdw_l3_configs);
+   CHECK_ONE_SENTINAL(chv_l3_configs);
+   CHECK_ONE_SENTINAL(bxt_2x6_l3_configs);
+   CHECK_ONE_SENTINAL(cnl_l3_configs);
+   CHECK_ONE_SENTINAL(icl_l3_configs);
+   CHECK_ONE_SENTINAL(tgl_l3_configs);
+}
+
 /**
  * Return a zero-terminated array of validated L3 configurations for the
  * specified device.
@@ -169,6 +195,7 @@ is_sentinel(const struct gen_l3_config *cfg)
 static const struct gen_l3_config *
 get_l3_configs(const struct gen_device_info *devinfo)
 {
+   check_all_l3_config_sentinals();
    switch (devinfo->gen) {
    case 7:
       return (devinfo->is_baytrail ? vlv_l3_configs : ivb_l3_configs);

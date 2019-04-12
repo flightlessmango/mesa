@@ -156,6 +156,12 @@ static const struct gen_l3_config tgl_l3_configs[] = {
    {{  0 }}
 };
 
+static inline bool
+is_sentinel(const struct gen_l3_config *cfg)
+{
+   return cfg->n[GEN_L3P_URB] == 0;
+}
+
 /**
  * Return a zero-terminated array of validated L3 configurations for the
  * specified device.
@@ -302,7 +308,7 @@ gen_get_l3_config(const struct gen_device_info *devinfo,
    const struct gen_l3_config *cfg_best = NULL;
    float dw_best = HUGE_VALF;
 
-   for (const struct gen_l3_config *cfg = cfgs; cfg->n[GEN_L3P_URB]; cfg++) {
+   for (const struct gen_l3_config *cfg = cfgs; !is_sentinel(cfg); cfg++) {
       const float dw = gen_diff_l3_weights(w0, gen_get_l3_config_weights(cfg));
 
       if (dw < dw_best) {

@@ -159,7 +159,7 @@ static const struct gen_l3_config tgl_l3_configs[] = {
 static inline bool
 is_sentinel(const struct gen_l3_config *cfg)
 {
-   return cfg->n[GEN_L3P_URB] == 0;
+   return cfg->n[GEN_L3P_URB] == 0 && cfg->n[GEN_L3P_ALL] == 0;
 }
 
 static bool

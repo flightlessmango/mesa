@@ -309,7 +309,7 @@ gen_get_default_l3_weights(const struct gen_device_info *devinfo,
    struct gen_l3_weights w = {{ 0 }};
 
    w.w[GEN_L3P_SLM] = devinfo->gen < 11 && needs_slm;
-   w.w[GEN_L3P_URB] = 1.0;
+   w.w[GEN_L3P_URB] = !devinfo->is_dg1 ? 1.0 : 0.0;
 
    if (devinfo->gen >= 8) {
       w.w[GEN_L3P_ALL] = 1.0;

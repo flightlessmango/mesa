@@ -416,7 +416,12 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       case GEN_MI_VALUE_TYPE_REG32:
       case GEN_MI_VALUE_TYPE_REG64:
          gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
+#if GEN_GEN >= 11
+            srm.RegisterAddress = src.reg;
+            srm.AddCSMMIOStartOffset = src.cs;
+#else
             srm.RegisterAddress = src.reg + (src.cs ? 0x2000 : 0);
+#endif
             srm.MemoryAddress = dst.addr;
          }
          break;
@@ -430,7 +435,12 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       switch (src.type) {
       case GEN_MI_VALUE_TYPE_IMM:
          gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_IMM), lri) {
+#if GEN_GEN >= 11
+            lri.RegisterOffset = dst.reg;
+            lri.AddCSMMIOStartOffset = dst.cs;
+#else
             lri.RegisterOffset = dst.reg + (dst.cs ? 0x2000 : 0);
+#endif
             lri.DataDWord = src.imm;
          }
          break;
@@ -438,7 +448,12 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       case GEN_MI_VALUE_TYPE_MEM32:
       case GEN_MI_VALUE_TYPE_MEM64:
          gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_MEM), lrm) {
+#if GEN_GEN >= 11
+            lrm.RegisterAddress = dst.reg;
+            lrm.AddCSMMIOStartOffset = dst.cs;
+#else
             lrm.RegisterAddress = dst.reg + (dst.cs ? 0x2000 : 0);
+#endif
             lrm.MemoryAddress = src.addr;
          }
          break;
@@ -448,8 +463,15 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
          if (src.reg != dst.reg || src.cs != dst.cs) {
             gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_REG), lrr) {
+#if GEN_GEN >= 11
+               lrr.SourceRegisterAddress = src.reg;
+               lrr.AddCSMMIOStartOffsetSource = src.cs;
+               lrr.DestinationRegisterAddress = dst.reg;
+               lrr.AddCSMMIOStartOffsetDestination = dst.cs;
+#else
                lrr.SourceRegisterAddress = src.reg + (src.cs ? 0x2000 : 0);
                lrr.DestinationRegisterAddress = dst.reg + (dst.cs ? 0x2000 : 0);
+#endif
             }
          }
 #else
@@ -567,18 +589,33 @@ gen_mi_store_if(struct gen_mi_builder *b,
 
    if (dst.type == GEN_MI_VALUE_TYPE_MEM64) {
       gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
+#if GEN_GEN >= 11
+         srm.RegisterAddress = src.reg;
+         srm.AddCSMMIOStartOffset = src.cs;
+#else
          srm.RegisterAddress = src.reg + (src.cs ? 0x2000 : 0);
+#endif
          srm.MemoryAddress = dst.addr;
          srm.PredicateEnable = true;
       }
       gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
+#if GEN_GEN >= 11
+         srm.RegisterAddress = src.reg + 4;
+         srm.AddCSMMIOStartOffset = src.cs;
+#else
          srm.RegisterAddress = src.reg + (src.cs ? 0x2000 : 0) + 4;
+#endif
          srm.MemoryAddress = __gen_address_offset(dst.addr, 4);
          srm.PredicateEnable = true;
       }
    } else {
       gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
+#if GEN_GEN >= 11
+         srm.RegisterAddress = src.reg;
+         srm.AddCSMMIOStartOffset = src.cs;
+#else
          srm.RegisterAddress = src.reg + (src.cs ? 0x2000 : 0);
+#endif
          srm.MemoryAddress = dst.addr;
          srm.PredicateEnable = true;
       }

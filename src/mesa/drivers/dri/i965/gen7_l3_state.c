@@ -196,7 +196,7 @@ update_urb_size(struct brw_context *brw, const struct gen_l3_config *cfg)
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const unsigned sz = gen_get_l3_config_urb_size(devinfo, cfg);
 
-   if (brw->urb.size != sz) {
+   if (brw->urb.size != sz && !devinfo->is_dg1) {
       brw->urb.size = sz;
       brw->ctx.NewDriverState |= BRW_NEW_URB_SIZE;
 

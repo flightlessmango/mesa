@@ -716,8 +716,8 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
       /* No modifiers - we can select our own tiling. */
 
       if (has_depth) {
-         /* Depth must be Y-tiled */
-         tiling_flags = ISL_TILING_Y0_BIT;
+         tiling_flags =
+            ISL_TILING_Y0_BIT | ISL_TILING_F_BIT | ISL_TILING_S_BIT;
       } else if (templ->format == PIPE_FORMAT_S8_UINT) {
          tiling_flags = ISL_TILING_ANY_MASK;
       } else if (templ->target == PIPE_BUFFER ||

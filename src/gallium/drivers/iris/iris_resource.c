@@ -719,8 +719,7 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
          /* Depth must be Y-tiled */
          tiling_flags = ISL_TILING_Y0_BIT;
       } else if (templ->format == PIPE_FORMAT_S8_UINT) {
-         /* Stencil must be W-tiled */
-         tiling_flags = ISL_TILING_W_BIT;
+         tiling_flags = ISL_TILING_ANY_MASK;
       } else if (templ->target == PIPE_BUFFER ||
                  templ->target == PIPE_TEXTURE_1D ||
                  templ->target == PIPE_TEXTURE_1D_ARRAY) {

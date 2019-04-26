@@ -343,6 +343,23 @@ genX(emit_raw_pipe_control)(struct brw_context *brw, uint32_t flags,
       flags |= PIPE_CONTROL_STALL_AT_SCOREBOARD;
    }
 
+   if (GEN_GEN >= 12 && ((flags & PIPE_CONTROL_RENDER_TARGET_FLUSH) ||
+                         (flags & PIPE_CONTROL_DEPTH_CACHE_FLUSH))) {
+      /* From the PIPE_CONTROL instruction table, bit 28 (Tile Cache Flush
+       * Enable):
+       *
+       *    Unified Cache (Tile Cache Disabled):
+       *
+       *    When the Color and Depth (Z) streams are enabled to be cached in
+       *    the DC space of L2, Software must use "Render Target Cache Flush
+       *    Enable" and "Depth Cache Flush Enable" along with "Tile Cache
+       *    Flush" for getting the color and depth (Z) write data to be
+       *    globally observable.  In this mode of operation it is not required
+       *    to set "CS Stall" upon setting "Tile Cache Flush" bit.
+       */
+      flags |= PIPE_CONTROL_TILE_CACHE_FLUSH;
+   }
+
    if (GEN_GEN == 9 && devinfo->gt == 4) {
       /* TODO: The big Skylake GT4 post sync op workaround */
    }
@@ -463,6 +480,9 @@ genX(emit_raw_pipe_control)(struct brw_context *brw, uint32_t flags,
    /* Emit --------------------------------------------------------------- */
 
    brw_batch_emit(brw, GENX(PIPE_CONTROL), pc) {
+   #if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = flags & PIPE_CONTROL_TILE_CACHE_FLUSH;
+   #endif
    #if GEN_GEN >= 9
       pc.FlushLLC = 0;
    #endif

@@ -671,6 +671,7 @@ iris_enable_obj_preemption(struct iris_batch *batch, bool enable)
                               PIPE_CONTROL_RENDER_TARGET_FLUSH);
 
    /* enable object level preemption */
+   assert(!batch->screen->devinfo.is_arctic_sound);
    iris_pack_state(GENX(CS_CHICKEN1), &reg_val, reg) {
       reg.ReplayMode = enable;
       reg.ReplayModeMask = true;

@@ -1551,6 +1551,9 @@ blorp_alloc_surface_states(struct blorp_batch *batch,
           * must be used.
           */
          pipe.RenderTargetCacheFlushEnable = true;
+#if GEN_GEN >= 12
+         pipe.TileCacheFlushEnable = true;
+#endif
 #endif
       }
    }
@@ -1588,6 +1591,9 @@ blorp_emit_surface_states(struct blorp_batch *batch,
    blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
       pipe.RenderTargetCacheFlushEnable  = true;
       pipe.StallAtPixelScoreboard = true;
+#if GEN_GEN >= 12
+      pipe.TileCacheFlushEnable = true;
+#endif
    }
 #endif
 }

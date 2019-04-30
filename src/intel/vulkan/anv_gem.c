@@ -382,7 +382,7 @@ create_context_ext(struct anv_device *device)
 
    uint32_t num_queues = 0;
    for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
-      num_queues += device->num_queues[i];
+      num_queues += device->queue_count[i];
 
    const size_t queue_inst_sz = 2 * sizeof(__u16); /* 1 class, 1 instance */
    const size_t engines_param_size =
@@ -396,22 +396,12 @@ create_context_ext(struct anv_device *device)
    /* For each queue, we look for the next instance that matches the class we
     * need.
     */
-   uint32_t engine_num[ANV_MAX_QUEUE_FAMILIES] = { 0 };
    for (uint32_t i = 0; i < num_queues; i++) {
       enum anv_queue_family family = device->queue[i].queue_family;
       enum drm_i915_gem_engine_class engine_class =
          anv_queue_family_to_engine_class(family);
-      int pos = -1;
-      while (engine_num[family] < info->num_engines) {
-         int engine = engine_num[family]++;
-         if (info->engines[engine].engine_class == engine_class) {
-            pos = engine;
-            break;
-         }
-      }
-      assert(pos >= 0 && pos < info->num_engines);
       *class_inst_ptr++ = engine_class;
-      *class_inst_ptr++ = info->engines[pos].engine_instance;
+      *class_inst_ptr++ = device->queue[i].queue_family_instance;
 
       /* Instead of I915_EXEC_RENDER, we use the engine slot. */
       device->queue[i].exec_flags = i;
@@ -448,8 +438,8 @@ anv_gem_create_context(struct anv_device *device)
    bool require_ext = false;
    for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
       require_ext = require_ext ||
-         device->num_queues[i] > 1 ||
-         (i != ANV_RENDER_QUEUE_FAMILY && device->num_queues[i] > 0);
+         device->queue_count[i] > 1 ||
+         (i != ANV_RENDER_QUEUE_FAMILY && device->queue_count[i] > 0);
    }
 
    int ret = create_context_ext(device);

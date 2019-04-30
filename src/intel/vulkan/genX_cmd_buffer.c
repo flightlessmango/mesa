@@ -70,6 +70,9 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
       pc.DCFlushEnable = true;
       pc.RenderTargetCacheFlushEnable = true;
       pc.CommandStreamerStallEnable = true;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(STATE_BASE_ADDRESS), sba) {
@@ -1835,8 +1838,17 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
       bits &= ~ANV_PIPE_NEEDS_CS_STALL_BIT;
    }
 
+   if (GEN_GEN >= 12 &&
+       ((bits & ANV_PIPE_DEPTH_CACHE_FLUSH_BIT) ||
+        (bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT))) {
+      bits |= ANV_PIPE_TILE_CACHE_FLUSH_BIT;
+   }
+
    if (bits & (ANV_PIPE_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+#if GEN_GEN >= 12
+         pipe.TileCacheFlushEnable = bits & ANV_PIPE_TILE_CACHE_FLUSH_BIT;
+#endif
          pipe.DepthCacheFlushEnable = bits & ANV_PIPE_DEPTH_CACHE_FLUSH_BIT;
          pipe.DCFlushEnable = bits & ANV_PIPE_DATA_CACHE_FLUSH_BIT;
          pipe.RenderTargetCacheFlushEnable =
@@ -2383,6 +2395,9 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
       pc.RenderTargetCacheFlushEnable  = true;
       pc.StallAtPixelScoreboard        = true;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 #endif
 
@@ -2540,6 +2555,9 @@ cmd_buffer_emit_descriptor_pointers(struct anv_cmd_buffer *cmd_buffer,
          anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
             pc.RenderTargetCacheFlushEnable  = true;
             pc.StallAtPixelScoreboard = true;
+#if GEN_GEN >= 12
+            pc.TileCacheFlushEnable = true;
+#endif
          }
       }
 #endif
@@ -4005,6 +4023,9 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
       pc.DCFlushEnable                 = true;
       pc.PostSyncOperation             = NoWrite;
       pc.CommandStreamerStallEnable    = true;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
@@ -4013,6 +4034,9 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
       pc.StateCacheInvalidationEnable     = true;
       pc.InstructionCacheInvalidateEnable = true;
       pc.PostSyncOperation                = NoWrite;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPELINE_SELECT), ps) {
@@ -4079,6 +4103,9 @@ genX(cmd_buffer_emit_gen7_depth_flush)(struct anv_cmd_buffer *cmd_buffer)
    }
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
       pipe.DepthCacheFlushEnable = true;
+#if GEN_GEN >= 12
+      pipe.TileCacheFlushEnable = true;
+#endif
    }
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
       pipe.DepthStallEnable = true;

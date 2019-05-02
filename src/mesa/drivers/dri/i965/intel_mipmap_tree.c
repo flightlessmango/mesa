@@ -92,7 +92,8 @@ format_supports_ccs_e(const struct brw_context *brw, mesa_format format)
     * Hence these are left to to be enabled in the future when they are known
     * to improve things.
     */
-   if (devinfo->gen < 12 && _mesa_get_format_datatype(format) == GL_FLOAT)
+   if (brw->screen->devinfo.gen < 12 &&
+       _mesa_get_format_datatype(format) == GL_FLOAT)
       return false;
 
    /* Many window system buffers are sRGB even if they are never rendered as

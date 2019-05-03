@@ -641,7 +641,8 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
    }
 
-   if (info_has_aux_surf) {
+   if (info_has_aux_surf &&
+       (GEN_GEN < 12 || info->aux_usage != ISL_AUX_USAGE_CCS_E)) {
       assert(info->aux_usage != ISL_AUX_USAGE_NONE);
 
       if (GEN_GEN >= 12) {

@@ -1892,7 +1892,7 @@ fill_surface_state(struct isl_device *isl_dev,
    assert(!iris_resource_unfinished_aux_import(res));
 
    if (aux_usage != ISL_AUX_USAGE_NONE) {
-      if (isl_dev->info->gen < 12 || aux_usage != ISL_AUX_USAGE_CCS_E) {
+      if (isl_dev->info->gen < 12 || aux_usage != ISL_AUX_USAGE_CCS_E || 1) {
          f.aux_surf = &res->aux.surf;
          f.aux_address = res->aux.bo->gtt_offset + res->aux.offset;
       }

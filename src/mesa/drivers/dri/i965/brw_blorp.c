@@ -212,7 +212,7 @@ blorp_surf_for_miptree(struct brw_context *brw,
                                        &surf->clear_color_addr.buffer,
                                        &surf->clear_color_addr.offset);
 
-      if (devinfo->gen < 12 || aux_usage != ISL_AUX_USAGE_CCS_E) {
+      if (devinfo->gen < 12 || aux_usage != ISL_AUX_USAGE_CCS_E || 1) {
          surf->aux_surf = &mt->aux_buf->surf;
          surf->aux_addr = (struct blorp_address) {
             .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,

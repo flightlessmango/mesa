@@ -174,7 +174,8 @@ intel_miptree_choose_aux_usage(struct brw_context *brw,
       } else if (!unlikely(INTEL_DEBUG & DEBUG_NO_RBC) &&
                  format_supports_ccs_e(brw, mt->format)) {
          mt->aux_usage = ISL_AUX_USAGE_CCS_E;
-      } else if (brw->mesa_format_supports_render[mt->format]) {
+      } else if (brw->mesa_format_supports_render[mt->format] &&
+                 brw->screen->devinfo.gen < 12) {
          mt->aux_usage = ISL_AUX_USAGE_CCS_D;
       }
    } else if (isl_surf_usage_is_depth(mt->surf.usage) && brw->has_hiz) {

@@ -1669,7 +1669,9 @@ isl_surf_get_hiz_surf(const struct isl_device *dev,
    assert(ISL_DEV_GEN(dev) >= 5 && ISL_DEV_USE_SEPARATE_STENCIL(dev));
 
    /* HiZ only works with Y-tiled depth buffers */
-   if (!isl_tiling_is_any_y(surf->tiling))
+   if (!isl_tiling_is_any_y(surf->tiling) &&
+       surf->tiling != ISL_TILING_F &&
+       surf->tiling != ISL_TILING_S)
       return false;
 
    /* On SNB+, compressed depth buffers cannot be interleaved with stencil. */

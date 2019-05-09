@@ -122,6 +122,8 @@ setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
       OUT_BATCH(MI_LOAD_REGISTER_IMM | (3 - 2));
 
       /* Set up the L3 partitioning. */
+      assert(cfg->n[GEN_L3P_ALL] == 0 ||
+             (cfg->n[GEN_L3P_RO] == 0 && cfg->n[GEN_L3P_DC] == 0));
       OUT_BATCH(GEN12_L3ALLOC);
       OUT_BATCH(SET_FIELD(cfg->n[GEN_L3P_URB], GEN12_L3ALLOC_URB_ALLOC) |
                 SET_FIELD(cfg->n[GEN_L3P_RO], GEN12_L3ALLOC_RO_ALLOC) |

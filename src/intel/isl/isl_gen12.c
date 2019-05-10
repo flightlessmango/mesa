@@ -36,6 +36,27 @@ isl_gen12_choose_image_alignment_el(const struct isl_device *dev,
    /* Handled by isl_choose_image_alignment_el */
    assert(info->format != ISL_FORMAT_HIZ);
 
+   const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
+   if (fmtl->txc == ISL_TXC_CCS) {
+      /* Compressed main surfaces have an alignment of 16px x 4 rows. A CCS
+       * element is 256b x 4 rows.
+       *
+       * This corresponds to an alignment of:
+       *  * < 1 CCS el for 8bpp
+       *  * 1 CCS el for 16bpp
+       *  * 2 CCS el for 32bpp
+       *  * 4 CCS el for 64bpp
+       *  * 8 CCS el for 128bpp
+       *
+       * The 8bpp case is safe as long as the horizontal alignment doesn't
+       * actually come into play. We disallow miplevels greater than 2 in
+       * isl_surf_get_ccs_surf() to avoid it.
+       */
+      assert(fmtl->bh == 4);
+      *image_align_el = isl_extent3d(MAX(16 / fmtl->bw, 1), 1, 1);
+      return;
+   }
+
    /* Arctic sound has new alignment requirements:
     */
    if (dev->info->gen > 12 || dev->info->is_arctic_sound) {

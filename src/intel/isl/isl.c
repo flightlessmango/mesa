@@ -1915,11 +1915,12 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
        (surf->levels > 1 || surf->logical_level0_px.array_len > 1))
       return false;
 
-   /* On Gen12, 8BPP surfaces can have CCS only if every level is
-    * 32Bx4row-aligned.
+   /* On Gen12, 8BPP surfaces cannot be compressed if any level is not
+    * 32Bx4row-aligned. Alignment only matters for level 2 and onward.
+    * TODO: Check each level.
     */
-   if (ISL_DEV_GEN(dev) >= 12 && isl_format_get_layout(surf->format)->bpb == 8
-       && surf->levels > 1) {
+   if (ISL_DEV_GEN(dev) >= 12 &&
+       isl_format_get_layout(surf->format)->bpb == 8 && surf->levels >= 3) {
       return false;
    }
 
@@ -2001,21 +2002,48 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
       return false;
    }
 
+
+   /* On Gen12, compressed main surfaces should have an alignment of 16px x 4
+    * rows. This is relied upon when determining the CCS surface alignment.
+    */
+   if (ISL_DEV_GEN(dev) >= 12 && surf->levels >= 3) {
+      assert(surf->image_alignment_el.w == 16);
+      assert(surf->image_alignment_el.h == 4);
+   }
+
    const isl_tiling_flags_t tiling_flag = ISL_DEV_GEN(dev) >= 12 ?
       ISL_TILING_GEN12_CCS_BIT : ISL_TILING_CCS_BIT;
 
-   return isl_surf_init(dev, ccs_surf,
-                        .dim = surf->dim,
-                        .format = ccs_format,
-                        .width = surf->logical_level0_px.width,
-                        .height = surf->logical_level0_px.height,
-                        .depth = surf->logical_level0_px.depth,
-                        .levels = surf->levels,
-                        .array_len = surf->logical_level0_px.array_len,
-                        .samples = 1,
-                        .row_pitch_B = row_pitch_B,
-                        .usage = ISL_SURF_USAGE_CCS_BIT,
-                        .tiling_flags = tiling_flag);
+   /* On Gen12, there's a byte-to-byte mapping from the main surface to the
+    * auxiliary surface. Because the main surface may have a row pitch larger
+    * than what ISL would calculate and the caller may not have adjusted
+    * row_pitch_B accordingly, the auxiliary surface row pitch must always be
+    * specified on Gen12.
+    */
+   const uint32_t row_pitch_override_B =
+      row_pitch_B == 0 && ISL_DEV_GEN(dev) >= 12 ?
+      surf->row_pitch_B / 8 : row_pitch_B;
+
+   const bool ok =
+      isl_surf_init(dev, ccs_surf,
+                    .dim = surf->dim,
+                    .format = ccs_format,
+                    .width = surf->logical_level0_px.width,
+                    .height = surf->logical_level0_px.height,
+                    .depth = surf->logical_level0_px.depth,
+                    .levels = surf->levels,
+                    .array_len = surf->logical_level0_px.array_len,
+                    .samples = 1,
+                    .row_pitch_B = row_pitch_override_B,
+                    .usage = ISL_SURF_USAGE_CCS_BIT,
+                    .tiling_flags = tiling_flag);
+
+   if (ISL_DEV_GEN(dev) >= 12) {
+      assert(ccs_surf->row_pitch_B == surf->row_pitch_B / 8);
+      assert(ccs_surf->size_B == surf->size_B / 256);
+   }
+
+   return ok;
 }
 
 #define isl_genX_call(dev, func, ...)              \

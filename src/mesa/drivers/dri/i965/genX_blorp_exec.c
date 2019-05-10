@@ -183,7 +183,9 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
        */
       .reloc_flags = RELOC_32BIT,
 
-#if GEN_GEN == 11
+#if GEN_GEN == 12
+      .mocs = TGL_MOCS_WB,
+#elif GEN_GEN == 11
       .mocs = ICL_MOCS_WB,
 #elif GEN_GEN == 10
       .mocs = CNL_MOCS_WB,

@@ -1540,8 +1540,7 @@ _anv_combine_address(struct anv_batch *batch, void *location,
 
 /* TigerLake MOCS */
 #define GEN12_MOCS GEN9_MOCS
-/* TC=1/LLC Only, LeCC=1/Uncacheable, LRUM=0, L3CC=1/Uncacheable */
-#define GEN12_EXTERNAL_MOCS (3 << 1)
+#define GEN12_EXTERNAL_MOCS (61 << 1)
 
 struct anv_device_memory {
    struct list_head                             link;

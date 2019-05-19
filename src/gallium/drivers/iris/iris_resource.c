@@ -487,6 +487,7 @@ iris_resource_configure_aux(struct iris_screen *screen,
     * On gen <= 9, we are going to store the clear color on the buffer
     * anyways, and copy it back to the surface state during state emission.
     */
+   size = ALIGN(size, 4096);
    res->aux.clear_color_offset = size;
    size += iris_get_aux_clear_color_state_size(screen);
    *aux_size_B = size;

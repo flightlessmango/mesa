@@ -1482,6 +1482,7 @@ intel_alloc_aux_buffer(struct brw_context *brw,
        * will set a pointer to a dword somewhere that contains the color. So,
        * allocate the space for the clear color value here on the aux buffer.
        */
+      size = ALIGN(size, 4096);
       buf->clear_color_offset = size;
       size += brw->isl_dev.ss.clear_color_state_size;
    }

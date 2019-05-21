@@ -1538,9 +1538,9 @@ _anv_combine_address(struct anv_batch *batch, void *location,
 #define GEN11_MOCS GEN9_MOCS
 #define GEN11_EXTERNAL_MOCS GEN9_EXTERNAL_MOCS
 
-/* TigerLake MOCS */
+/* TigerLake MOCS defines are duplicates of Skylake MOCS defines. */
 #define GEN12_MOCS GEN9_MOCS
-#define GEN12_EXTERNAL_MOCS (61 << 1)
+#define GEN12_EXTERNAL_MOCS GEN9_EXTERNAL_MOCS
 
 struct anv_device_memory {
    struct list_head                             link;

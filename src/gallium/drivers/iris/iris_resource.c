@@ -1801,7 +1801,12 @@ iris_transfer_map(struct pipe_context *ctx,
    if (fmtl->txc == ISL_TXC_ASTC)
       no_gpu = true;
 
-   if ((map_would_stall || res->aux.usage == ISL_AUX_USAGE_CCS_E) && !no_gpu) {
+   struct iris_screen *screen = (void *) ctx->screen;
+   const struct gen_device_info *devinfo = &screen->devinfo;
+   bool no_cpu = res->bo->external && devinfo->gen >= 12;
+   bool prefer_gpu = map_would_stall || res->aux.usage == ISL_AUX_USAGE_CCS_E;
+
+   if (no_cpu || (prefer_gpu && !no_gpu)) {
       /* If we need a synchronous mapping and the resource is busy, or needs
        * resolving, we copy to/from a linear temporary buffer using the GPU.
        */

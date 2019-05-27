@@ -33,6 +33,8 @@
 #include "iris_resource.h"
 #include "iris_screen.h"
 
+#define FILE_DEBUG_FLAG DEBUG_BLORP
+
 /**
  * Helper function for handling mirror image blits.
  *
@@ -468,6 +470,15 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
       for (int slice = 0; slice < info->dst.box.depth; slice++) {
          iris_batch_maybe_flush(batch, 1500);
 
+         DBG("%s from %dx %s res %p %d %d (%f,%f) (%f,%f) "
+             "to %dx %s res %p %d %d (%f,%f) (%f,%f) (flip %d,%d)\n",
+             __func__,
+             src_surf.surf->samples, _mesa_get_format_name(src_fmt.fmt),
+             src_res, info->src.level, info->src.box.z + slice, src_x0, src_y0,
+             src_x1, src_y1, dst_surf.surf->samples,
+             _mesa_get_format_name(dst_fmt.fmt), dst_res,
+             info->dst.level, info->dst.box.z + slice, dst_x0, dst_y0, dst_x1,
+             dst_y1, mirror_x, mirror_y);
          blorp_blit(&blorp_batch,
                     &src_surf, info->src.level, info->src.box.z + slice,
                     src_fmt.fmt, src_fmt.swizzle,
@@ -615,6 +626,16 @@ iris_copy_region(struct blorp_context *blorp,
       for (int slice = 0; slice < src_box->depth; slice++) {
          iris_batch_maybe_flush(batch, 1500);
 
+         DBG("%s from %dx %s res %p %d %d (%d,%d) %dx%d "
+             "to %dx %s res %p %d %d (%d,%d)\n",
+             __func__,
+             src_surf.surf->samples,
+             _mesa_get_format_name(src_res->internal_format),
+             src_res, src_level, src_box->z + slice, src_box->x,
+             src_box->y, src_box->width, src_box->height,
+             dst_surf.surf->samples,
+             _mesa_get_format_name(dst_res->internal_format),
+             dst_res, dst_level, dstz + slice, dstx, dsty);
          blorp_copy(&blorp_batch, &src_surf, src_level, src_box->z + slice,
                     &dst_surf, dst_level, dstz + slice,
                     src_box->x, src_box->y, dstx, dsty,

@@ -1711,12 +1711,13 @@ iris_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
 
    /* The STATE_BASE_ADDRESS size field can only hold 1 page shy of 4GB */
    const uint64_t _4GB_minus_1 = _4GB - PAGE_SIZE;
+   const uint64_t max_pool_size = devinfo->gen >= 12 ? _2GB : _4GB_minus_1;
 
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_SHADER],
-                      PAGE_SIZE, _4GB_minus_1 - PAGE_SIZE);
+                      PAGE_SIZE, max_pool_size - PAGE_SIZE);
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_SURFACE],
                       IRIS_MEMZONE_SURFACE_START,
-                      _4GB_minus_1 - IRIS_MAX_BINDERS * IRIS_BINDER_SIZE);
+                      max_pool_size - IRIS_MAX_BINDERS * IRIS_BINDER_SIZE);
    const uint64_t dynamic_pool_size =
       (devinfo->gen >= 12 ? _2GB : _4GB_minus_1) - IRIS_BORDER_COLOR_POOL_SIZE;
    util_vma_heap_init(&bufmgr->vma_allocator[IRIS_MEMZONE_DYNAMIC],

@@ -849,6 +849,8 @@ isl_format_rgbx_to_rgba(enum isl_format rgbx)
       return ISL_FORMAT_B5G5R5A1_UNORM;
    case ISL_FORMAT_B5G5R5X1_UNORM_SRGB:
       return ISL_FORMAT_B5G5R5A1_UNORM_SRGB;
+   case ISL_FORMAT_R10G10B10X2_USCALED:
+      return ISL_FORMAT_R10G10B10A2_USCALED;
    default:
       assert(!"Invalid RGBX format");
       return rgbx;

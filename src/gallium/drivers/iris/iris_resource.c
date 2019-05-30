@@ -699,6 +699,7 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
    const struct util_format_description *format_desc =
       util_format_description(templ->format);
    const bool has_depth = util_format_has_depth(format_desc);
+   const bool has_stencil = util_format_has_stencil(format_desc);
    uint64_t modifier =
       select_best_modifier(devinfo, templ->format, modifiers, modifiers_count);
 
@@ -779,6 +780,9 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
    } else if (has_depth) {
       if (likely(!(INTEL_DEBUG & DEBUG_NO_HIZ)))
          res->aux.possible_usages |= 1 << ISL_AUX_USAGE_HIZ;
+   } else if (has_stencil) {
+      if (likely(!(INTEL_DEBUG & DEBUG_NO_HIZ)))
+         res->aux.possible_usages = 1 << ISL_AUX_USAGE_NONE;
    } else if (likely(!(INTEL_DEBUG & DEBUG_NO_RBC)) &&
               supports_ccs(devinfo, &res->surf)) {
       if (isl_format_supports_ccs_e(devinfo, res->surf.format))

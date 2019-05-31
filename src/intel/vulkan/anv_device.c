@@ -617,19 +617,24 @@ anv_physical_device_init(struct anv_physical_device *device,
    device->local_fd = fd;
 
    anv_init_engine_info(device);
+   int num_compute = anv_gem_count_engines(device, I915_ENGINE_CLASS_COMPUTE);
 
-   int num_render_engines =
-      anv_gem_count_engines(device, I915_ENGINE_CLASS_RENDER);
-   int num_compute_engines =
-      anv_gem_count_engines(device, I915_ENGINE_CLASS_COMPUTE);
-
-   /* On older kernel that do not support counting engine instances, consider
-    * we have at a single render and no compute engines.
-    */
-   device->queue_count[ANV_RENDER_QUEUE_FAMILY] =
-      num_render_engines < 0 ? 1 : num_render_engines;
-   device->queue_count[ANV_COMPUTE_QUEUE_FAMILY] =
-      num_compute_engines < 0 ? 0 : num_compute_engines;
+   uint32_t num_families = 0;
+   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
+      STATIC_ASSERT(ANV_MAX_QUEUE_FAMILIES == 2);
+      switch (i) {
+      case ANV_RENDER_QUEUE_FAMILY:
+         device->queue_map[num_families++] = i;
+         break;
+      case ANV_COMPUTE_QUEUE_FAMILY:
+         if (num_compute > 0)
+            device->queue_map[num_families++] = i;
+         break;
+      }
+   }
+   for (uint32_t i = num_families; i < ANV_MAX_QUEUE_FAMILIES; i++) {
+      device->queue_map[i] = ANV_MAX_QUEUE_FAMILIES;
+   }
 
    return VK_SUCCESS;
 
@@ -1826,6 +1831,15 @@ void anv_GetPhysicalDeviceProperties2(
    }
 }
 
+/* We support exactly one queue family. */
+static const VkQueueFamilyProperties
+anv_queue_family_properties = {
+   .queueFlags = 0,
+   .queueCount = 1,
+   .timestampValidBits = 36, /* XXX: Real value here */
+   .minImageTransferGranularity = { 1, 1, 1 },
+};
+
 static const uint32_t queue_family_flags[] = {
       [ANV_RENDER_QUEUE_FAMILY] = VK_QUEUE_GRAPHICS_BIT |
                                   VK_QUEUE_COMPUTE_BIT |
@@ -1843,15 +1857,12 @@ void anv_GetPhysicalDeviceQueueFamilyProperties(
 
    ANV_FROM_HANDLE(anv_physical_device, pdevice, physicalDevice);
    for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
-      VkQueueFamilyProperties props = {
-         .queueFlags = queue_family_flags[i],
-         .queueCount = pdevice->queue_count[i],
-         .timestampValidBits = 36, /* XXX: Real value here */
-         .minImageTransferGranularity = { 1, 1, 1 },
-      };
-
-      vk_outarray_append(&out, p)
-         *p = props;
+      if (pdevice->queue_map[i] < ANV_MAX_QUEUE_FAMILIES) {
+         vk_outarray_append(&out, p) {
+            *p = anv_queue_family_properties;
+            p->queueFlags |= queue_family_flags[pdevice->queue_map[i]];
+         }
+      }
    }
 }
 
@@ -1865,17 +1876,14 @@ void anv_GetPhysicalDeviceQueueFamilyProperties2(
 
    ANV_FROM_HANDLE(anv_physical_device, pdevice, physicalDevice);
    for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
-      VkQueueFamilyProperties props = {
-         .queueFlags = queue_family_flags[i],
-         .queueCount = pdevice->queue_count[i],
-         .timestampValidBits = 36, /* XXX: Real value here */
-         .minImageTransferGranularity = { 1, 1, 1 },
-      };
-
-      vk_outarray_append(&out, p) {
-         p->queueFamilyProperties = props;
-         vk_foreach_struct(s, p->pNext) {
-            anv_debug_ignored_stype(s->sType);
+      if (pdevice->queue_map[i] < ANV_MAX_QUEUE_FAMILIES) {
+         vk_outarray_append(&out, p) {
+            p->queueFamilyProperties = anv_queue_family_properties;
+            vk_foreach_struct(s, p->pNext) {
+               anv_debug_ignored_stype(s->sType);
+            }
+            p->queueFamilyProperties.queueFlags |=
+               queue_family_flags[pdevice->queue_map[i]];
          }
       }
    }
@@ -2127,14 +2135,11 @@ anv_DebugReportMessageEXT(VkInstance _instance,
 }
 
 static void
-anv_queue_init(struct anv_device *device,
-               enum anv_queue_family family,
-               uint32_t family_instance,
+anv_queue_init(struct anv_device *device, enum anv_queue_family family,
                struct anv_queue *queue)
 {
    queue->_loader_data.loaderMagic = ICD_LOADER_MAGIC;
    queue->queue_family = family;
-   queue->queue_family_instance = family_instance;
    queue->device = device;
    queue->flags = 0;
 }
@@ -2459,27 +2464,47 @@ static struct gen_mapped_pinned_buffer_alloc aux_map_allocator = {
 static VkResult
 early_queue_init(struct anv_device *device, const VkDeviceCreateInfo *info)
 {
+   int gem_render, gem_compute;
    const VkDeviceQueueCreateInfo *infos = info->pQueueCreateInfos;
    struct anv_physical_device *pdevice = &device->instance->physicalDevice;
 
    device->queue = NULL;
 
-   /* Count the user requested #queues and store in device->queue_count */
-   memset(device->queue_count, 0, sizeof(device->queue_count));
+   /* Read the number of queues for each type from gem */
+   gem_render = anv_gem_count_engines(pdevice, I915_ENGINE_CLASS_RENDER);
+   if (gem_render >= 0) {
+      gem_compute = anv_gem_count_engines(pdevice, I915_ENGINE_CLASS_COMPUTE);
+      if (gem_compute < 0)
+         gem_compute = 0;
+   } else {
+      gem_render = 1;
+      gem_compute = 0;
+   }
+   assert(gem_render >= 0 && gem_compute >= 0);
+   if (gem_render < 1 && gem_compute < 1)
+      return vk_error(VK_ERROR_INITIALIZATION_FAILED);
+
+   /* Count the user requested #queues and store in device->num_queues */
+   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
+      device->num_queues[i] = 0;
    for (uint32_t i = 0; i < info->queueCreateInfoCount; i++) {
       uint32_t family_index = infos[i].queueFamilyIndex;
       if (family_index >= ANV_MAX_QUEUE_FAMILIES)
          return vk_error(VK_ERROR_INITIALIZATION_FAILED);
-      for (uint32_t j = 0; j < infos[i].queueCount; j++) {
-         if (device->queue_count[family_index] >= pdevice->queue_count[family_index])
-            return vk_error(VK_ERROR_INITIALIZATION_FAILED);
-         device->queue_count[family_index]++;
-      }
+      enum anv_queue_family anv_queue_family =
+         pdevice->queue_map[family_index];
+      if (anv_queue_family >= ANV_MAX_QUEUE_FAMILIES)
+         return vk_error(VK_ERROR_INITIALIZATION_FAILED);
+      device->num_queues[anv_queue_family]++;
    }
+
+   if (device->num_queues[ANV_RENDER_QUEUE_FAMILY] > gem_render ||
+       device->num_queues[ANV_COMPUTE_QUEUE_FAMILY] > gem_compute)
+      return vk_error(VK_ERROR_INITIALIZATION_FAILED);
 
    uint32_t num_queues = 0;
    for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
-      num_queues += device->queue_count[i];
+      num_queues += device->num_queues[i];
 
    device->queue =
       vk_zalloc(&device->alloc, num_queues * sizeof(device->queue[0]), 8,
@@ -2488,12 +2513,9 @@ early_queue_init(struct anv_device *device, const VkDeviceCreateInfo *info)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
    /* Set queue_family to it can be used during context creation. */
-   for (uint32_t family_idx = 0, idx = 0; family_idx < ANV_MAX_QUEUE_FAMILIES; family_idx++) {
-      for (uint32_t instance_idx = 0; instance_idx < device->queue_count[family_idx]; instance_idx++) {
-         device->queue[idx].queue_family = family_idx;
-         device->queue[idx].queue_family_instance = instance_idx;
-         idx++;
-      }
+   for (uint32_t i = 0; i < num_queues; i++) {
+      device->queue[i].queue_family =
+         pdevice->queue_map[infos[i].queueFamilyIndex];
    }
 
    return VK_SUCCESS;
@@ -2750,9 +2772,39 @@ VkResult anv_CreateDevice(
 
    anv_scratch_pool_init(device, &device->scratch_pool);
 
-   for (uint32_t f = 0, idx = 0; f < ANV_MAX_QUEUE_FAMILIES; f++) {
-      for (uint32_t i = 0; i < device->queue_count[f]; i++) {
-         anv_queue_init(device, f, i, &device->queue[idx++]);
+   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
+      device->queue[i].queue_family = ANV_MAX_QUEUE_FAMILIES;
+
+   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
+      assert(pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex <
+             ANV_MAX_QUEUE_FAMILIES);
+      uint32_t queue_family_index =
+         pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
+      if (device->queue[queue_family_index].queue_family >=
+          ANV_MAX_QUEUE_FAMILIES) {
+         enum anv_queue_family queue_family =
+            device->instance->physicalDevice.queue_map[queue_family_index];
+         assert(queue_family < ANV_MAX_QUEUE_FAMILIES);
+         anv_queue_init(device, queue_family,
+                        &device->queue[queue_family_index]);
+      }
+   }
+
+   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
+      device->queue[i].queue_family = ANV_MAX_QUEUE_FAMILIES;
+
+   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
+      assert(pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex <
+             ANV_MAX_QUEUE_FAMILIES);
+      uint32_t queue_family_index =
+         pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
+      if (device->queue[queue_family_index].queue_family >=
+          ANV_MAX_QUEUE_FAMILIES) {
+         enum anv_queue_family queue_family =
+            device->instance->physicalDevice.queue_map[queue_family_index];
+         assert(queue_family < ANV_MAX_QUEUE_FAMILIES);
+         anv_queue_init(device, queue_family,
+                        &device->queue[queue_family_index]);
       }
    }
 
@@ -2934,18 +2986,6 @@ VkResult anv_EnumerateDeviceLayerProperties(
    return vk_error(VK_ERROR_LAYER_NOT_PRESENT);
 }
 
-static inline uint32_t
-anv_device_queue_index(struct anv_device *device, uint32_t queue_family, uint32_t queue_family_instance)
-{
-   uint32_t idx = 0;
-
-   for (uint32_t family_idx = 0; family_idx < queue_family; family_idx++)
-      idx += device->queue_count[family_idx];
-   idx += queue_family_instance;
-
-   return idx;
-}
-
 void anv_GetDeviceQueue(
     VkDevice                                    _device,
     uint32_t                                    queueFamilyIndex,
@@ -2956,8 +2996,7 @@ void anv_GetDeviceQueue(
 
    assert(queueIndex == 0);
 
-   uint32_t idx = anv_device_queue_index(device, queueFamilyIndex, queueIndex);
-   *pQueue = anv_queue_to_handle(&device->queue[idx]);
+   *pQueue = anv_queue_to_handle(&device->queue[queueFamilyIndex]);
 }
 
 void anv_GetDeviceQueue2(
@@ -2969,10 +3008,7 @@ void anv_GetDeviceQueue2(
 
    assert(pQueueInfo->queueIndex == 0);
 
-   uint32_t idx = anv_device_queue_index(device,
-                                         pQueueInfo->queueFamilyIndex,
-                                         pQueueInfo->queueIndex);
-   struct anv_queue *queue = &device->queue[idx];
+   struct anv_queue *queue = &device->queue[pQueueInfo->queueFamilyIndex];
 
    if (pQueueInfo->flags == queue->flags)
       *pQueue = anv_queue_to_handle(queue);

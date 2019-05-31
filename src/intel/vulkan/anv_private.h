@@ -938,8 +938,7 @@ struct anv_physical_device {
        uint8_t                                  function;
     }                                           pci_info;
     struct gen_device_info                      info;
-    uint32_t                                    queue_count[ANV_MAX_QUEUE_FAMILIES];
-
+    enum anv_queue_family                       queue_map[ANV_MAX_QUEUE_FAMILIES];
     /** Amount of "GPU memory" we want to advertise
      *
      * Clearly, this value is bogus since Intel is a UMA architecture.  On
@@ -1044,7 +1043,6 @@ struct anv_queue {
     uint32_t                                    exec_flags;
 
     enum anv_queue_family                       queue_family;
-    uint32_t                                    queue_family_instance;
 
     VkDeviceQueueCreateFlags                    flags;
 };
@@ -1164,7 +1162,7 @@ struct anv_device {
 
     struct anv_state                            slice_hash;
 
-    uint32_t                                    queue_count[ANV_MAX_QUEUE_FAMILIES];
+    uint32_t                                    num_queues[ANV_MAX_QUEUE_FAMILIES];
     struct anv_queue                            *queue;
 
     struct anv_scratch_pool                     scratch_pool;

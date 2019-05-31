@@ -603,13 +603,6 @@ anv_physical_device_init(struct anv_physical_device *device,
    }
    device->master_fd = master_fd;
 
-   result = anv_init_wsi(device);
-   if (result != VK_SUCCESS) {
-      ralloc_free(device->compiler);
-      anv_physical_device_free_disk_cache(device);
-      goto fail;
-   }
-
    anv_physical_device_get_supported_extensions(device,
                                                 &device->supported_extensions);
 
@@ -617,7 +610,7 @@ anv_physical_device_init(struct anv_physical_device *device,
    device->local_fd = fd;
 
    anv_init_engine_info(device);
-   int num_compute = anv_gem_count_engines(device, I915_ENGINE_CLASS_COMPUTE);
+   int num_compute = 0;//anv_gem_count_engines(device, I915_ENGINE_CLASS_COMPUTE);
 
    uint32_t num_families = 0;
    for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
@@ -634,6 +627,13 @@ anv_physical_device_init(struct anv_physical_device *device,
    }
    for (uint32_t i = num_families; i < ANV_MAX_QUEUE_FAMILIES; i++) {
       device->queue_map[i] = ANV_MAX_QUEUE_FAMILIES;
+   }
+
+   result = anv_init_wsi(device);
+   if (result != VK_SUCCESS) {
+      ralloc_free(device->compiler);
+      anv_physical_device_free_disk_cache(device);
+      goto fail;
    }
 
    return VK_SUCCESS;
@@ -2471,9 +2471,9 @@ early_queue_init(struct anv_device *device, const VkDeviceCreateInfo *info)
    device->queue = NULL;
 
    /* Read the number of queues for each type from gem */
-   gem_render = anv_gem_count_engines(pdevice, I915_ENGINE_CLASS_RENDER);
+   gem_render = 1;//anv_gem_count_engines(pdevice, I915_ENGINE_CLASS_RENDER);
    if (gem_render >= 0) {
-      gem_compute = anv_gem_count_engines(pdevice, I915_ENGINE_CLASS_COMPUTE);
+      gem_compute = 0;//anv_gem_count_engines(pdevice, I915_ENGINE_CLASS_COMPUTE);
       if (gem_compute < 0)
          gem_compute = 0;
    } else {
@@ -2485,7 +2485,7 @@ early_queue_init(struct anv_device *device, const VkDeviceCreateInfo *info)
       return vk_error(VK_ERROR_INITIALIZATION_FAILED);
 
    /* Count the user requested #queues and store in device->num_queues */
-   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
+   for (uint32_t i = 0; i < ARRAY_SIZE(device->num_queues); i++)
       device->num_queues[i] = 0;
    for (uint32_t i = 0; i < info->queueCreateInfoCount; i++) {
       uint32_t family_index = infos[i].queueFamilyIndex;
@@ -2496,15 +2496,15 @@ early_queue_init(struct anv_device *device, const VkDeviceCreateInfo *info)
       if (anv_queue_family >= ANV_MAX_QUEUE_FAMILIES)
          return vk_error(VK_ERROR_INITIALIZATION_FAILED);
       device->num_queues[anv_queue_family]++;
+      device->num_queues[ANV_MAX_QUEUE_FAMILIES]++;
+      fprintf(stderr, "num_queues[%d]: %d\n", anv_queue_family, device->num_queues[anv_queue_family]);
    }
 
    if (device->num_queues[ANV_RENDER_QUEUE_FAMILY] > gem_render ||
        device->num_queues[ANV_COMPUTE_QUEUE_FAMILY] > gem_compute)
       return vk_error(VK_ERROR_INITIALIZATION_FAILED);
 
-   uint32_t num_queues = 0;
-   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
-      num_queues += device->num_queues[i];
+   uint32_t num_queues = device->num_queues[ANV_MAX_QUEUE_FAMILIES];
 
    device->queue =
       vk_zalloc(&device->alloc, num_queues * sizeof(device->queue[0]), 8,
@@ -2772,6 +2772,22 @@ VkResult anv_CreateDevice(
 
    anv_scratch_pool_init(device, &device->scratch_pool);
 
+   //for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
+   //   device->queue[i].queue_family = ANV_MAX_QUEUE_FAMILIES;
+
+   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
+      assert(pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex <
+             ANV_MAX_QUEUE_FAMILIES);
+      uint32_t queue_family_index =
+         pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
+      enum anv_queue_family queue_family =
+         device->instance->physicalDevice.queue_map[queue_family_index];
+      assert(queue_family < ANV_MAX_QUEUE_FAMILIES);
+      anv_queue_init(device, queue_family,
+                     &device->queue[i]);
+   }
+
+#if 0
    for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
       device->queue[i].queue_family = ANV_MAX_QUEUE_FAMILIES;
 
@@ -2789,24 +2805,7 @@ VkResult anv_CreateDevice(
                         &device->queue[queue_family_index]);
       }
    }
-
-   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++)
-      device->queue[i].queue_family = ANV_MAX_QUEUE_FAMILIES;
-
-   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
-      assert(pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex <
-             ANV_MAX_QUEUE_FAMILIES);
-      uint32_t queue_family_index =
-         pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
-      if (device->queue[queue_family_index].queue_family >=
-          ANV_MAX_QUEUE_FAMILIES) {
-         enum anv_queue_family queue_family =
-            device->instance->physicalDevice.queue_map[queue_family_index];
-         assert(queue_family < ANV_MAX_QUEUE_FAMILIES);
-         anv_queue_init(device, queue_family,
-                        &device->queue[queue_family_index]);
-      }
-   }
+#endif
 
    switch (device->info.gen) {
    case 7:
@@ -2849,9 +2848,8 @@ VkResult anv_CreateDevice(
    return VK_SUCCESS;
 
  fail_workaround_bo:
-   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
-      if (device->queue[i].queue_family < ANV_MAX_QUEUE_FAMILIES)
-         anv_queue_finish(&device->queue[i]);
+   for (uint32_t i = 0; i < device->num_queues[ANV_MAX_QUEUE_FAMILIES]; i++) {
+      anv_queue_finish(&device->queue[i]);
    }
    anv_scratch_pool_finish(device, &device->scratch_pool);
    anv_gem_munmap(device, device->workaround_bo.map,
@@ -2906,9 +2904,8 @@ void anv_DestroyDevice(
 
    anv_pipeline_cache_finish(&device->default_pipeline_cache);
 
-   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
-      if (device->queue[i].queue_family < ANV_MAX_QUEUE_FAMILIES)
-         anv_queue_finish(&device->queue[i]);
+   for (uint32_t i = 0; i < device->num_queues[ANV_MAX_QUEUE_FAMILIES]; i++) {
+      anv_queue_finish(&device->queue[i]);
    }
 
 #ifdef HAVE_VALGRIND
@@ -3069,11 +3066,9 @@ anv_queue_query_status(struct anv_queue *queue)
 VkResult
 anv_device_query_status(struct anv_device *device)
 {
-   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
-      if (device->queue[i].queue_family < ANV_MAX_QUEUE_FAMILIES) {
-         if (anv_queue_query_status(&device->queue[i]) == VK_ERROR_DEVICE_LOST)
-            return VK_ERROR_DEVICE_LOST;
-      }
+   for (uint32_t i = 0; i < device->num_queues[ANV_MAX_QUEUE_FAMILIES]; i++) {
+      if (anv_queue_query_status(&device->queue[i]) == VK_ERROR_DEVICE_LOST)
+         return VK_ERROR_DEVICE_LOST;
    }
 
    return VK_SUCCESS;
@@ -3139,13 +3134,11 @@ VkResult anv_DeviceWaitIdle(
    anv_batch_emit(&batch, GEN7_MI_BATCH_BUFFER_END, bbe);
    anv_batch_emit(&batch, GEN7_MI_NOOP, noop);
 
-   for (uint32_t i = 0; i < ANV_MAX_QUEUE_FAMILIES; i++) {
+   for (uint32_t i = 0; i < device->num_queues[ANV_MAX_QUEUE_FAMILIES]; i++) {
       struct anv_queue *queue = &device->queue[i];
-      if (queue->queue_family < ANV_MAX_QUEUE_FAMILIES) {
-         VkResult res = anv_device_submit_simple_batch(queue, &batch);
-         if (res != VK_SUCCESS)
-            return res;
-      }
+      VkResult res = anv_device_submit_simple_batch(queue, &batch);
+      if (res != VK_SUCCESS)
+         return res;
    }
 
    return VK_SUCCESS;

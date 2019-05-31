@@ -65,6 +65,7 @@ anv_device_submit_simple_batch(struct anv_queue *queue,
    VkResult result = VK_SUCCESS;
    uint32_t size;
    struct anv_device *device = queue->device;
+   assert(device);
 
    /* Kernel driver requires 8 byte aligned batch length */
    size = align_u32(batch->next - batch->start, 8);

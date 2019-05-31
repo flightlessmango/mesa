@@ -1162,7 +1162,7 @@ struct anv_device {
 
     struct anv_state                            slice_hash;
 
-    uint32_t                                    num_queues[ANV_MAX_QUEUE_FAMILIES];
+    uint32_t                                    num_queues[ANV_MAX_QUEUE_FAMILIES + 1];
     struct anv_queue                            *queue;
 
     struct anv_scratch_pool                     scratch_pool;

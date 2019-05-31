@@ -1367,7 +1367,7 @@ anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,
 {
    pool->device = device;
    pool->bo_flags = bo_flags;
-   memset(pool->free_list, 0, sizeof(pool->free_list));
+   memset(&pool->free_list[0], 0, sizeof(pool->free_list));
 
    VG(VALGRIND_CREATE_MEMPOOL(pool, 0, false));
 }

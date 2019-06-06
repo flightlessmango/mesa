@@ -1489,7 +1489,7 @@ isl_calc_row_pitch(const struct isl_device *dev,
       surf_info->row_pitch_B != 0 ?
          surf_info->row_pitch_B :
       /* On Gen12, CCS-compressed surface pitches must be 512B-aligned. */
-      !isl_format_is_compressed(surf_info->format) && isl_is_pow2(fmtl->bpb) ?
+      isl_format_supports_ccs_e(dev->info, surf_info->format) ?
          isl_align(min_row_pitch_B, 512) :
       /* Else */
          min_row_pitch_B;

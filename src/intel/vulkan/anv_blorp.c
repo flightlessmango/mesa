@@ -34,7 +34,7 @@ anv_blorp_map(const struct blorp_context *blorp,
    struct anv_bo *bo = blorp_addr->buffer;
    uint64_t bo_offset = /*bo->offset +*/ blorp_addr->offset;
    uint64_t map_size = bo->size;
-   fprintf(stderr, "bo(%p) bo->offset=0x%lx blorp_addr->offset=0x%x "
+   fprintf(stderr, "bo(%p) bo->offset=0x%lx blorp_addr->offset=0x%lx "
            "map_size=0x%lx\n", bo, bo->offset, blorp_addr->offset, map_size);
 
    if (bo->map == NULL) {

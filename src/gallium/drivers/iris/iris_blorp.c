@@ -319,6 +319,7 @@ iris_blorp_exec(struct blorp_batch *blorp_batch,
 
    iris_handle_always_flush_cache(batch);
 
+   assert(params->compute_program == (batch->name == IRIS_BATCH_COMPUTE));
    blorp_exec(blorp_batch, params);
 
    iris_handle_always_flush_cache(batch);

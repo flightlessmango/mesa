@@ -668,6 +668,9 @@ struct iris_context {
       /** Bitfield of whether color blending is enabled for RT[i] */
       uint8_t blend_enables;
 
+      /** Bitfield of whether color writes are enabled for RT[i] */
+      uint8_t color_write_enables;
+
       /** Are depth writes enabled?  (Depth buffer may or may not exist.) */
       bool depth_writes_enabled;
 

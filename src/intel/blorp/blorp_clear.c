@@ -23,6 +23,7 @@
 
 #include "util/ralloc.h"
 
+#include "main/format_utils.h"
 #include "main/macros.h" /* Needed for MAX3 and MAX2 for format_rgb9e5 */
 #include "util/format_rgb9e5.h"
 #include "util/format_srgb.h"
@@ -575,6 +576,13 @@ blorp_clear(struct blorp_batch *batch,
    bool clear_rgb_as_red = false;
    if (format == ISL_FORMAT_B8G8R8X8_UNORM) {
       format = ISL_FORMAT_B8G8R8A8_UNORM;
+   } else if (format == ISL_FORMAT_R8G8B8A8_UNORM_SRGB) {
+      clear_color.u32[0] =
+         (_mesa_float_to_unorm(clear_color.f32[3], 8) << 24) |
+         (util_format_linear_float_to_srgb_8unorm(clear_color.f32[2]) << 16) |
+         (util_format_linear_float_to_srgb_8unorm(clear_color.f32[1]) << 8) |
+         util_format_linear_float_to_srgb_8unorm(clear_color.f32[0]);
+      format = ISL_FORMAT_R32_UINT;
    } else if (format == ISL_FORMAT_R9G9B9E5_SHAREDEXP) {
       clear_color.u32[0] = float3_to_rgb9e5(clear_color.f32);
       format = ISL_FORMAT_R32_UINT;

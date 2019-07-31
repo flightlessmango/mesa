@@ -145,6 +145,8 @@ struct iris_bufmgr {
 
    struct util_vma_heap vma_allocator[IRIS_MEMZONE_COUNT];
 
+   uint64_t vma_min_align;
+
    bool has_llc:1;
    bool has_mmap_offset:1;
    bool bo_reuse:1;
@@ -277,8 +279,10 @@ vma_alloc(struct iris_bufmgr *bufmgr,
           uint64_t size,
           uint64_t alignment)
 {
-   /* Force alignment to be some number of pages */
-   alignment = ALIGN(alignment, PAGE_SIZE);
+   assert(alignment > bufmgr->vma_min_align ||
+          bufmgr->vma_min_align % alignment == 0);
+   /* Force minimum alignment based on device requirements */
+   alignment = ALIGN(alignment, bufmgr->vma_min_align);
 
    if (memzone == IRIS_MEMZONE_BORDER_COLOR_POOL)
       return IRIS_BORDER_COLOR_POOL_ADDRESS;
@@ -1737,6 +1741,8 @@ iris_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
       _mesa_hash_table_create(NULL, key_hash_uint, key_uint_equal);
    bufmgr->handle_table =
       _mesa_hash_table_create(NULL, key_hash_uint, key_uint_equal);
+
+   bufmgr->vma_min_align = devinfo->gen >= 12 ? 64 * 1024 : PAGE_SIZE;
 
    list_inithead(&bufmgr->aux_map_bos);
    if (devinfo->gen >= 12) {

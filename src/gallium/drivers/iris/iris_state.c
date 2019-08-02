@@ -642,10 +642,16 @@ iris_emit_l3_config(struct iris_batch *batch, const struct gen_l3_config *cfg,
       reg.ErrorDetectionBehaviorControl = true;
       reg.UseFullWays = true;
 #endif
-      reg.URBAllocation = cfg->n[GEN_L3P_URB];
-      reg.ROAllocation = cfg->n[GEN_L3P_RO];
-      reg.DCAllocation = cfg->n[GEN_L3P_DC];
-      reg.AllAllocation = cfg->n[GEN_L3P_ALL];
+      if (!batch->screen->devinfo.is_dg1) {
+         reg.URBAllocation = cfg->n[GEN_L3P_URB];
+         reg.ROAllocation = cfg->n[GEN_L3P_RO];
+         reg.DCAllocation = cfg->n[GEN_L3P_DC];
+         reg.AllAllocation = cfg->n[GEN_L3P_ALL];
+      } else {
+#if GEN_GEN >= 12
+         reg.L3FullWayAllocationEnable = true;
+#endif
+      }
    }
    _iris_emit_lri(batch, L3_ALLOCATION_REG_num, reg_val);
 }

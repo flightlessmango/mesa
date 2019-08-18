@@ -85,6 +85,7 @@ struct gen_mi_value {
 #if GEN_GEN >= 7 || GEN_IS_HASWELL
    bool invert;
 #endif
+   bool cs;
 };
 
 #if GEN_GEN >= 9
@@ -265,6 +266,34 @@ gen_mi_reg64(uint32_t reg)
 }
 
 static inline struct gen_mi_value
+gen_mi_cs_reg32(uint32_t reg)
+{
+   struct gen_mi_value val = {
+      .type = GEN_MI_VALUE_TYPE_REG32,
+      .reg = reg,
+      .cs = true,
+   };
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+   assert(!_gen_mi_value_is_allocated_gpr(val));
+#endif
+   return val;
+}
+
+static inline struct gen_mi_value
+gen_mi_cs_reg64(uint32_t reg)
+{
+   struct gen_mi_value val = {
+      .type = GEN_MI_VALUE_TYPE_REG64,
+      .reg = reg,
+      .cs = true,
+   };
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+   assert(!_gen_mi_value_is_allocated_gpr(val));
+#endif
+   return val;
+}
+
+static inline struct gen_mi_value
 gen_mi_mem32(__gen_address_type addr)
 {
    return (struct gen_mi_value) {
@@ -354,8 +383,10 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       break;
 
    case GEN_MI_VALUE_TYPE_MEM32:
+      assert(!dst.cs);
       switch (src.type) {
       case GEN_MI_VALUE_TYPE_IMM:
+         assert(!src.cs);
          gen_mi_builder_emit(b, GENX(MI_STORE_DATA_IMM), sdi) {
             sdi.Address = dst.addr;
             sdi.ImmediateData = src.imm;
@@ -364,6 +395,7 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
 
       case GEN_MI_VALUE_TYPE_MEM32:
       case GEN_MI_VALUE_TYPE_MEM64:
+         assert(!src.cs);
 #if GEN_GEN >= 8
          gen_mi_builder_emit(b, GENX(MI_COPY_MEM_MEM), cmm) {
             cmm.DestinationMemoryAddress = dst.addr;
@@ -384,7 +416,7 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       case GEN_MI_VALUE_TYPE_REG32:
       case GEN_MI_VALUE_TYPE_REG64:
          gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
-            srm.RegisterAddress = src.reg;
+            srm.RegisterAddress = src.reg + (src.cs ? 0x2000 : 0);
             srm.MemoryAddress = dst.addr;
          }
          break;
@@ -398,7 +430,7 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       switch (src.type) {
       case GEN_MI_VALUE_TYPE_IMM:
          gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_IMM), lri) {
-            lri.RegisterOffset = dst.reg;
+            lri.RegisterOffset = dst.reg + (dst.cs ? 0x2000 : 0);
             lri.DataDWord = src.imm;
          }
          break;
@@ -406,7 +438,7 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       case GEN_MI_VALUE_TYPE_MEM32:
       case GEN_MI_VALUE_TYPE_MEM64:
          gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_MEM), lrm) {
-            lrm.RegisterAddress = dst.reg;
+            lrm.RegisterAddress = dst.reg + (dst.cs ? 0x2000 : 0);
             lrm.MemoryAddress = src.addr;
          }
          break;
@@ -414,10 +446,10 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       case GEN_MI_VALUE_TYPE_REG32:
       case GEN_MI_VALUE_TYPE_REG64:
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
-         if (src.reg != dst.reg) {
+         if (src.reg != dst.reg || src.cs != dst.cs) {
             gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_REG), lrr) {
-               lrr.SourceRegisterAddress = src.reg;
-               lrr.DestinationRegisterAddress = dst.reg;
+               lrr.SourceRegisterAddress = src.reg + (src.cs ? 0x2000 : 0);
+               lrr.DestinationRegisterAddress = dst.reg + (dst.cs ? 0x2000 : 0);
             }
          }
 #else
@@ -535,18 +567,18 @@ gen_mi_store_if(struct gen_mi_builder *b,
 
    if (dst.type == GEN_MI_VALUE_TYPE_MEM64) {
       gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
-         srm.RegisterAddress = src.reg;
+         srm.RegisterAddress = src.reg + (src.cs ? 0x2000 : 0);
          srm.MemoryAddress = dst.addr;
          srm.PredicateEnable = true;
       }
       gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
-         srm.RegisterAddress = src.reg + 4;
+         srm.RegisterAddress = src.reg + (src.cs ? 0x2000 : 0) + 4;
          srm.MemoryAddress = __gen_address_offset(dst.addr, 4);
          srm.PredicateEnable = true;
       }
    } else {
       gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
-         srm.RegisterAddress = src.reg;
+         srm.RegisterAddress = src.reg + (src.cs ? 0x2000 : 0);
          srm.MemoryAddress = dst.addr;
          srm.PredicateEnable = true;
       }

@@ -882,6 +882,8 @@ intel_miptree_create_for_dri_image(struct brw_context *brw,
          intel_miptree_release(&mt);
          return NULL;
       }
+
+      map_miptree_aux_addresses(brw, mt);
    }
 
    /* Don't assume coherency for imported EGLimages.  We don't know what

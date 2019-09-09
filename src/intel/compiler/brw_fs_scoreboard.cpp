@@ -69,8 +69,65 @@ namespace {
     * counter calculated for any ordered dependency that crosses this
     * instruction.
     */
+   tgl_pipe
+   inferred_sync_pipe(const struct gen_device_info *devinfo, const fs_inst *inst)
+   {
+      if (devinfo->is_arctic_sound) {
+         bool has_int_src = false, has_long_src = false;
+
+         if (is_send(inst))
+            return TGL_PIPE_NONE;
+
+         for (unsigned i = 0; i < inst->sources; i++) {
+            if (inst->src[i].file != BAD_FILE &&
+                !inst->is_control_source(i)) {
+               const brw_reg_type t = inst->src[i].type;
+               has_int_src |= !brw_reg_type_is_floating_point(t);
+               has_long_src |= type_sz(t) >= 8;
+            }
+         }
+
+         return has_long_src ? ATS_PIPE_LONG :
+                has_int_src ? ATS_PIPE_INT :
+                TGL_PIPE_FLOAT;
+
+      } else {
+         return TGL_PIPE_FLOAT;
+      }
+   }
+
+   tgl_pipe
+   inferred_exec_pipe(const struct gen_device_info *devinfo, const fs_inst *inst)
+   {
+      const brw_reg_type t = get_exec_type(inst);
+      const bool is_dword_multiply = !brw_reg_type_is_floating_point(t) &&
+         ((inst->opcode == BRW_OPCODE_MUL &&
+           MIN2(type_sz(inst->src[0].type), type_sz(inst->src[1].type)) >= 4) ||
+          (inst->opcode == BRW_OPCODE_MAD &&
+           MIN2(type_sz(inst->src[1].type), type_sz(inst->src[2].type)) >= 4));
+
+      if (is_unordered(inst))
+         return TGL_PIPE_NONE;
+      else if (!devinfo->is_arctic_sound)
+         return TGL_PIPE_FLOAT;
+      else if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT &&
+               type_sz(t) >= 8)
+         return ATS_PIPE_INT;
+      else if (type_sz(inst->dst.type) >= 8 || type_sz(t) >= 8 ||
+               is_dword_multiply)
+         return ATS_PIPE_LONG;
+      else if (brw_reg_type_is_floating_point(inst->dst.type))
+         return TGL_PIPE_FLOAT;
+      else
+         return ATS_PIPE_INT;
+   }
+
+#define IDX(p) (p >= TGL_PIPE_FLOAT ? unsigned(p - TGL_PIPE_FLOAT) :    \
+                (abort(), ~0u))
+
    unsigned
-   ordered_unit(const fs_inst *inst)
+   ordered_unit(const struct gen_device_info *devinfo, const fs_inst *inst,
+                unsigned p)
    {
       switch (inst->opcode) {
       case BRW_OPCODE_SYNC:
@@ -89,7 +146,11 @@ namespace {
           * (again) don't use virtual instructions if you want optimal
           * scheduling.
           */
-         return is_unordered(inst) ? 0 : 1;
+         if (!is_unordered(inst) && (p == IDX(inferred_exec_pipe(devinfo, inst)) ||
+                                     p == IDX(TGL_PIPE_ALL)))
+            return 1;
+         else
+            return 0;
       }
    }
 
@@ -98,7 +159,32 @@ namespace {
     * instructions only, arbitrarily denoted 'jp' throughout this lowering
     * pass in order to distinguish it from the regular instruction counter.
     */
-   typedef int ordered_address;
+   struct ordered_address {
+      ordered_address(tgl_pipe p = TGL_PIPE_NONE, int jp0 = INT_MIN) {
+         for (unsigned q = 0; q < IDX(TGL_PIPE_ALL); q++)
+            jp[q] = (p == TGL_PIPE_NONE || (IDX(p) != q && p != TGL_PIPE_ALL) ?
+                     INT_MIN : jp0);
+      }
+
+      int jp[IDX(TGL_PIPE_ALL)];
+
+      friend bool
+      operator==(const ordered_address &jp0, const ordered_address &jp1)
+      {
+         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++) {
+            if (jp0.jp[p] != jp1.jp[p])
+               return false;
+         }
+
+         return true;
+      }
+
+      friend bool
+      operator!=(const ordered_address &jp0, const ordered_address &jp1)
+      {
+         return !(jp0 == jp1);
+      }
+   };
 
    /**
     * Return the number of instructions in the program.
@@ -117,12 +203,13 @@ namespace {
    ordered_inst_addresses(const fs_visitor *shader)
    {
       ordered_address *jps = new ordered_address[num_instructions(shader)];
-      ordered_address jp = 0;
+      ordered_address jp(TGL_PIPE_ALL, 0);
       unsigned ip = 0;
 
       foreach_block_and_inst_safe(block, fs_inst, inst, shader->cfg) {
          jps[ip] = jp;
-         jp += ordered_unit(inst);
+         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+            jp.jp[p] += ordered_unit(shader->devinfo, inst, p);
          ip++;
       }
 
@@ -238,21 +325,21 @@ namespace {
       /**
        * No dependency information.
        */
-      dependency() : ordered(false), jp(INT_MIN),
+      dependency() : ordered(false), jp(),
                      unordered(TGL_SBID_NULL), id(0) {}
 
       /**
        * Construct a dependency on the in-order instruction with the provided
        * ordered_address instruction counter.
        */
-      dependency(ordered_address jp) : ordered(true), jp(jp),
-                                       unordered(TGL_SBID_NULL), id(0) {}
+      dependency(const ordered_address &jp) : ordered(true), jp(jp),
+                                              unordered(TGL_SBID_NULL), id(0) {}
 
       /**
        * Construct a dependency on the out-of-order instruction with the
        * specified synchronization token.
        */
-      dependency(tgl_sbid_mode mode, unsigned id) : ordered(false), jp(INT_MIN),
+      dependency(tgl_sbid_mode mode, unsigned id) : ordered(false), jp(),
                                                     unordered(mode), id(id) {}
 
       /** Whether there is an in-order dependency present. */
@@ -308,7 +395,7 @@ namespace {
       }
    };
 
-   const dependency dependency::done = dependency(INT_MIN);
+   const dependency dependency::done = dependency(ordered_address());
 
    /**
     * Return whether \p dep contains any dependency information.
@@ -334,7 +421,8 @@ namespace {
 
       if (dep0.ordered || dep1.ordered) {
          dep.ordered = true;
-         dep.jp = MAX2(dep0.jp, dep1.jp);
+         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+            dep.jp.jp[p] = MAX2(dep0.jp.jp[p], dep1.jp.jp[p]);
       }
 
       if (dep0.unordered || dep1.unordered) {
@@ -366,10 +454,14 @@ namespace {
     * the end of the origin block.
     */
    dependency
-   transport(dependency dep, int delta)
+   transport(dependency dep, int delta[IDX(TGL_PIPE_ALL)])
    {
-      if (dep.ordered && dep.jp > INT_MIN)
-         dep.jp += delta;
+      if (dep.ordered) {
+         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++) {
+            if (dep.jp.jp[p] > INT_MIN)
+               dep.jp.jp[p] += delta[p];
+         }
+      }
 
       return dep;
    }
@@ -450,7 +542,7 @@ namespace {
        * object.  \sa transport().
        */
       friend scoreboard
-      transport(const scoreboard &sb0, int delta)
+      transport(const scoreboard &sb0, int delta[IDX(TGL_PIPE_ALL)])
       {
          scoreboard sb;
 
@@ -577,7 +669,8 @@ namespace {
          /* Try to combine the specified dependency with any existing ones. */
          for (unsigned i = 0; i < deps.size(); i++) {
             if (dep.ordered && deps[i].ordered) {
-               deps[i].jp = MAX2(deps[i].jp, dep.jp);
+               for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+                  deps[i].jp.jp[p] = MAX2(deps[i].jp.jp[p], dep.jp.jp[p]);
                dep.ordered = false;
             }
 
@@ -602,19 +695,25 @@ namespace {
    ordered_dependency_swsb(const dependency_list &deps,
                            const ordered_address &jp)
    {
+      tgl_pipe p = TGL_PIPE_NONE;
       unsigned min_dist = ~0u;
 
       for (unsigned i = 0; i < deps.size(); i++) {
          if (deps[i].ordered) {
-            const unsigned dist = jp - deps[i].jp;
-            const unsigned max_dist = 10;
-            assert(jp > deps[i].jp);
-            if (dist <= max_dist)
-               min_dist = MIN3(min_dist, dist, 7);
+            for (unsigned q = 0; q < IDX(TGL_PIPE_ALL); q++) {
+               const unsigned dist = jp.jp[q] - deps[i].jp.jp[q];
+               const unsigned max_dist = (q == IDX(ATS_PIPE_LONG) ? 14 : 10);
+               assert(jp.jp[q] > deps[i].jp.jp[q]);
+               if (dist <= max_dist) {
+                  p = (p && IDX(p) != q ? TGL_PIPE_ALL :
+                       tgl_pipe(TGL_PIPE_FLOAT + q));
+                  min_dist = MIN3(min_dist, dist, 7);
+               }
+            }
          }
       }
 
-      return { min_dist == ~0u ? 0 : min_dist };
+      return { p ? min_dist : 0, p };
    }
 
    /**
@@ -654,18 +753,20 @@ namespace {
     * dependency is present.
     */
    tgl_sbid_mode
-   baked_unordered_dependency_mode(const fs_inst *inst,
+   baked_unordered_dependency_mode(const struct gen_device_info *devinfo,
+                                   const fs_inst *inst,
                                    const dependency_list &deps,
                                    const ordered_address &jp)
    {
       const bool has_ordered = find_ordered_dependency(deps, jp);
+      const tgl_pipe ordered_pipe = ordered_dependency_swsb(deps, jp).pipe;
 
       if (find_unordered_dependency(deps, TGL_SBID_SET))
          return find_unordered_dependency(deps, TGL_SBID_SET);
       else if (has_ordered && is_unordered(inst))
          return TGL_SBID_NULL;
       else if (find_unordered_dependency(deps, TGL_SBID_DST) &&
-               (!has_ordered || !is_unordered(inst)))
+               (!has_ordered || ordered_pipe == inferred_sync_pipe(devinfo, inst)))
          return find_unordered_dependency(deps, TGL_SBID_DST);
       else if (!has_ordered)
          return find_unordered_dependency(deps, TGL_SBID_SRC);
@@ -674,6 +775,27 @@ namespace {
    }
 
    /** @} */
+
+   bool
+   baked_ordered_dependency_mode(const struct gen_device_info *devinfo,
+                                 const fs_inst *inst,
+                                 const dependency_list &deps,
+                                 const ordered_address &jp)
+   {
+      const bool has_ordered = find_ordered_dependency(deps, jp);
+      const tgl_pipe ordered_pipe = ordered_dependency_swsb(deps, jp).pipe;
+      const tgl_sbid_mode unordered_mode =
+         baked_unordered_dependency_mode(devinfo, inst, deps, jp);
+
+      if (!has_ordered)
+         return false;
+      else if (!unordered_mode)
+         return true;
+      else
+         return ordered_pipe == inferred_sync_pipe(devinfo, inst) &&
+                unordered_mode == (is_unordered(inst) ? TGL_SBID_SET :
+                                   TGL_SBID_DST);
+   }
 
    /**
     * Shader instruction dependency calculation.
@@ -728,9 +850,11 @@ namespace {
       }
 
       /* Track any destination registers of this instruction. */
+      const tgl_pipe p = inferred_exec_pipe(shader->devinfo, inst);
       const dependency wr_dep =
          is_unordered(inst) ? dependency(TGL_SBID_DST, ip) :
-         ordered_unit(inst) ? dependency(jps[ip]) :
+         ordered_unit(shader->devinfo, inst, IDX(TGL_PIPE_ALL)) ?
+            dependency(ordered_address(p, jps[ip].jp[IDX(p)])) :
          dependency();
 
       if (is_valid(wr_dep)) {
@@ -793,9 +917,13 @@ namespace {
                foreach_list_typed(bblock_link, child_link, link,
                                   &block->children) {
                   scoreboard &in_sb = in_sbs[child_link->block->num];
-                  const int delta =
-                     jps[child_link->block->start_ip] - jps[block->end_ip]
-                     - ordered_unit(static_cast<const fs_inst *>(block->end()));
+                  int delta[IDX(TGL_PIPE_ALL)];
+
+                  for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+                     delta[p] = jps[child_link->block->start_ip].jp[p]
+                        - jps[block->end_ip].jp[p]
+                        - ordered_unit(shader->devinfo,
+                                       static_cast<const fs_inst *>(block->end()), p);
 
                   in_sb = merge(eq, in_sb, transport(sb, delta));
                }
@@ -930,12 +1058,25 @@ namespace {
                           const ordered_address *jps,
                           const dependency_list *deps)
    {
+      const struct gen_device_info *devinfo = shader->devinfo;
       unsigned ip = 0;
 
       foreach_block_and_inst_safe(block, fs_inst, inst, shader->cfg) {
          tgl_swsb swsb = ordered_dependency_swsb(deps[ip], jps[ip]);
+
+         if (swsb.regdist &&
+             !baked_ordered_dependency_mode(devinfo, inst, deps[ip], jps[ip])) {
+            const fs_builder ibld = fs_builder(shader, block, inst)
+               .exec_all().group(1, 0);
+            fs_inst *sync = ibld.emit(BRW_OPCODE_SYNC, ibld.null_reg_ud(),
+                                      brw_imm_ud(TGL_SYNC_NOP));
+            sync->sched = swsb;
+            swsb.regdist = 0;
+            swsb.pipe = TGL_PIPE_NONE;
+         }
+
          const tgl_sbid_mode unordered_mode =
-            baked_unordered_dependency_mode(inst, deps[ip], jps[ip]);
+            baked_unordered_dependency_mode(devinfo, inst, deps[ip], jps[ip]);
 
          for (unsigned i = 0; i < deps[ip].size(); i++) {
             const dependency &dep = deps[ip][i];

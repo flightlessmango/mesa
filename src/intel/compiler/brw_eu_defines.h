@@ -33,6 +33,7 @@
 #define BRW_EU_DEFINES_H
 
 #include <stdint.h>
+#include "dev/gen_device_info.h"
 #include "util/macros.h"
 
 /* The following hunk, up-to "Execution Unit" is used by both the
@@ -1045,12 +1046,21 @@ operator|=(tgl_sbid_mode &x, tgl_sbid_mode y)
 
 #endif
 
+enum tgl_pipe {
+   TGL_PIPE_NONE = 0,
+   TGL_PIPE_FLOAT,
+   ATS_PIPE_INT,
+   ATS_PIPE_LONG,
+   TGL_PIPE_ALL
+};
+
 /**
  * Logical representation of the SWSB scheduling information of a hardware
  * instruction.  The binary representation is slightly more compact.
  */
 struct tgl_swsb {
    unsigned regdist : 3;
+   enum tgl_pipe pipe : 3;
    unsigned sbid : 4;
    enum tgl_sbid_mode mode : 3;
 };
@@ -1063,7 +1073,7 @@ struct tgl_swsb {
 static inline struct tgl_swsb
 tgl_swsb_regdist(unsigned d)
 {
-   const struct tgl_swsb swsb = { d };
+   const struct tgl_swsb swsb = { d, d ? TGL_PIPE_ALL : TGL_PIPE_NONE };
    assert(swsb.regdist == d);
    return swsb;
 }
@@ -1087,6 +1097,7 @@ tgl_swsb_dst_dep(struct tgl_swsb swsb, unsigned regdist)
 {
    swsb.regdist = regdist;
    swsb.mode = swsb.mode & TGL_SBID_SET;
+   swsb.pipe = (regdist ? TGL_PIPE_ALL : TGL_PIPE_NONE);
    return swsb;
 }
 
@@ -1106,10 +1117,15 @@ tgl_swsb_src_dep(struct tgl_swsb swsb)
  * SWSB annotation.
  */
 static inline uint8_t
-tgl_swsb_encode(struct tgl_swsb swsb)
+tgl_swsb_encode(const struct gen_device_info *devinfo, struct tgl_swsb swsb)
 {
    if (!swsb.mode) {
-      return swsb.regdist;
+      const unsigned pipe = !devinfo->is_arctic_sound ? 0 :
+         swsb.pipe == TGL_PIPE_FLOAT ? 0x10 :
+         swsb.pipe == ATS_PIPE_INT ? 0x18 :
+         swsb.pipe == ATS_PIPE_LONG ? 0x50 :
+         swsb.pipe == TGL_PIPE_ALL ? 0x8 : 0;
+      return pipe | swsb.regdist;
    } else if (swsb.regdist) {
       return 0x80 | swsb.regdist << 4 | swsb.sbid;
    } else {
@@ -1123,20 +1139,25 @@ tgl_swsb_encode(struct tgl_swsb swsb)
  * tgl_swsb.
  */
 static inline struct tgl_swsb
-tgl_swsb_decode(uint8_t x)
+tgl_swsb_decode(const struct gen_device_info *devinfo, uint8_t x)
 {
    if (x & 0x80) {
-      const struct tgl_swsb swsb = { (x & 0x70u) >> 4, x & 0xfu,
-                                     TGL_SBID_DST | TGL_SBID_SET };
+      const struct tgl_swsb swsb = { (x & 0x70u) >> 4, TGL_PIPE_NONE,
+                                     x & 0xfu, TGL_SBID_DST | TGL_SBID_SET };
       return swsb;
    } else if ((x & 0x70) == 0x20 || (x & 0x70) == 0x30 || (x & 0x70) == 0x40) {
-      const struct tgl_swsb swsb = { 0, x & 0xfu,
+      const struct tgl_swsb swsb = { 0, TGL_PIPE_NONE, x & 0xfu,
                                      (x & 0x70) == 0x20 ? TGL_SBID_DST :
                                      (x & 0x70) == 0x30 ? TGL_SBID_SRC :
                                      TGL_SBID_SET };
       return swsb;
    } else {
-      const struct tgl_swsb swsb = { x & 0x7u };
+      const struct tgl_swsb swsb = { x & 0x7u,
+                                     ((x & 0x78) == 0x10 ? TGL_PIPE_FLOAT :
+                                      (x & 0x78) == 0x18 ? ATS_PIPE_INT :
+                                      (x & 0x78) == 0x50 ? ATS_PIPE_LONG :
+                                      (x & 0x78) == 0x8 ? TGL_PIPE_ALL :
+                                      TGL_PIPE_NONE) };
       return swsb;
    }
 }

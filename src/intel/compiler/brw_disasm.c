@@ -1616,9 +1616,14 @@ qtr_ctrl(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst
 static int
 swsb(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
-   const struct tgl_swsb swsb = tgl_swsb_decode(brw_inst_swsb(devinfo, inst));
+   const struct tgl_swsb swsb = tgl_swsb_decode(devinfo, brw_inst_swsb(devinfo, inst));
    if (swsb.regdist)
-      format(file, " @%d", swsb.regdist);
+      format(file, " %s@%d",
+             (swsb.pipe == TGL_PIPE_FLOAT ? "F" :
+              swsb.pipe == ATS_PIPE_INT ? "I" :
+              swsb.pipe == ATS_PIPE_LONG ? "L" :
+              swsb.pipe == TGL_PIPE_ALL ? "A"  : "" ),
+             swsb.regdist);
    if (swsb.mode)
       format(file, " $%d%s", swsb.sbid,
              (swsb.mode & TGL_SBID_SET ? "" :

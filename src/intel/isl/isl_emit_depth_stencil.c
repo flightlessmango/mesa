@@ -135,7 +135,7 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
 #endif
 #if GEN_GEN >= 12
       sb.StencilWriteEnable = true;
-      sb.SurfaceType = SURFTYPE_2D;
+      sb.SurfaceType = SURFTYPE_2D; // TODO: SURFTYPE_CUBE
       sb.Width = info->stencil_surf->logical_level0_px.width - 1;
       sb.Height = info->stencil_surf->logical_level0_px.height - 1;
       sb.Depth = sb.RenderTargetViewExtent = info->view->array_len - 1;

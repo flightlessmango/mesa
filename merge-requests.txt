@@ -1,3 +1,3 @@
 Summary: https://gitlab.freedesktop.org/jljusten/mesa/issues/1
 compiler: https://gitlab.freedesktop.org/mesa/mesa/merge_requests/1884
-aux-map start: https://gitlab.freedesktop.org/mesa/mesa/merge_requests/1862
+aux-map: https://gitlab.freedesktop.org/mesa/mesa/merge_requests/1862

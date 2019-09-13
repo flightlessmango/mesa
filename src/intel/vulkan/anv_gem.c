@@ -404,14 +404,14 @@ create_context_ext(struct anv_device *device)
       int pos = -1;
       while (engine_num[family] < info->num_engines) {
          int engine = engine_num[family]++;
-         if (info->engines[engine].engine_class == engine_class) {
+         if (info->engines[engine].engine.engine_class == engine_class) {
             pos = engine;
             break;
          }
       }
       assert(pos >= 0 && pos < info->num_engines);
       *class_inst_ptr++ = engine_class;
-      *class_inst_ptr++ = info->engines[pos].engine_instance;
+      *class_inst_ptr++ = info->engines[pos].engine.engine_instance;
 
       /* Instead of I915_EXEC_RENDER, we use the engine slot. */
       device->queue[i].exec_flags = i;

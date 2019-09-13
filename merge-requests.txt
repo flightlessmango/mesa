@@ -3,3 +3,4 @@ compiler: https://gitlab.freedesktop.org/mesa/mesa/merge_requests/1884
 aux-map: https://gitlab.freedesktop.org/mesa/mesa/merge_requests/1862
 isl-1: https://gitlab.freedesktop.org/mesa/mesa/merge_requests/2048
 compaction: ?
+device-info start: ?

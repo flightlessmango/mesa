@@ -127,8 +127,19 @@ enum drm_i915_gem_engine_class {
 	I915_ENGINE_CLASS_INVALID	= -1
 };
 
+/*
+ * There may be more than one engine fulfilling any role within the system.
+ * Each engine of a class is given a unique instance number and therefore
+ * any engine can be specified by its class:instance tuplet. APIs that allow
+ * access to any engine in the system will use struct i915_engine_class_instance
+ * for this identification.
+ */
+struct i915_engine_class_instance {
+	__u16 engine_class; /* see enum drm_i915_gem_engine_class */
+	__u16 engine_instance;
 #define I915_ENGINE_CLASS_INVALID_NONE -1
-#define I915_ENGINE_CLASS_INVALID_VIRTUAL 0
+#define I915_ENGINE_CLASS_INVALID_VIRTUAL -2
+};
 
 /**
  * DOC: perf_events exposed by i915 through /sys/bus/event_sources/drivers/i915
@@ -350,7 +361,8 @@ typedef struct _drm_i915_sarea {
 #define DRM_I915_GEM_VM_CREATE		0x3a
 #define DRM_I915_GEM_VM_DESTROY		0x3b
 #define DRM_I915_GEM_MMAP_OFFSET   	DRM_I915_GEM_MMAP_GTT
-#define DRM_I915_GEM_OBJECT_SETPARAM	0x3c
+#define DRM_I915_GEM_OBJECT_SETPARAM	DRM_I915_GEM_CONTEXT_SETPARAM
+#define DRM_I915_GEM_FD_SETPARAM	0x3c
 /* Must be kept compact -- no holes */
 
 #define DRM_IOCTL_I915_INIT		DRM_IOW( DRM_COMMAND_BASE + DRM_I915_INIT, drm_i915_init_t)
@@ -415,6 +427,7 @@ typedef struct _drm_i915_sarea {
 #define DRM_IOCTL_I915_GEM_VM_DESTROY	DRM_IOW (DRM_COMMAND_BASE + DRM_I915_GEM_VM_DESTROY, struct drm_i915_gem_vm_control)
 #define DRM_IOCTL_I915_GEM_MMAP_OFFSET		DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_MMAP_OFFSET, struct drm_i915_gem_mmap_offset)
 #define DRM_IOCTL_I915_GEM_OBJECT_SETPARAM	DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_OBJECT_SETPARAM, struct drm_i915_gem_object_param)
+#define DRM_IOCTL_I915_GEM_FD_SETPARAM		DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_FD_SETPARAM, struct drm_i915_fd_setparam_info)
 
 /* Allow drivers to submit batchbuffers directly to hardware, relying
  * on the security mechanisms provided by hardware.
@@ -515,6 +528,7 @@ typedef struct drm_i915_irq_wait {
 #define   I915_SCHEDULER_CAP_PRIORITY	(1ul << 1)
 #define   I915_SCHEDULER_CAP_PREEMPTION	(1ul << 2)
 #define   I915_SCHEDULER_CAP_SEMAPHORES	(1ul << 3)
+#define   I915_SCHEDULER_CAP_ENGINE_BUSY_STATS	(1ul << 4)
 
 #define I915_PARAM_HUC_STATUS		 42
 
@@ -605,17 +619,14 @@ typedef struct drm_i915_irq_wait {
  */
 #define I915_PARAM_HAS_EXEC_SUBMIT_FENCE 53
 
-/* Dual Context / Compute-only Engine */
-#define I915_PARAM_HAS_CCS		54
-
 /* Mmap offset ioctl */
-#define I915_PARAM_MMAP_OFFSET_VERSION	55
+#define I915_PARAM_MMAP_OFFSET_VERSION	54
 
 /* Total local memory in bytes */
-#define I915_PARAM_LMEM_TOTAL_BYTES 56
+#define I915_PARAM_LMEM_TOTAL_BYTES 55
 
 /* Available local memory in bytes */
-#define I915_PARAM_LMEM_AVAIL_BYTES 57
+#define I915_PARAM_LMEM_AVAIL_BYTES 56
 
 /* Must be kept compact -- no holes and well documented */
 
@@ -718,28 +729,6 @@ struct drm_i915_gem_create {
 	 */
 	__u32 handle;
 	__u32 pad;
-};
-
-struct drm_i915_gem_object_param {
-	/** Handle for the object */
-	__u32 handle;
-
-	/** Set the memory region for the object listed in preference order
-	 *  as an array of region ids within data. To force an object
-	 *  to a particular memory region, set the region as the sole entry.
-	 *
-	 *  Valid region ids are derived from the id field of
-	 *  struct drm_i915_memory_region_info.
-	 *  See struct drm_i915_query_memory_region_info.
-	 */
-#define I915_PARAM_MEMORY_REGION 0x1
-	__u32 param;
-
-	__u32 size;
-	/* Unused at the moment */
-	__u32 flags;
-
-	__u64 data;
 };
 
 struct drm_i915_gem_pread {
@@ -1086,7 +1075,6 @@ struct drm_i915_gem_execbuffer2 {
 #define I915_EXEC_BSD                    (2<<0)
 #define I915_EXEC_BLT                    (3<<0)
 #define I915_EXEC_VEBOX                  (4<<0)
-#define I915_EXEC_COMPUTE                (5<<0)
 
 /* Used for switching the constants addressing mode on gen4+ RENDER ring.
  * Gen6+ only supports relative addressing to dynamic state (default) and
@@ -1624,6 +1612,27 @@ struct drm_i915_gem_context_param {
 	__u64 value;
 };
 
+struct drm_i915_gem_object_param {
+	/** Handle for the object */
+	__u32 handle;
+
+	__u32 size;
+
+	/** Set the memory region for the object listed in preference order
+	 *  as an array of region ids within data. To force an object
+	 *  to a particular memory region, set the region as the sole entry.
+	 *
+	 *  Valid region ids are derived from the id field of
+	 *  struct drm_i915_memory_region_info.
+	 *  See struct drm_i915_query_memory_region_info.
+	 */
+#define I915_OBJECT_PARAM  (1ull<<32)
+#define I915_PARAM_MEMORY_REGION 0x1
+	__u64 param;
+
+	__u64 data;
+};
+
 /**
  * Context SSEU programming
  *
@@ -1649,8 +1658,7 @@ struct drm_i915_gem_context_param_sseu {
 	/*
 	 * Engine class & instance to be configured or queried.
 	 */
-	__u16 engine_class;
-	__u16 engine_instance;
+	struct i915_engine_class_instance engine;
 
 	/*
 	 * Unknown flags must be cleared to zero.
@@ -1704,48 +1712,72 @@ struct i915_context_engines_load_balance {
 	struct i915_user_extension base;
 
 	__u16 engine_index;
-	__u16 mbz16; /* reserved for future use; must be zero */
+	__u16 num_siblings;
 	__u32 flags; /* all undefined flags must be zero */
 
-	__u64 engines_mask; /* selection mask of engines[] */
+	__u64 mbz64; /* reserved for future use; must be zero */
 
-	__u64 mbz64[4]; /* reserved for future use; must be zero */
-};
+	struct i915_engine_class_instance engines[0];
+} __attribute__((packed));
+
+#define I915_DEFINE_CONTEXT_ENGINES_LOAD_BALANCE(name__, N__) struct { \
+	struct i915_user_extension base; \
+	__u16 engine_index; \
+	__u16 num_siblings; \
+	__u32 flags; \
+	__u64 mbz64; \
+	struct i915_engine_class_instance engines[N__]; \
+} __attribute__((packed)) name__
 
 /*
  * i915_context_engines_bond:
  *
+ * Constructed bonded pairs for execution within a virtual engine.
+ *
+ * All engines are equal, but some are more equal than others. Given
+ * the distribution of resources in the HW, it may be preferable to run
+ * a request on a given subset of engines in parallel to a request on a
+ * specific engine. We enable this selection of engines within a virtual
+ * engine by specifying bonding pairs, for any given master engine we will
+ * only execute on one of the corresponding siblings within the virtual engine.
+ *
+ * To execute a request in parallel on the master engine and a sibling requires
+ * coordination with a I915_EXEC_FENCE_SUBMIT.
  */
 struct i915_context_engines_bond {
 	struct i915_user_extension base;
 
-	__u16 engine_index;
-	__u16 mbz;
+	struct i915_engine_class_instance master;
 
-	__u16 master_class;
-	__u16 master_instance;
+	__u16 virtual_index; /* index of virtual engine in ctx->engines[] */
+	__u16 num_bonds;
 
-	__u64 sibling_mask;
 	__u64 flags; /* all undefined flags must be zero */
-};
+	__u64 mbz64[4]; /* reserved for future use; must be zero */
+
+	struct i915_engine_class_instance engines[0];
+} __attribute__((packed));
+
+#define I915_DEFINE_CONTEXT_ENGINES_BOND(name__, N__) struct { \
+	struct i915_user_extension base; \
+	struct i915_engine_class_instance master; \
+	__u16 virtual_index; \
+	__u16 num_bonds; \
+	__u64 flags; \
+	__u64 mbz64[4]; \
+	struct i915_engine_class_instance engines[N__]; \
+} __attribute__((packed)) name__
 
 struct i915_context_param_engines {
 	__u64 extensions; /* linked chain of extension blocks, 0 terminates */
-#define I915_CONTEXT_ENGINES_EXT_LOAD_BALANCE 0
-#define I915_CONTEXT_ENGINES_EXT_BOND 1
-
-	struct {
-		__u16 engine_class; /* see enum drm_i915_gem_engine_class */
-		__u16 engine_instance;
-	} class_instance[0];
+#define I915_CONTEXT_ENGINES_EXT_LOAD_BALANCE 0 /* see i915_context_engines_load_balance */
+#define I915_CONTEXT_ENGINES_EXT_BOND 1 /* see i915_context_engines_bond */
+	struct i915_engine_class_instance engines[0];
 } __attribute__((packed));
 
 #define I915_DEFINE_CONTEXT_PARAM_ENGINES(name__, N__) struct { \
 	__u64 extensions; \
-	struct { \
-		__u16 engine_class; \
-		__u16 engine_instance; \
-	} class_instance[N__]; \
+	struct i915_engine_class_instance engines[N__]; \
 } __attribute__((packed)) name__
 
 struct drm_i915_gem_context_create_ext_setparam {
@@ -1759,13 +1791,13 @@ struct drm_i915_gem_context_create_ext_clone {
 	struct i915_user_extension base;
 	__u32 clone_id;
 	__u32 flags;
-#define I915_CONTEXT_CLONE_FLAGS	(1u << 0)
-#define I915_CONTEXT_CLONE_SCHED	(1u << 1)
-#define I915_CONTEXT_CLONE_SSEU		(1u << 2)
-#define I915_CONTEXT_CLONE_TIMELINE	(1u << 3)
-#define I915_CONTEXT_CLONE_VM		(1u << 4)
-#define I915_CONTEXT_CLONE_ENGINES	(1u << 5)
-#define I915_CONTEXT_CLONE_UNKNOWN -(I915_CONTEXT_CLONE_ENGINES << 1)
+#define I915_CONTEXT_CLONE_ENGINES	(1u << 0)
+#define I915_CONTEXT_CLONE_FLAGS	(1u << 1)
+#define I915_CONTEXT_CLONE_SCHEDATTR	(1u << 2)
+#define I915_CONTEXT_CLONE_SSEU		(1u << 3)
+#define I915_CONTEXT_CLONE_TIMELINE	(1u << 4)
+#define I915_CONTEXT_CLONE_VM		(1u << 5)
+#define I915_CONTEXT_CLONE_UNKNOWN -(I915_CONTEXT_CLONE_VM << 1)
 	__u64 rsvd;
 };
 
@@ -2023,6 +2055,7 @@ struct drm_i915_query_item {
 #define DRM_I915_QUERY_TOPOLOGY_INFO    1
 #define DRM_I915_QUERY_ENGINE_INFO	2
 #define DRM_I915_QUERY_MEMREGION_INFO   3
+#define DRM_I915_QUERY_DISTANCE_INFO	4
 /* Must be kept compact -- no holes and well documented */
 
 	/*
@@ -2072,8 +2105,10 @@ struct drm_i915_query {
  *           (data[X / 8] >> (X % 8)) & 1
  *
  * - the subslice mask for each slice with one bit per subslice telling
- *   whether a subslice is available. The availability of subslice Y in slice
- *   X can be queried with the following formula :
+ *   whether a subslice is available. Gen12 has dual-subslices, which are
+ *   similar to two gen11 subslices. For gen12, this array represents dual-
+ *   subslices. The availability of subslice Y in slice X can be queried
+ *   with the following formula :
  *
  *           (data[subslice_offset +
  *                 X * subslice_stride +
@@ -2127,11 +2162,8 @@ struct drm_i915_query_topology_info {
  * Describes one engine and it's capabilities as known to the driver.
  */
 struct drm_i915_engine_info {
-	/** Engine class as in enum drm_i915_gem_engine_class. */
-	__u16 engine_class;
-
-	/** Engine instance number. */
-	__u16 engine_instance;
+	/** Engine class and instance. */
+	struct i915_engine_class_instance engine;
 
 	/** Reserved field. */
 	__u32 rsvd0;
@@ -2141,11 +2173,45 @@ struct drm_i915_engine_info {
 
 	/** Capabilities of this engine. */
 	__u64 capabilities;
+#define I915_RENDER_CLASS_CAPABILITY_3D			(1 << 0)
 #define I915_VIDEO_CLASS_CAPABILITY_HEVC		(1 << 0)
 #define I915_VIDEO_AND_ENHANCE_CLASS_CAPABILITY_SFC	(1 << 1)
+#define I915_VIDEO_CLASS_CAPABILITY_VDENC		(1 << 2)
 
 	/** Reserved fields. */
 	__u64 rsvd1[4];
+};
+
+/**
+ * struct i915_memory_type_instance
+ * It is possible to have more than one instance of a memory type
+ * to identify a memory region uniquely across system we need
+ * type:instance tuple.
+ */
+struct i915_memory_type_instance {
+	__u16 memory_type;
+	__u16 memory_instance;
+};
+
+/**
+ * struct drm_i915_query_distance_info
+ *
+ * Distance info query returns the distance of given (class, instance)
+ * engine to the memory region id passed by the user. If the distance
+ * is -1 it means region is unreachable.
+ */
+struct drm_i915_query_distance_info {
+	/** Engine for which distance is queried */
+	struct i915_engine_class_instance engine;
+
+	/** Memory region to be used */
+	struct i915_memory_type_instance region;
+
+	/** Distance to region from engine */
+	__s32 distance;
+
+	/** Must be zero */
+	__u32 rsvd[3];
 };
 
 /**
@@ -2201,6 +2267,53 @@ struct drm_i915_query_memory_region_info {
 	__u32 rsvd[3];
 
 	struct drm_i915_memory_region_info regions[];
+};
+
+/**
+ * struct drm_i915_fd_region_map
+ *
+ * List of memory regions passed in fd_set_param ioctl that user
+ * wishes to use, in param_ptr.If num_regions is 0xffffffff assigns
+ * all the available regions to this user fd.
+ */
+struct drm_i915_fd_region_map {
+	__u32 num_regions;
+
+	/** List of (type, instance) memory user want to use */
+	struct i915_memory_type_instance regions[0];
+}__attribute__((packed));
+
+/**
+ * struct drm_i915_fd_engine_map
+ *
+ * List of engines passed to fd_set_param ioctl that user wishes to use
+ * in param_ptr. If num_engines is 0xffffffff assigns all the engines
+ * available in the system to this fd.
+ */
+struct drm_i915_fd_engine_map {
+	__u32 num_engines;
+
+	/** List of (class, instance) user want to use */
+	struct i915_engine_class_instance engines[0];
+}__attribute__((packed));
+
+/**
+ * struct drm_i915_fd_setparam_info
+ *
+ * fd_setparam info is used to pass information about the HW resources
+ * to be set for current fd.
+ */
+struct drm_i915_fd_setparam_info {
+	/** id that user is requesting to set */
+	__u32 id;
+#define DRM_I915_FD_SETPARAM_ENGINE_MAP 0
+#define DRM_I915_FD_SETPARAM_MEMREGION_MAP 1
+
+	/** Must be zero */
+	__u32 rsvd;
+
+	/** Points to the data user wishes to set */
+	__u64 param_ptr;
 };
 
 #if defined(__cplusplus)

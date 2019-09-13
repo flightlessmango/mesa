@@ -811,7 +811,7 @@ anv_gem_count_engines(struct anv_physical_device *device, uint16_t engine_class)
    struct drm_i915_query_engine_info *info = device->engine_info;
    int count = 0;
    for (int i = 0; i < info->num_engines; i++) {
-      if (info->engines[i].engine_class == engine_class)
+      if (info->engines[i].engine.engine_class == engine_class)
          count++;
    }
    return count;

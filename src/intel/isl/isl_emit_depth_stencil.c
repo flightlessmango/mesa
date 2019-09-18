@@ -126,7 +126,13 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
          (info->hiz_usage == ISL_AUX_USAGE_CCS_E ||
           info->hiz_usage == ISL_AUX_USAGE_HIZ_CCS);
 
-      db.ClearValueAddress = info->depth_clear_address;
+      if (GEN_GEN > 12 || dev->info->is_arctic_sound) {
+         db.ClearValueAddress = info->depth_clear_address;
+      } else {
+         /* Turn 2 extra address dwords into no-op commands */
+         db.ClearValueAddress = 0;
+         db.DWordLength -= 2;
+      }
 #endif
    }
 

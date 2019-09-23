@@ -1,1 +1,0 @@
-gen12 i965 support is deprecated and will not be upstreamed.

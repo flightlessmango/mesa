@@ -943,7 +943,11 @@ struct iris_genx_state {
 
    struct iris_depth_buffer_state depth_buffer;
 
+#if GEN_GEN < 12
    uint32_t so_buffers[4 * GENX(3DSTATE_SO_BUFFER_length)];
+#else
+   uint32_t so_buffers[4 * GENX(3DSTATE_SO_BUFFER_INDEX_0_length)];
+#endif
 
 #if GEN_GEN == 9
    /* Is object level preemption enabled? */
@@ -3203,15 +3207,25 @@ iris_set_stream_output_targets(struct pipe_context *ctx,
    if (!active)
       return;
 
+#if GEN_GEN < 12
    for (unsigned i = 0; i < 4; i++,
         so_buffers += GENX(3DSTATE_SO_BUFFER_length)) {
+#else
+   for (unsigned i = 0; i < 4; i++,
+      so_buffers += GENX(3DSTATE_SO_BUFFER_INDEX_0_length)) {
+#endif
 
       struct iris_stream_output_target *tgt = (void *) ice->state.so_target[i];
       unsigned offset = offsets[i];
 
       if (!tgt) {
+#if GEN_GEN < 12
          iris_pack_command(GENX(3DSTATE_SO_BUFFER), so_buffers, sob)
             sob.SOBufferIndex = i;
+#else
+         iris_pack_command(GENX(3DSTATE_SO_BUFFER_INDEX_0), so_buffers, sobi)
+            sobi._3DCommandSubOpcode = 96 + i;
+#endif
          continue;
       }
 
@@ -3230,8 +3244,14 @@ iris_set_stream_output_targets(struct pipe_context *ctx,
        */
       if (!tgt->zeroed)
          offset = 0;
-
+#if GEN_GEN < 12
       iris_pack_command(GENX(3DSTATE_SO_BUFFER), so_buffers, sob) {
+         sob.SOBufferIndex = i;
+#else
+      iris_pack_command(GENX(3DSTATE_SO_BUFFER_INDEX_0), so_buffers, sobi) {
+         sobi._3DCommandSubOpcode = 96 + i;
+#define sob sobi.SOBufferIndexStateBody
+#endif
          sob.SurfaceBaseAddress =
             rw_bo(NULL, res->bo->gtt_offset + tgt->base.buffer_offset);
          sob.SOBufferEnable = true;
@@ -3241,11 +3261,11 @@ iris_set_stream_output_targets(struct pipe_context *ctx,
 
          sob.SurfaceSize = MAX2(tgt->base.buffer_size / 4, 1) - 1;
 
-         sob.SOBufferIndex = i;
          sob.StreamOffset = offset;
          sob.StreamOutputBufferOffsetAddress =
             rw_bo(NULL, iris_resource_bo(tgt->offset.res)->gtt_offset +
                         tgt->offset.offset);
+#undef sob
       }
    }
 
@@ -5125,8 +5145,13 @@ iris_upload_dirty_render_state(struct iris_context *ice,
 
    if (ice->state.streamout_active) {
       if (dirty & IRIS_DIRTY_SO_BUFFERS) {
+#if GEN_GEN < 12
          iris_batch_emit(batch, genx->so_buffers,
                          4 * 4 * GENX(3DSTATE_SO_BUFFER_length));
+#else
+         iris_batch_emit(batch, genx->so_buffers,
+                         4 * 4 * GENX(3DSTATE_SO_BUFFER_INDEX_0_length));
+#endif
          for (int i = 0; i < 4; i++) {
             struct iris_stream_output_target *tgt =
                (void *) ice->state.so_target[i];

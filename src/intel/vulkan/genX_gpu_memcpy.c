@@ -148,8 +148,13 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
                         cmd_buffer->state.current_l3_config,
                         VK_SHADER_STAGE_VERTEX_BIT, entry_size);
 
+#if GEN_GEN < 12
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER), sob) {
       sob.SOBufferIndex = 0;
+#else
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER_INDEX_0), sobi) {
+#define sob sobi.SOBufferIndexStateBody
+#endif
       sob.MOCS = anv_mocs_for_bo(cmd_buffer->device, dst.bo),
       sob.SurfaceBaseAddress = dst;
 
@@ -170,6 +175,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       sob.StreamOffsetWriteEnable = true;
       sob.StreamOffset = 0;
 #endif
+#undef sob
    }
 
 #if GEN_GEN <= 7

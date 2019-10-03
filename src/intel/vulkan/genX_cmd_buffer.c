@@ -2805,8 +2805,14 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
        */
       for (unsigned idx = 0; idx < MAX_XFB_BUFFERS; idx++) {
          struct anv_xfb_binding *xfb = &cmd_buffer->state.xfb_bindings[idx];
+#if GEN_GEN < 12
          anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER), sob) {
             sob.SOBufferIndex = idx;
+#else
+         anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER_INDEX_0), sobi) {
+            sobi._3DCommandSubOpcode = 96 + idx;
+#define sob sobi.SOBufferIndexStateBody
+#endif
 
             if (cmd_buffer->state.xfb_enabled && xfb->buffer && xfb->size != 0) {
                sob.SOBufferEnable = true;
@@ -2817,6 +2823,7 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
                /* Size is in DWords - 1 */
                sob.SurfaceSize = xfb->size / 4 - 1;
             }
+#undef sob
          }
       }
 

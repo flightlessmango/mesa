@@ -733,8 +733,10 @@ static void compute_swapchain_display(struct swapchain_data *data)
           s == OVERLAY_PARAM_ENABLED_acquire_timing ||
           s == OVERLAY_PARAM_ENABLED_present_timing ||
           s == OVERLAY_PARAM_ENABLED_gpu_timing) {
-         double min_time = data->stats_min.stats[s] / data->time_dividor;
-         double max_time = data->stats_max.stats[s] / data->time_dividor;
+         // double min_time = data->stats_min.stats[s] / data->time_dividor;
+         // double max_time = data->stats_max.stats[s] / data->time_dividor;
+         double min_time = 0.0f;
+         double max_time = 50.0f;
          ImGui::PlotLines(hash, get_time_stat, data,
                               ARRAY_SIZE(data->frames_stats), 0,
                               NULL, min_time, max_time,

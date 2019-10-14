@@ -690,12 +690,12 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::NewFrame();
    position_layer(data);
    ImGui::Begin("", &open, ImGuiWindowFlags_NoDecoration);
-   ImGui::Text("Device: %s", device_data->properties.deviceName);
-
-   const char *format_name = vk_Format_to_str(data->format);
-   format_name = format_name ? (format_name + strlen("VK_FORMAT_")) : "unknown";
-   ImGui::Text("Swapchain format: %s", format_name);
-   ImGui::Text("Frames: %" PRIu64, data->n_frames);
+   // ImGui::Text("Device: %s", device_data->properties.deviceName);
+   // 
+   // const char *format_name = vk_Format_to_str(data->format);
+   // format_name = format_name ? (format_name + strlen("VK_FORMAT_")) : "unknown";
+   // ImGui::Text("Swapchain format: %s", format_name);
+   // ImGui::Text("Frames: %" PRIu64, data->n_frames);
    if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps])
       ImGui::Text("FPS: %.2f" , data->fps);
 

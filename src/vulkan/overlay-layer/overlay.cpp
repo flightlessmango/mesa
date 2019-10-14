@@ -179,6 +179,8 @@ struct swapchain_data {
    unsigned n_frames_since_update;
    uint64_t last_fps_update;
    double fps;
+   double frametime;
+   double frametimeDisplay;
    const char* cpuString;
    const char* gpuString;
 
@@ -590,7 +592,7 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          pthread_create(&gpu, NULL, &getNvidiaGpuUsage, NULL);
          ifstream myfile ("/tmp/nvidia-smi");
          getline (myfile,gpuString);
-         
+         data->frametimeDisplay = data->frametime;
          data->fps = 1000000.0f * data->n_frames_since_update / elapsed;
          if (instance_data->params.output_file) {
             if (!instance_data->first_line_printed) {
@@ -717,9 +719,10 @@ static void compute_swapchain_display(struct swapchain_data *data)
    // ImGui::Text("Frames: %" PRIu64, data->n_frames);
    ImGui::Text("GPU: %s" , gpuString.c_str());
    ImGui::Text("%s", data->cpuString );
+   data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
    if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps])
-      ImGui::Text("FPS: %.2f" , data->fps);
-
+      ImGui::Text("FPS: %.1f" "%s" "%.1fms" , data->fps, "  ", data->frametimeDisplay);
+   
    /* Recompute min/max */
    for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {
       data->stats_min.stats[s] = UINT64_MAX;
@@ -762,9 +765,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
                               ARRAY_SIZE(data->frames_stats), 0,
                               NULL, min_time, max_time,
                               ImVec2(ImGui::GetContentRegionAvailWidth(), 30));
-         ImGui::Text("%s: %.3fms [%.3f, %.3f]", overlay_param_names[s],
-                     get_time_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
-                     min_time, max_time);
+         // ImGui::Text("%s: %.3fms [%.3f, %.3f]", overlay_param_names[s],
+         //             get_time_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
+         //             min_time, max_time);
       } else {
          ImGui::PlotHistogram(hash, get_stat, data,
                               ARRAY_SIZE(data->frames_stats), 0,

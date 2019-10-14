@@ -46,6 +46,8 @@
 
 bool open = false;
 pthread_t cpu;
+pthread_t gpu;
+string gpuString;
 
 /* Mapped from VkInstace/VkPhysicalDevice */
 struct instance_data {
@@ -178,6 +180,7 @@ struct swapchain_data {
    uint64_t last_fps_update;
    double fps;
    const char* cpuString;
+   const char* gpuString;
 
    enum overlay_param_enabled stat_selector;
    double time_dividor;
@@ -583,6 +586,11 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          pthread_create(&cpu, NULL, &getCpuUsage, NULL);
          data->cpuString = cpuArray[0].output.c_str();
         
+         // get gpu usage
+         pthread_create(&gpu, NULL, &getNvidiaGpuUsage, NULL);
+         ifstream myfile ("/tmp/nvidia-smi");
+         getline (myfile,gpuString);
+         
          data->fps = 1000000.0f * data->n_frames_since_update / elapsed;
          if (instance_data->params.output_file) {
             if (!instance_data->first_line_printed) {
@@ -707,6 +715,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
    // format_name = format_name ? (format_name + strlen("VK_FORMAT_")) : "unknown";
    // ImGui::Text("Swapchain format: %s", format_name);
    // ImGui::Text("Frames: %" PRIu64, data->n_frames);
+   ImGui::Text("GPU: %s" , gpuString.c_str());
    ImGui::Text("%s", data->cpuString );
    if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps])
       ImGui::Text("FPS: %.2f" , data->fps);

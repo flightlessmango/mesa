@@ -42,7 +42,11 @@
 #include "vk_enum_to_str.h"
 #include "vk_util.h"
 
+#include "cpu_gpu.h"
+
 bool open = false;
+pthread_t cpu;
+
 /* Mapped from VkInstace/VkPhysicalDevice */
 struct instance_data {
    struct vk_instance_dispatch_table vtable;
@@ -173,6 +177,7 @@ struct swapchain_data {
    unsigned n_frames_since_update;
    uint64_t last_fps_update;
    double fps;
+   const char* cpuString;
 
    enum overlay_param_enabled stat_selector;
    double time_dividor;
@@ -572,6 +577,12 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
    if (data->last_fps_update) {
       double elapsed = (double)(now - data->last_fps_update); /* us */
       if (elapsed >= instance_data->params.fps_sampling_period) {
+         // get cpu usage
+         coreCounting();
+         updateCpuStrings();
+         pthread_create(&cpu, NULL, &getCpuUsage, NULL);
+         data->cpuString = cpuArray[0].output.c_str();
+        
          data->fps = 1000000.0f * data->n_frames_since_update / elapsed;
          if (instance_data->params.output_file) {
             if (!instance_data->first_line_printed) {
@@ -696,6 +707,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
    // format_name = format_name ? (format_name + strlen("VK_FORMAT_")) : "unknown";
    // ImGui::Text("Swapchain format: %s", format_name);
    // ImGui::Text("Frames: %" PRIu64, data->n_frames);
+   ImGui::Text("%s", data->cpuString );
    if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps])
       ImGui::Text("FPS: %.2f" , data->fps);
 

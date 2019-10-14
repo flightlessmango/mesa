@@ -735,7 +735,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
           s == OVERLAY_PARAM_ENABLED_gpu_timing) {
          double min_time = data->stats_min.stats[s] / data->time_dividor;
          double max_time = data->stats_max.stats[s] / data->time_dividor;
-         ImGui::PlotHistogram(hash, get_time_stat, data,
+         ImGui::PlotLines(hash, get_time_stat, data,
                               ARRAY_SIZE(data->frames_stats), 0,
                               NULL, min_time, max_time,
                               ImVec2(ImGui::GetContentRegionAvailWidth(), 30));

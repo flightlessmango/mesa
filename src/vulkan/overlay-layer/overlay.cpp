@@ -589,9 +589,14 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          data->cpuString = cpuArray[0].output.c_str();
         
          // get gpu usage
-         pthread_create(&gpu, NULL, &getNvidiaGpuUsage, NULL);
-         ifstream myfile ("/tmp/nvidia-smi");
-         getline (myfile,gpuString);
+         std::string deviceName = device_data->properties.deviceName;
+         if (deviceName.find("GeForce") != std::string::npos) {
+           pthread_create(&gpu, NULL, &getNvidiaGpuUsage, NULL);
+           ifstream myfile ("/tmp/nvidia-smi");
+           getline (myfile,gpuString);
+         } else {
+           // Insert gpu load method for AMD/Intel
+         }
          data->frametimeDisplay = data->frametime;
          data->fps = 1000000.0f * data->n_frames_since_update / elapsed;
          if (instance_data->params.output_file) {
@@ -717,7 +722,10 @@ static void compute_swapchain_display(struct swapchain_data *data)
    // format_name = format_name ? (format_name + strlen("VK_FORMAT_")) : "unknown";
    // ImGui::Text("Swapchain format: %s", format_name);
    // ImGui::Text("Frames: %" PRIu64, data->n_frames);
-   ImGui::Text("GPU: %s" , gpuString.c_str());
+   std::string deviceName = device_data->properties.deviceName;
+   if (deviceName.find("GeForce") != std::string::npos) {
+     ImGui::Text("GPU: %s" , gpuString.c_str());
+   }  
    ImGui::Text("%s", data->cpuString );
    data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
    if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps])

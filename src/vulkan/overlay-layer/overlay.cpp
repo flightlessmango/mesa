@@ -42,6 +42,7 @@
 #include "vk_enum_to_str.h"
 #include "vk_util.h"
 
+bool open = false;
 /* Mapped from VkInstace/VkPhysicalDevice */
 struct instance_data {
    struct vk_instance_dispatch_table vtable;
@@ -688,7 +689,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::SetCurrentContext(data->imgui_context);
    ImGui::NewFrame();
    position_layer(data);
-   ImGui::Begin("Mesa overlay");
+   ImGui::Begin("", &open, ImGuiWindowFlags_NoDecoration);
    ImGui::Text("Device: %s", device_data->properties.deviceName);
 
    const char *format_name = vk_Format_to_str(data->format);

@@ -584,7 +584,7 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
       data->accumulated_stats.stats[s] += device_data->frame_stats.stats[s] + data->frame_stats.stats[s];
    }
    
-   if (elapsedF2 >= 500000){
+   if (elapsedF2 >= 500000 && !mango_output == NULL){
      if (key_is_pressed(XK_F2)){
        loggingOn = !loggingOn;
        last_f2_press = now;

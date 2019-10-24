@@ -17,7 +17,7 @@ double fps;
 std::vector<logData> logArray;
 
 ofstream out;
-string mango_output = std::getenv("MANGO_OUTPUT");
+const char* mango_output = std::getenv("MANGO_OUTPUT");
 int duration, num, prevTick, currentTick;
 time_t now_log = time(0);
 tm *log_time = localtime(&now_log);

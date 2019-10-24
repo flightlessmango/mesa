@@ -11,8 +11,7 @@ A modification of the Mesa vulkan overlay. mostly just stuff to make my life eas
 - Increased hud font size [b7d238b](https://github.com/flightlessmango/mesa/commit/b7d238b07eb82153f272d34bf7d1353b701f32e0)
 
 ## Environment Variables
-- `MANGO_OUTPUT`: Define name and location of the output file (Required for logging)
-
+`MANGO_OUTPUT`: Define name and location of the output file (Required for logging)
 
 ## Keybindings
 - `F2` : Toggle Logging
@@ -27,23 +26,3 @@ you can share the created page with others, just link it.
 
 It's possible to upload multiple files. You can rename them to your preferred names and upload them in a batch.
 These names will be used in the graphs.
-
-# Normal usage
-A Vulkan layer to display information about the running application
-using an overlay.
-
-To turn on the layer run :
-
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay /path/to/my_vulkan_app
-
-List the available statistics :
-
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay VK_LAYER_MESA_OVERLAY_CONFIG=help /path/to/my_vulkan_app
-
-Turn on some statistics :
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay VK_LAYER_MESA_OVERLAY_CONFIG=submit,draw,pipeline_graphics /path/to/my_vulkan_app
-
-Position the layer :
-
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay VK_LAYER_MESA_OVERLAY_CONFIG=submit,draw,pipeline_graphics,position=top-right /path/to/my_vulkan_app
-l

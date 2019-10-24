@@ -20,15 +20,15 @@ A modification of the Mesa vulkan overlay. mostly just stuff to make my life eas
 
 ## MangoLog file
 
- When you toggle logging on (using the keybind `F2`), a file is created with your chosen name + date/time stamp (`MANGO_OUTPUT`). this file can be uploaded to [Flightlessmango.com](htps://flightlessmango.com/logs/new) to create graphs automatically.
- you can share the created page with others, just link it.
- 
- #### Multiple log files
- 
- It's possible to upload multiple files. You can rename them to your preferred names and upload them in a batch.
- These names will be used in the graphs.
- 
-#
+When you toggle logging on (using the keybind `F2`), a file is created with your chosen name + date/time stamp (`MANGO_OUTPUT`). this file can be uploaded to [Flightlessmango.com](htps://flightlessmango.com/logs/new) to create graphs automatically.
+you can share the created page with others, just link it.
+
+#### Multiple log files
+
+It's possible to upload multiple files. You can rename them to your preferred names and upload them in a batch.
+These names will be used in the graphs.
+
+# Normal usage
 A Vulkan layer to display information about the running application
 using an overlay.
 

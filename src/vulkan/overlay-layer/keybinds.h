@@ -3,8 +3,8 @@
 #include "X11/keysym.h"
 #include "util/os_time.h"
 
-double elapsedF2;
-uint64_t last_f2_press;
+double elapsedF2, elapsedF12;
+uint64_t last_f2_press, last_f12_press;
 pthread_t f2;
 Display *dpy = XOpenDisplay(":0");
 

@@ -46,7 +46,7 @@
 #include "logging.h"
 #include "keybinds.h"
 
-bool open = false;
+bool open = false, displayHud = true;
 pthread_t cpu, gpu;
 string gpuString;
 
@@ -570,6 +570,7 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
    uint64_t now = os_time_get(); /* us */
    double elapsed = (double)(now - data->last_fps_update); /* us */
    elapsedF2 = (double)(now - last_f2_press);
+   elapsedF12 = (double)(now - last_f12_press);
    fps = 1000000.0f * data->n_frames_since_update / elapsed;
    
    if (data->last_present_time) {
@@ -591,6 +592,13 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
        if (loggingOn)
          pthread_create(&f2, NULL, &logging, NULL);
 
+     }
+   }
+   
+   if (elapsedF12 >= 500000){
+     if (key_is_pressed(XK_F12)){
+       displayHud = !displayHud;		
+       last_f12_press = now;
      }
    }
 
@@ -729,7 +737,13 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::SetCurrentContext(data->imgui_context);
    ImGui::NewFrame();
    position_layer(data);
-   ImGui::Begin("", &open, ImGuiWindowFlags_NoDecoration);
+   if(displayHud)
+	   ImGui::Begin("Main", &open, ImVec2(280, 160), 0.5f, ImGuiWindowFlags_NoDecoration);
+
+	 if(!displayHud)
+	   ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);
+
+	 if (displayHud){ 
    // ImGui::Text("Device: %s", device_data->properties.deviceName);
    // 
    // const char *format_name = vk_Format_to_str(data->format);
@@ -803,6 +817,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
       }
    }
    data->window_size = ImVec2(data->window_size.x, ImGui::GetCursorPosY() + 10.0f);
+   }
    ImGui::End();
    ImGui::EndFrame();
    ImGui::Render();

@@ -43,10 +43,11 @@
 #include "vk_util.h"
 
 #include "cpu_gpu.h"
+#include "logging.h"
+#include "keybinds.h"
 
 bool open = false;
-pthread_t cpu;
-pthread_t gpu;
+pthread_t cpu, gpu;
 string gpuString;
 
 /* Mapped from VkInstace/VkPhysicalDevice */
@@ -567,7 +568,10 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
    struct instance_data *instance_data = device_data->instance;
    uint32_t f_idx = data->n_frames % ARRAY_SIZE(data->frames_stats);
    uint64_t now = os_time_get(); /* us */
-
+   double elapsed = (double)(now - data->last_fps_update); /* us */
+   elapsedF2 = (double)(now - last_f2_press);
+   fps = 1000000.0f * data->n_frames_since_update / elapsed;
+   
    if (data->last_present_time) {
       data->frame_stats.stats[OVERLAY_PARAM_ENABLED_frame_timing] =
          now - data->last_present_time;
@@ -578,9 +582,19 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
       data->frames_stats[f_idx].stats[s] += device_data->frame_stats.stats[s] + data->frame_stats.stats[s];
       data->accumulated_stats.stats[s] += device_data->frame_stats.stats[s] + data->frame_stats.stats[s];
    }
+   
+   if (elapsedF2 >= 500000){
+     if (key_is_pressed(XK_F2)){
+       loggingOn = !loggingOn;
+       last_f2_press = now;
+       
+       if (loggingOn)
+         pthread_create(&f2, NULL, &logging, NULL);
+
+     }
+   }
 
    if (data->last_fps_update) {
-      double elapsed = (double)(now - data->last_fps_update); /* us */
       if (elapsed >= instance_data->params.fps_sampling_period) {
          // get cpu usage
          coreCounting();
@@ -598,7 +612,7 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
            // Insert gpu load method for AMD/Intel
          }
          data->frametimeDisplay = data->frametime;
-         data->fps = 1000000.0f * data->n_frames_since_update / elapsed;
+         data->fps = fps;
          if (instance_data->params.output_file) {
             if (!instance_data->first_line_printed) {
                bool first_column = true;

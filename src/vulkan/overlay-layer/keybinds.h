@@ -3,6 +3,9 @@
 #include "X11/keysym.h"
 #include "util/os_time.h"
 
+double elapsedF2;
+uint64_t last_f2_press;
+pthread_t f2;
 Display *dpy = XOpenDisplay(":0");
 
 bool key_is_pressed(KeySym ks) {

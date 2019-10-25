@@ -3,6 +3,9 @@
 A modification of the Mesa vulkan overlay. mostly just stuff to make my life easier.
 
 ## Differences
+<p align="left">
+    <img height="160" src="gifs/overlay_example.gif">
+</p>
 - Removed hud decoration [90a2212](https://github.com/flightlessmango/mesa/commit/90a2212055a8047d46d0220d5fdc30a76900aaed)
 - Changed frametime graph to Lines instead of Histogram [e40533b](https://github.com/flightlessmango/mesa/commit/e40533b7f46858e5b9f08829e789277b2364d5d1)
 - Set static min/max ms on frametime graph to act like Afterburners graph [df5238f](https://github.com/flightlessmango/mesa/commit/df5238f990218f5d6e698d572b05ddd19e52b108)

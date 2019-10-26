@@ -36,16 +36,8 @@ using an overlay.
 
 To turn on the layer run :
 
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay /path/to/my_vulkan_app
-
-List the available statistics :
-
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay VK_LAYER_MESA_OVERLAY_CONFIG=help /path/to/my_vulkan_app
-
-Turn on some statistics :
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay VK_LAYER_MESA_OVERLAY_CONFIG=submit,draw,pipeline_graphics /path/to/my_vulkan_app
+VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay_mango /path/to/my_vulkan_app
 
 Position the layer :
 
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay VK_LAYER_MESA_OVERLAY_CONFIG=submit,draw,pipeline_graphics,position=top-right /path/to/my_vulkan_app
-l
+VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay_mango VK_LAYER_MESA_OVERLAY_CONFIG=lposition=top-right /path/to/my_vulkan_app

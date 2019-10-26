@@ -37,7 +37,7 @@ vklayer_files = files(
 )
 
 vklayer_mesa_overlay = shared_library(
-  'VkLayer_MESA_overlay',
+  'VkLayer_MESA_overlay_mango',
   vklayer_files, overlay_spv,
   c_args : [c_vis_args, no_override_init_args, vulkan_wsi_args],
   cpp_args : [cpp_vis_args, vulkan_wsi_args],
@@ -48,6 +48,6 @@ vklayer_mesa_overlay = shared_library(
 )
 
 install_data(
-  files('VkLayer_MESA_overlay.json'),
+  files('VkLayer_MESA_overlay_mango.json'),
   install_dir : join_paths(get_option('datadir'), 'vulkan', 'explicit_layer.d'),
 )

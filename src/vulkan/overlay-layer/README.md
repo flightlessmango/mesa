@@ -22,7 +22,7 @@ A modification of the Mesa vulkan overlay. mostly just stuff to make my life eas
 
 ## MangoLog file
 
-When you toggle logging on (using the keybind `F2`), a file is created with your chosen name + date/time stamp (`MANGO_OUTPUT`). this file can be uploaded to [Flightlessmango.com](htps://flightlessmango.com/logs/new) to create graphs automatically.
+When you toggle logging on (using the keybind `F2`), a file is created with your chosen name + date/time stamp (`MANGO_OUTPUT`). this file can be uploaded to [Flightlessmango.com](https://flightlessmango.com/logs/new) to create graphs automatically.
 you can share the created page with others, just link it.
 
 #### Multiple log files

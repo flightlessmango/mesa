@@ -9,7 +9,12 @@
 #include <fstream>
 #include <stdlib.h>
 #include <stdio.h>
+#include <iostream>
+#include <string>
 using namespace std;
+
+int gpuLoad;
+string gpuLoadDisplay;
 
 const int NUM_CPU_STATES = 10;
 
@@ -23,6 +28,28 @@ struct Cpus{
 size_t numCpuCores = 12;
 size_t arraySize = numCpuCores + 1;
 std::vector<Cpus> cpuArray;
+
+string exec(string command) {
+   char buffer[128];
+   string result = "";
+
+   // Open pipe to file
+   FILE* pipe = popen(command.c_str(), "r");
+   if (!pipe) {
+      return "popen failed!";
+   }
+
+   // read till end of process:
+   while (!feof(pipe)) {
+
+      // use buffer to read and add to result
+      if (fgets(buffer, 128, pipe) != NULL)
+         result += buffer;
+   }
+
+   pclose(pipe);
+   return result;
+}
 
 void coreCounting(){
   cpuArray.push_back({0, "CPU:"});
@@ -128,13 +155,19 @@ void PrintStats(const std::vector<CPUData> & entries1, const std::vector<CPUData
 	}
 }
 
-void *getGpuUsage(void *){
-  system("/home/crz/script/radeontop");
+void *getAmdGpuUsage(void *){
+  string gpu = exec("sudo cat /sys/kernel/debug/dri/0/amdgpu_pm_info | grep 'GPU Load' | awk '{print $3}'");
+  gpu.pop_back();
+  gpuLoadDisplay = gpu + "%";
+  gpuLoad = stoi(gpu);
   return NULL;
 }
 
 void *getNvidiaGpuUsage(void *){
-  system("nvidia-smi | grep GPU-Util -A 3 | tail -n1 | awk '{ print $13 }' > /tmp/nvidia-smi");
+  string gpu = exec("nvidia-smi --query-gpu=utilization.gpu,temperature.gpu --format=csv,noheader | tr -d ' ' | head -n1 | cut -d',' -f1 | tr -d '%'");
+  gpu.pop_back();
+  gpuLoadDisplay = gpu + "%";
+  gpuLoad = stoi(gpu);
   return NULL;
 }
 

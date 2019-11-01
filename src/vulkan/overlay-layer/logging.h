@@ -6,6 +6,9 @@
 
 using namespace std;
 
+int gpuLoadLog;
+int cpuLoadLog;
+
 struct logData{
   double fps;
   double cpu;
@@ -30,7 +33,7 @@ void writeFile(){
 
 	out.open(mango_output + date, ios::out | ios::app);
 	for (size_t i = 0; i < logArray.size(); i++) {
-     out << logArray[i].fps << endl;
+     out << logArray[i].fps << "," << logArray[i].cpu  << "," << logArray[i].gpu << endl;
   }
 	out.close();
 	logArray.clear();
@@ -39,7 +42,7 @@ void writeFile(){
 void *logging(void *){
   num = 0;
 	while (loggingOn){
-		logArray.push_back({fps, 0.0f, 0.0f, 0.0f});
+		logArray.push_back({fps, cpuLoadLog, gpuLoadLog, 0.0f});
     num++;
     this_thread::sleep_for(chrono::milliseconds(100));
   }

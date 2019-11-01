@@ -617,6 +617,10 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          } else {
            // Insert gpu load method for AMD/Intel
          }
+         // update variables for logging
+         cpuLoadLog = cpuArray[0].value;
+         gpuLoadLog = gpuLoad; 
+         
          data->frametimeDisplay = data->frametime;
          data->fps = fps;
          if (instance_data->params.output_file) {

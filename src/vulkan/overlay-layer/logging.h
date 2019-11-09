@@ -6,8 +6,9 @@
 
 using namespace std;
 
-int gpuLoadLog;
-int cpuLoadLog;
+string os, cpu, gpu, ram, kernel, driver, deviceName;
+bool sysInfoFetched; 
+int gpuLoadLog,cpuLoadLog;
 
 struct logData{
   double fps;

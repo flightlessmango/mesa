@@ -47,7 +47,7 @@
 #include "keybinds.h"
 
 bool open = false, displayHud = true;
-pthread_t cpu, gpu;
+pthread_t cpuThread, gpuThread;
 string gpuString;
 
 /* Mapped from VkInstace/VkPhysicalDevice */
@@ -601,19 +601,36 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
        last_f12_press = now;
      }
    }
+   
+   if (!sysInfoFetched) {
+     deviceName = device_data->properties.deviceName;
+     ram =  exec("cat /proc/meminfo | grep 'MemTotal' | awk '{print $2}'");
+     cpu =  exec("cat /proc/cpuinfo | grep 'model name' | tail -n1 | sed 's/^.*: //' | sed 's/([^)]*)/()/g' | tr -d '(/)'");
+     kernel = exec("uname -r");
+     os = exec("cat /etc/*-release | grep 'PRETTY_NAME' | cut -d '=' -f 2-");
+     os.erase(remove( os.begin(), os.end(), '\"' ),os.end());
+     gpu = exec("lspci | grep VGA | head -n1 | awk -vRS=']' -vFS='[' '{print $2}' | sed '/^$/d' | tail -n1");
+     driver = exec("glxinfo | grep 'OpenGL version' | sed 's/^.*: //' | cut -d' ' --output-delimiter=$'\n' -f1- | grep -v '(' | grep -v ')' | tr '\n' ' ' | cut -c 1-");
+     ram.pop_back();
+     cpu.pop_back();
+     kernel.pop_back();
+     os.pop_back();
+     gpu.pop_back();
+     driver.pop_back();
+     sysInfoFetched = true;
+   }
 
    if (data->last_fps_update) {
       if (elapsed >= instance_data->params.fps_sampling_period) {
          // get cpu usage
          coreCounting();
          updateCpuStrings();
-         pthread_create(&cpu, NULL, &getCpuUsage, NULL);
+         pthread_create(&cpuThread, NULL, &getCpuUsage, NULL);
          data->cpuString = cpuArray[0].output.c_str();
         
          // get gpu usage
-         std::string deviceName = device_data->properties.deviceName;
          if (deviceName.find("GeForce") != std::string::npos) {
-           pthread_create(&gpu, NULL, &getNvidiaGpuUsage, NULL);
+           pthread_create(&gpuThread, NULL, &getNvidiaGpuUsage, NULL);
          } else {
            // Insert gpu load method for AMD/Intel
          }

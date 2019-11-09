@@ -40,4 +40,4 @@ VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay_mango /path/to/my_vulkan_app
 
 Position the layer :
 
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay_mango VK_LAYER_MESA_OVERLAY_CONFIG=lposition=top-right /path/to/my_vulkan_app
+VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay_mango VK_LAYER_MESA_OVERLAY_CONFIG=position=top-right /path/to/my_vulkan_app

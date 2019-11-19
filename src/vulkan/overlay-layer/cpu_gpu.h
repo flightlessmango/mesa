@@ -25,7 +25,7 @@ struct Cpus{
   string output;
 };
 
-size_t numCpuCores = 12;
+size_t numCpuCores = std::thread::hardware_concurrency();
 size_t arraySize = numCpuCores + 1;
 std::vector<Cpus> cpuArray;
 

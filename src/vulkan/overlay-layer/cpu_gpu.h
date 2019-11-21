@@ -156,7 +156,7 @@ void PrintStats(const std::vector<CPUData> & entries1, const std::vector<CPUData
 }
 
 void *getAmdGpuUsage(void *){
-  string gpu = exec("sudo cat /sys/kernel/debug/dri/0/amdgpu_pm_info | grep 'GPU Load' | awk '{print $3}'");
+  string gpu = exec("cat /sys/class/drm/card0/device/gpu_busy_percent");
   gpu.pop_back();
   gpuLoadDisplay = gpu + "%";
   gpuLoad = stoi(gpu);

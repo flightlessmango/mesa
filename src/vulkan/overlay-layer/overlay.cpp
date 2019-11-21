@@ -627,13 +627,13 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          updateCpuStrings();
          pthread_create(&cpuThread, NULL, &getCpuUsage, NULL);
          data->cpuString = cpuArray[0].output.c_str();
-        
          // get gpu usage
-         if (deviceName.find("GeForce") != std::string::npos) {
+         if (deviceName.find("GeForce") != std::string::npos)
            pthread_create(&gpuThread, NULL, &getNvidiaGpuUsage, NULL);
-         } else {
-           // Insert gpu load method for AMD/Intel
-         }
+         
+         if (deviceName.find("Radeon") != std::string::npos)
+           pthread_create(&gpuThread, NULL, &getAmdGpuUsage, NULL);
+
          // update variables for logging
          cpuLoadLog = cpuArray[0].value;
          gpuLoadLog = gpuLoad; 
@@ -770,9 +770,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
    // ImGui::Text("Swapchain format: %s", format_name);
    // ImGui::Text("Frames: %" PRIu64, data->n_frames);
    std::string deviceName = device_data->properties.deviceName;
-   if (deviceName.find("GeForce") != std::string::npos) {
+   if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos)
      ImGui::Text("GPU: %s" , gpuLoadDisplay.c_str());
-   }  
+
    ImGui::Text("%s", data->cpuString );
    data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
    if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps])

@@ -9,7 +9,7 @@ A modification of the Mesa vulkan overlay. mostly just stuff to make my life eas
 - Removed hud decoration [90a2212](https://github.com/flightlessmango/mesa/commit/90a2212055a8047d46d0220d5fdc30a76900aaed)
 - Changed frametime graph to Lines instead of Histogram [e40533b](https://github.com/flightlessmango/mesa/commit/e40533b7f46858e5b9f08829e789277b2364d5d1)
 - Set static min/max ms on frametime graph to act like Afterburners graph [df5238f](https://github.com/flightlessmango/mesa/commit/df5238f990218f5d6e698d572b05ddd19e52b108)
-- Added CPU/GPU usage (Only Nvidia for now)
+- Added CPU/GPU usage (Only Nvidia and AMD)
 - Changed font to UbuntuMono-Bold [73f0aa9](https://github.com/flightlessmango/mesa/commit/73f0aa94d382365205a4a4128d82208315b0b190)
 - Increased hud font size [b7d238b](https://github.com/flightlessmango/mesa/commit/b7d238b07eb82153f272d34bf7d1353b701f32e0)
 

@@ -19,19 +19,12 @@ struct logData{
 
 double fps;
 std::vector<logData> logArray;
-
 ofstream out;
 const char* mango_output = std::getenv("MANGO_OUTPUT");
 int duration, num, prevTick, currentTick;
-time_t now_log = time(0);
-tm *log_time = localtime(&now_log);
 bool loggingOn;
 
-void writeFile(){
-	now_log = time(0);
-	log_time = localtime(&now_log);
-	string date = to_string(log_time->tm_year + 1900) + "-" + to_string(1 + log_time->tm_mon) + "-" + to_string(log_time->tm_mday) + "_" + to_string(1 + log_time->tm_hour) + "-" + to_string(1 + log_time->tm_min) + "-" + to_string(1 + log_time->tm_sec);
-
+void writeFile(string date){
 	out.open(mango_output + date, ios::out | ios::app);
   out << "os," << "cpu," << "gpu," << "ram," << "kernel," << "driver" << endl;
   out << os << "," << cpu << "," << gpu << "," << ram << "," << kernel << "," << driver << endl;
@@ -43,12 +36,15 @@ void writeFile(){
 }
 
 void *logging(void *){
+  time_t now_log = time(0);
+  tm *log_time = localtime(&now_log);
+	string date = to_string(log_time->tm_year + 1900) + "-" + to_string(1 + log_time->tm_mon) + "-" + to_string(log_time->tm_mday) + "_" + to_string(1 + log_time->tm_hour) + "-" + to_string(1 + log_time->tm_min) + "-" + to_string(1 + log_time->tm_sec);
   num = 0;
 	while (loggingOn){
 		logArray.push_back({fps, cpuLoadLog, gpuLoadLog, 0.0f});
     num++;
     this_thread::sleep_for(chrono::milliseconds(100));
   }
-  writeFile();
+  writeFile(date);
   return NULL; 
 }

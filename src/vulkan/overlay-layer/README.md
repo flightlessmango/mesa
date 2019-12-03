@@ -30,6 +30,8 @@ you can share the created page with others, just link it.
 It's possible to upload multiple files. You can rename them to your preferred names and upload them in a batch.
 These names will be used in the graphs.
 
+![](gifs/uploading.gif)
+
 # Normal usage
 A Vulkan layer to display information about the running application
 using an overlay.

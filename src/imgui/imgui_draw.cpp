@@ -26,6 +26,7 @@ Index of this file:
 #endif
 
 #include "imgui.h"
+#include "string"
 #ifndef IMGUI_DEFINE_MATH_OPERATORS
 #define IMGUI_DEFINE_MATH_OPERATORS
 #endif
@@ -1594,8 +1595,21 @@ ImFont* ImFontAtlas::AddFontDefault(const ImFontConfig* font_cfg_template)
         font_cfg.OversampleH = font_cfg.OversampleV = 1;
         font_cfg.PixelSnapH = true;
     }
-    if (font_cfg.SizePixels <= 0.0f)
-        font_cfg.SizePixels = 12.0f * 2.0f;
+
+    const char* font_size_env = std::getenv("FONT_SIZE");
+    float font_size;
+
+    if(!font_size_env == NULL)
+		font_size = std::stof(font_size_env);
+
+    if (font_cfg.SizePixels <= 0.0f){
+        if(int(font_size) == 0){
+            font_cfg.SizePixels = 24.0f * 1.0f;
+        } else {
+            font_cfg.SizePixels = font_size * 1.0f;
+        }
+    }
+    
     if (font_cfg.Name[0] == '\0')
         ImFormatString(font_cfg.Name, IM_ARRAYSIZE(font_cfg.Name), "ProggyClean.ttf, %dpx", (int)font_cfg.SizePixels);
 

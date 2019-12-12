@@ -46,9 +46,12 @@
 #include "logging.h"
 #include "keybinds.h"
 
-bool open = false, displayHud = true;
+bool open = false, displayHud = true, checkHudSize = false;
 pthread_t cpuThread, gpuThread;
 string gpuString;
+int hud_width, hud_height;
+const char* hud_width_env = std::getenv("HUD_WIDTH");
+const char* hud_height_env = std::getenv("HUD_HEIGHT");
 
 /* Mapped from VkInstace/VkPhysicalDevice */
 struct instance_data {
@@ -620,6 +623,16 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
      sysInfoFetched = true;
    }
 
+   if (!checkHudSize){
+      if(!hud_width_env == NULL)
+         hud_width = std::stoi(hud_width_env);
+      
+      if(!hud_height_env == NULL)
+         hud_height = std::stoi(hud_height_env);
+
+      checkHudSize = true;
+   }
+
    if (data->last_fps_update) {
       if (elapsed >= instance_data->params.fps_sampling_period) {
          // get cpu usage
@@ -756,8 +769,22 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::SetCurrentContext(data->imgui_context);
    ImGui::NewFrame();
    position_layer(data);
+   int x, y;
+   
+   if (hud_width == 0){
+      x = 280;
+   } else {
+      x = hud_width;
+   }
+   
+   if (hud_height == 0){
+      y = 160;
+   } else {
+      y = hud_height;
+   }
+   
    if(displayHud)
-	   ImGui::Begin("Main", &open, ImVec2(280, 160), 0.5f, ImGuiWindowFlags_NoDecoration);
+	   ImGui::Begin("Main", &open, ImVec2(x, y), 0.5f, ImGuiWindowFlags_NoDecoration);
 
 	 if(!displayHud)
 	   ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);

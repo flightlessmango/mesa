@@ -17,6 +17,9 @@ VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay_mango VK_LAYER_MESA_OVERLAY_CONFIG=posi
 
 ## Environment Variables
 - `MANGO_OUTPUT`: Define name and location of the output file (Required for logging)
+- `FONT_SIZE`   : Set hud font size. Default size is 24
+- `HUD_WIDTH`   : Set hud width. Default width is 280
+- `HUD_HEIGHT`  : Set hud height. Default height is 160
 
 ## Keybindings
 - `F2` : Toggle Logging

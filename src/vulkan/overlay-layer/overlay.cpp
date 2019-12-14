@@ -644,7 +644,7 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          if (deviceName.find("GeForce") != std::string::npos)
            pthread_create(&gpuThread, NULL, &getNvidiaGpuUsage, NULL);
          
-         if (deviceName.find("Radeon") != std::string::npos)
+         if (deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos)
            pthread_create(&gpuThread, NULL, &getAmdGpuUsage, NULL);
 
          // update variables for logging
@@ -796,8 +796,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
    // format_name = format_name ? (format_name + strlen("VK_FORMAT_")) : "unknown";
    // ImGui::Text("Swapchain format: %s", format_name);
    // ImGui::Text("Frames: %" PRIu64, data->n_frames);
-   std::string deviceName = device_data->properties.deviceName;
-   if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos)
+   if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos)
      ImGui::Text("GPU: %s" , gpuLoadDisplay.c_str());
 
    ImGui::Text("%s", data->cpuString );

@@ -45,7 +45,7 @@ class ApiVersion:
         self.version = version
         self.enable = _bool_to_c_expr(enable)
 
-API_PATCH_VERSION = 102
+API_PATCH_VERSION = 129
 
 # Supported API versions.  Each one is the maximum patch version for the given
 # version.  Version come in increasing order and each version is available if
@@ -53,10 +53,7 @@ API_PATCH_VERSION = 102
 # available.
 API_VERSIONS = [
     ApiVersion('1.0',   True),
-
-    # DRM_IOCTL_SYNCOBJ_WAIT is required for VK_KHR_external_fence which is a
-    # required core feature in Vulkan 1.1
-    ApiVersion('1.1',   'device->has_syncobj_wait'),
+    ApiVersion('1.1',   True),
 ]
 
 MAX_API_VERSION = None # Computed later
@@ -70,6 +67,8 @@ EXTENSIONS = [
     Extension('VK_KHR_8bit_storage',                      1, 'device->info.gen >= 8'),
     Extension('VK_KHR_16bit_storage',                     1, 'device->info.gen >= 8'),
     Extension('VK_KHR_bind_memory2',                      1, True),
+    Extension('VK_KHR_buffer_device_address',             1,
+              'device->has_a64_buffer_access && device->info.gen < 12'),
     Extension('VK_KHR_create_renderpass2',                1, True),
     Extension('VK_KHR_dedicated_allocation',              1, True),
     Extension('VK_KHR_depth_stencil_resolve',             1, True),
@@ -127,7 +126,8 @@ EXTENSIONS = [
     Extension('VK_KHR_xcb_surface',                       6, 'VK_USE_PLATFORM_XCB_KHR'),
     Extension('VK_KHR_xlib_surface',                      6, 'VK_USE_PLATFORM_XLIB_KHR'),
     Extension('VK_EXT_acquire_xlib_display',              1, 'VK_USE_PLATFORM_XLIB_XRANDR_EXT'),
-    Extension('VK_EXT_buffer_device_address',             1, 'device->has_a64_buffer_access'),
+    Extension('VK_EXT_buffer_device_address',             1,
+              'device->has_a64_buffer_access && device->info.gen < 12'),
     Extension('VK_EXT_calibrated_timestamps',             1, True),
     Extension('VK_EXT_conditional_rendering',             1, 'device->info.gen >= 8 || device->info.is_haswell'),
     Extension('VK_EXT_debug_report',                      8, True),

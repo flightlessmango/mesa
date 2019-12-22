@@ -91,6 +91,50 @@ struct radv_tessellation_state {
 	uint32_t tf_param;
 };
 
+static const VkPipelineMultisampleStateCreateInfo *
+radv_pipeline_get_multisample_state(const VkGraphicsPipelineCreateInfo *pCreateInfo)
+{
+	if (!pCreateInfo->pRasterizationState->rasterizerDiscardEnable)
+		return pCreateInfo->pMultisampleState;
+	return NULL;
+}
+
+static const VkPipelineTessellationStateCreateInfo *
+radv_pipeline_get_tessellation_state(const VkGraphicsPipelineCreateInfo *pCreateInfo)
+{
+	for (uint32_t i = 0; i < pCreateInfo->stageCount; i++) {
+		if (pCreateInfo->pStages[i].stage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ||
+		    pCreateInfo->pStages[i].stage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
+			return pCreateInfo->pTessellationState;
+		}
+	}
+	return NULL;
+}
+
+static const VkPipelineDepthStencilStateCreateInfo *
+radv_pipeline_get_depth_stencil_state(const VkGraphicsPipelineCreateInfo *pCreateInfo)
+{
+	RADV_FROM_HANDLE(radv_render_pass, pass, pCreateInfo->renderPass);
+	struct radv_subpass *subpass = pass->subpasses + pCreateInfo->subpass;
+
+	if (!pCreateInfo->pRasterizationState->rasterizerDiscardEnable &&
+	    subpass->depth_stencil_attachment)
+		return pCreateInfo->pDepthStencilState;
+	return NULL;
+}
+
+static const VkPipelineColorBlendStateCreateInfo *
+radv_pipeline_get_color_blend_state(const VkGraphicsPipelineCreateInfo *pCreateInfo)
+{
+	RADV_FROM_HANDLE(radv_render_pass, pass, pCreateInfo->renderPass);
+	struct radv_subpass *subpass = pass->subpasses + pCreateInfo->subpass;
+
+	if (!pCreateInfo->pRasterizationState->rasterizerDiscardEnable &&
+	    subpass->has_color_att)
+		return pCreateInfo->pColorBlendState;
+	return NULL;
+}
+
 bool radv_pipeline_has_ngg(const struct radv_pipeline *pipeline)
 {
 	struct radv_shader_variant *variant = NULL;
@@ -180,7 +224,8 @@ radv_pipeline_scratch_init(struct radv_device *device,
 	unsigned min_waves = 1;
 
 	for (int i = 0; i < MESA_SHADER_STAGES; ++i) {
-		if (pipeline->shaders[i]) {
+		if (pipeline->shaders[i] &&
+		    pipeline->shaders[i]->config.scratch_bytes_per_wave) {
 			unsigned max_stage_waves = device->scratch_waves;
 
 			scratch_bytes_per_wave = MAX2(scratch_bytes_per_wave,
@@ -200,14 +245,6 @@ radv_pipeline_scratch_init(struct radv_device *device,
 		min_waves = MAX2(min_waves, round_up_u32(group_size, 64));
 	}
 
-	if (scratch_bytes_per_wave)
-		max_waves = MIN2(max_waves, 0xffffffffu / scratch_bytes_per_wave);
-
-	if (scratch_bytes_per_wave && max_waves < min_waves) {
-		/* Not really true at this moment, but will be true on first
-		 * execution. Avoid having hanging shaders. */
-		return vk_error(device->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
-	}
 	pipeline->scratch_bytes_per_wave = scratch_bytes_per_wave;
 	pipeline->max_waves = max_waves;
 	return VK_SUCCESS;
@@ -705,24 +742,24 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 			       const VkGraphicsPipelineCreateInfo *pCreateInfo,
 			       const struct radv_graphics_pipeline_create_info *extra)
 {
-	const VkPipelineColorBlendStateCreateInfo *vkblend = pCreateInfo->pColorBlendState;
-	const VkPipelineMultisampleStateCreateInfo *vkms = pCreateInfo->pMultisampleState;
+	const VkPipelineColorBlendStateCreateInfo *vkblend = radv_pipeline_get_color_blend_state(pCreateInfo);
+	const VkPipelineMultisampleStateCreateInfo *vkms = radv_pipeline_get_multisample_state(pCreateInfo);
 	struct radv_blend_state blend = {0};
 	unsigned mode = V_028808_CB_NORMAL;
 	int i;
-
-	if (!vkblend)
-		return blend;
 
 	if (extra && extra->custom_blend_mode) {
 		blend.single_cb_enable = true;
 		mode = extra->custom_blend_mode;
 	}
+
 	blend.cb_color_control = 0;
-	if (vkblend->logicOpEnable)
-		blend.cb_color_control |= S_028808_ROP3(si_translate_blend_logic_op(vkblend->logicOp));
-	else
-		blend.cb_color_control |= S_028808_ROP3(V_028808_ROP3_COPY);
+	if (vkblend) {
+		if (vkblend->logicOpEnable)
+			blend.cb_color_control |= S_028808_ROP3(si_translate_blend_logic_op(vkblend->logicOp));
+		else
+			blend.cb_color_control |= S_028808_ROP3(V_028808_ROP3_COPY);
+	}
 
 	blend.db_alpha_to_mask = S_028B70_ALPHA_TO_MASK_OFFSET0(3) |
 		S_028B70_ALPHA_TO_MASK_OFFSET1(1) |
@@ -736,117 +773,119 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 	}
 
 	blend.cb_target_mask = 0;
-	for (i = 0; i < vkblend->attachmentCount; i++) {
-		const VkPipelineColorBlendAttachmentState *att = &vkblend->pAttachments[i];
-		unsigned blend_cntl = 0;
-		unsigned srcRGB_opt, dstRGB_opt, srcA_opt, dstA_opt;
-		VkBlendOp eqRGB = att->colorBlendOp;
-		VkBlendFactor srcRGB = att->srcColorBlendFactor;
-		VkBlendFactor dstRGB = att->dstColorBlendFactor;
-		VkBlendOp eqA = att->alphaBlendOp;
-		VkBlendFactor srcA = att->srcAlphaBlendFactor;
-		VkBlendFactor dstA = att->dstAlphaBlendFactor;
+	if (vkblend) {
+		for (i = 0; i < vkblend->attachmentCount; i++) {
+			const VkPipelineColorBlendAttachmentState *att = &vkblend->pAttachments[i];
+			unsigned blend_cntl = 0;
+			unsigned srcRGB_opt, dstRGB_opt, srcA_opt, dstA_opt;
+			VkBlendOp eqRGB = att->colorBlendOp;
+			VkBlendFactor srcRGB = att->srcColorBlendFactor;
+			VkBlendFactor dstRGB = att->dstColorBlendFactor;
+			VkBlendOp eqA = att->alphaBlendOp;
+			VkBlendFactor srcA = att->srcAlphaBlendFactor;
+			VkBlendFactor dstA = att->dstAlphaBlendFactor;
 
-		blend.sx_mrt_blend_opt[i] = S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) | S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
+			blend.sx_mrt_blend_opt[i] = S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) | S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
 
-		if (!att->colorWriteMask)
-			continue;
+			if (!att->colorWriteMask)
+				continue;
 
-		blend.cb_target_mask |= (unsigned)att->colorWriteMask << (4 * i);
-		blend.cb_target_enabled_4bit |= 0xf << (4 * i);
-		if (!att->blendEnable) {
+			blend.cb_target_mask |= (unsigned)att->colorWriteMask << (4 * i);
+			blend.cb_target_enabled_4bit |= 0xf << (4 * i);
+			if (!att->blendEnable) {
+				blend.cb_blend_control[i] = blend_cntl;
+				continue;
+			}
+
+			if (is_dual_src(srcRGB) || is_dual_src(dstRGB) || is_dual_src(srcA) || is_dual_src(dstA))
+				if (i == 0)
+					blend.mrt0_is_dual_src = true;
+
+			if (eqRGB == VK_BLEND_OP_MIN || eqRGB == VK_BLEND_OP_MAX) {
+				srcRGB = VK_BLEND_FACTOR_ONE;
+				dstRGB = VK_BLEND_FACTOR_ONE;
+			}
+			if (eqA == VK_BLEND_OP_MIN || eqA == VK_BLEND_OP_MAX) {
+				srcA = VK_BLEND_FACTOR_ONE;
+				dstA = VK_BLEND_FACTOR_ONE;
+			}
+
+			radv_blend_check_commutativity(&blend, eqRGB, srcRGB, dstRGB,
+						       0x7 << (4 * i));
+			radv_blend_check_commutativity(&blend, eqA, srcA, dstA,
+						       0x8 << (4 * i));
+
+			/* Blending optimizations for RB+.
+			 * These transformations don't change the behavior.
+			 *
+			 * First, get rid of DST in the blend factors:
+			 *    func(src * DST, dst * 0) ---> func(src * 0, dst * SRC)
+			 */
+			si_blend_remove_dst(&eqRGB, &srcRGB, &dstRGB,
+					    VK_BLEND_FACTOR_DST_COLOR,
+					    VK_BLEND_FACTOR_SRC_COLOR);
+
+			si_blend_remove_dst(&eqA, &srcA, &dstA,
+					    VK_BLEND_FACTOR_DST_COLOR,
+					    VK_BLEND_FACTOR_SRC_COLOR);
+
+			si_blend_remove_dst(&eqA, &srcA, &dstA,
+					    VK_BLEND_FACTOR_DST_ALPHA,
+					    VK_BLEND_FACTOR_SRC_ALPHA);
+
+			/* Look up the ideal settings from tables. */
+			srcRGB_opt = si_translate_blend_opt_factor(srcRGB, false);
+			dstRGB_opt = si_translate_blend_opt_factor(dstRGB, false);
+			srcA_opt = si_translate_blend_opt_factor(srcA, true);
+			dstA_opt = si_translate_blend_opt_factor(dstA, true);
+
+			/* Handle interdependencies. */
+			if (si_blend_factor_uses_dst(srcRGB))
+				dstRGB_opt = V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_NONE;
+			if (si_blend_factor_uses_dst(srcA))
+				dstA_opt = V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_NONE;
+
+			if (srcRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE &&
+			    (dstRGB == VK_BLEND_FACTOR_ZERO ||
+			     dstRGB == VK_BLEND_FACTOR_SRC_ALPHA ||
+			     dstRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE))
+				dstRGB_opt = V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_A0;
+
+			/* Set the final value. */
+			blend.sx_mrt_blend_opt[i] =
+				S_028760_COLOR_SRC_OPT(srcRGB_opt) |
+				S_028760_COLOR_DST_OPT(dstRGB_opt) |
+				S_028760_COLOR_COMB_FCN(si_translate_blend_opt_function(eqRGB)) |
+				S_028760_ALPHA_SRC_OPT(srcA_opt) |
+				S_028760_ALPHA_DST_OPT(dstA_opt) |
+				S_028760_ALPHA_COMB_FCN(si_translate_blend_opt_function(eqA));
+			blend_cntl |= S_028780_ENABLE(1);
+
+			blend_cntl |= S_028780_COLOR_COMB_FCN(si_translate_blend_function(eqRGB));
+			blend_cntl |= S_028780_COLOR_SRCBLEND(si_translate_blend_factor(srcRGB));
+			blend_cntl |= S_028780_COLOR_DESTBLEND(si_translate_blend_factor(dstRGB));
+			if (srcA != srcRGB || dstA != dstRGB || eqA != eqRGB) {
+				blend_cntl |= S_028780_SEPARATE_ALPHA_BLEND(1);
+				blend_cntl |= S_028780_ALPHA_COMB_FCN(si_translate_blend_function(eqA));
+				blend_cntl |= S_028780_ALPHA_SRCBLEND(si_translate_blend_factor(srcA));
+				blend_cntl |= S_028780_ALPHA_DESTBLEND(si_translate_blend_factor(dstA));
+			}
 			blend.cb_blend_control[i] = blend_cntl;
-			continue;
+
+			blend.blend_enable_4bit |= 0xfu << (i * 4);
+
+			if (srcRGB == VK_BLEND_FACTOR_SRC_ALPHA ||
+			    dstRGB == VK_BLEND_FACTOR_SRC_ALPHA ||
+			    srcRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE ||
+			    dstRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE ||
+			    srcRGB == VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA ||
+			    dstRGB == VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA)
+				blend.need_src_alpha |= 1 << i;
 		}
-
-		if (is_dual_src(srcRGB) || is_dual_src(dstRGB) || is_dual_src(srcA) || is_dual_src(dstA))
-			if (i == 0)
-				blend.mrt0_is_dual_src = true;
-
-		if (eqRGB == VK_BLEND_OP_MIN || eqRGB == VK_BLEND_OP_MAX) {
-			srcRGB = VK_BLEND_FACTOR_ONE;
-			dstRGB = VK_BLEND_FACTOR_ONE;
+		for (i = vkblend->attachmentCount; i < 8; i++) {
+			blend.cb_blend_control[i] = 0;
+			blend.sx_mrt_blend_opt[i] = S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) | S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
 		}
-		if (eqA == VK_BLEND_OP_MIN || eqA == VK_BLEND_OP_MAX) {
-			srcA = VK_BLEND_FACTOR_ONE;
-			dstA = VK_BLEND_FACTOR_ONE;
-		}
-
-		radv_blend_check_commutativity(&blend, eqRGB, srcRGB, dstRGB,
-					       0x7 << (4 * i));
-		radv_blend_check_commutativity(&blend, eqA, srcA, dstA,
-					       0x8 << (4 * i));
-
-		/* Blending optimizations for RB+.
-		 * These transformations don't change the behavior.
-		 *
-		 * First, get rid of DST in the blend factors:
-		 *    func(src * DST, dst * 0) ---> func(src * 0, dst * SRC)
-		 */
-		si_blend_remove_dst(&eqRGB, &srcRGB, &dstRGB,
-				    VK_BLEND_FACTOR_DST_COLOR,
-				    VK_BLEND_FACTOR_SRC_COLOR);
-
-		si_blend_remove_dst(&eqA, &srcA, &dstA,
-				    VK_BLEND_FACTOR_DST_COLOR,
-				    VK_BLEND_FACTOR_SRC_COLOR);
-
-		si_blend_remove_dst(&eqA, &srcA, &dstA,
-				    VK_BLEND_FACTOR_DST_ALPHA,
-				    VK_BLEND_FACTOR_SRC_ALPHA);
-
-		/* Look up the ideal settings from tables. */
-		srcRGB_opt = si_translate_blend_opt_factor(srcRGB, false);
-		dstRGB_opt = si_translate_blend_opt_factor(dstRGB, false);
-		srcA_opt = si_translate_blend_opt_factor(srcA, true);
-		dstA_opt = si_translate_blend_opt_factor(dstA, true);
-
-				/* Handle interdependencies. */
-		if (si_blend_factor_uses_dst(srcRGB))
-			dstRGB_opt = V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_NONE;
-		if (si_blend_factor_uses_dst(srcA))
-			dstA_opt = V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_NONE;
-
-		if (srcRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE &&
-		    (dstRGB == VK_BLEND_FACTOR_ZERO ||
-		     dstRGB == VK_BLEND_FACTOR_SRC_ALPHA ||
-		     dstRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE))
-			dstRGB_opt = V_028760_BLEND_OPT_PRESERVE_NONE_IGNORE_A0;
-
-		/* Set the final value. */
-		blend.sx_mrt_blend_opt[i] =
-			S_028760_COLOR_SRC_OPT(srcRGB_opt) |
-			S_028760_COLOR_DST_OPT(dstRGB_opt) |
-			S_028760_COLOR_COMB_FCN(si_translate_blend_opt_function(eqRGB)) |
-			S_028760_ALPHA_SRC_OPT(srcA_opt) |
-			S_028760_ALPHA_DST_OPT(dstA_opt) |
-			S_028760_ALPHA_COMB_FCN(si_translate_blend_opt_function(eqA));
-		blend_cntl |= S_028780_ENABLE(1);
-
-		blend_cntl |= S_028780_COLOR_COMB_FCN(si_translate_blend_function(eqRGB));
-		blend_cntl |= S_028780_COLOR_SRCBLEND(si_translate_blend_factor(srcRGB));
-		blend_cntl |= S_028780_COLOR_DESTBLEND(si_translate_blend_factor(dstRGB));
-		if (srcA != srcRGB || dstA != dstRGB || eqA != eqRGB) {
-			blend_cntl |= S_028780_SEPARATE_ALPHA_BLEND(1);
-			blend_cntl |= S_028780_ALPHA_COMB_FCN(si_translate_blend_function(eqA));
-			blend_cntl |= S_028780_ALPHA_SRCBLEND(si_translate_blend_factor(srcA));
-			blend_cntl |= S_028780_ALPHA_DESTBLEND(si_translate_blend_factor(dstA));
-		}
-		blend.cb_blend_control[i] = blend_cntl;
-
-		blend.blend_enable_4bit |= 0xfu << (i * 4);
-
-		if (srcRGB == VK_BLEND_FACTOR_SRC_ALPHA ||
-		    dstRGB == VK_BLEND_FACTOR_SRC_ALPHA ||
-		    srcRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE ||
-		    dstRGB == VK_BLEND_FACTOR_SRC_ALPHA_SATURATE ||
-		    srcRGB == VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA ||
-		    dstRGB == VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA)
-			blend.need_src_alpha |= 1 << i;
-	}
-	for (i = vkblend->attachmentCount; i < 8; i++) {
-		blend.cb_blend_control[i] = 0;
-		blend.sx_mrt_blend_opt[i] = S_028760_COLOR_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED) | S_028760_ALPHA_COMB_FCN(V_028760_OPT_COMB_BLEND_DISABLED);
 	}
 
 	if (pipeline->device->physical_device->rad_info.has_rbplus) {
@@ -862,7 +901,8 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 		/* RB+ doesn't work with dual source blending, logic op and
 		 * RESOLVE.
 		 */
-		if (blend.mrt0_is_dual_src || vkblend->logicOpEnable ||
+		if (blend.mrt0_is_dual_src ||
+		    (vkblend && vkblend->logicOpEnable) ||
 		    mode == V_028808_CB_RESOLVE)
 			blend.cb_color_control |= S_028808_DISABLE_DUAL_QUAD(1);
 	}
@@ -995,13 +1035,15 @@ radv_pipeline_out_of_order_rast(struct radv_pipeline *pipeline,
 {
 	RADV_FROM_HANDLE(radv_render_pass, pass, pCreateInfo->renderPass);
 	struct radv_subpass *subpass = pass->subpasses + pCreateInfo->subpass;
+	const VkPipelineDepthStencilStateCreateInfo *vkds = radv_pipeline_get_depth_stencil_state(pCreateInfo);
+	const VkPipelineColorBlendStateCreateInfo *vkblend = radv_pipeline_get_color_blend_state(pCreateInfo);
 	unsigned colormask = blend->cb_target_enabled_4bit;
 
 	if (!pipeline->device->physical_device->out_of_order_rast_allowed)
 		return false;
 
 	/* Be conservative if a logic operation is enabled with color buffers. */
-	if (colormask && pCreateInfo->pColorBlendState->logicOpEnable)
+	if (colormask && vkblend && vkblend->logicOpEnable)
 		return false;
 
 	/* Default depth/stencil invariance when no attachment is bound. */
@@ -1009,10 +1051,7 @@ radv_pipeline_out_of_order_rast(struct radv_pipeline *pipeline,
 		.zs = true, .pass_set = true
 	};
 
-	if (pCreateInfo->pDepthStencilState &&
-	    subpass->depth_stencil_attachment) {
-		const VkPipelineDepthStencilStateCreateInfo *vkds =
-			pCreateInfo->pDepthStencilState;
+	if (vkds) {
 		struct radv_render_pass_attachment *attachment =
 			pass->attachments + subpass->depth_stencil_attachment->attachment;
 		bool has_stencil = vk_format_is_stencil(attachment->format);
@@ -1099,22 +1138,39 @@ radv_pipeline_init_multisample_state(struct radv_pipeline *pipeline,
 				     struct radv_blend_state *blend,
 				     const VkGraphicsPipelineCreateInfo *pCreateInfo)
 {
-	const VkPipelineMultisampleStateCreateInfo *vkms = pCreateInfo->pMultisampleState;
+	const VkPipelineMultisampleStateCreateInfo *vkms = radv_pipeline_get_multisample_state(pCreateInfo);
 	struct radv_multisample_state *ms = &pipeline->graphics.ms;
 	unsigned num_tile_pipes = pipeline->device->physical_device->rad_info.num_tile_pipes;
 	bool out_of_order_rast = false;
 	int ps_iter_samples = 1;
 	uint32_t mask = 0xffff;
 
-	if (vkms)
+	if (vkms) {
 		ms->num_samples = vkms->rasterizationSamples;
-	else
-		ms->num_samples = 1;
 
-	if (vkms)
-		ps_iter_samples = radv_pipeline_get_ps_iter_samples(vkms);
-	if (vkms && !vkms->sampleShadingEnable && pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.force_persample) {
-		ps_iter_samples = ms->num_samples;
+		/* From the Vulkan 1.1.129 spec, 26.7. Sample Shading:
+		 *
+		 * "Sample shading is enabled for a graphics pipeline:
+		 *
+		 * - If the interface of the fragment shader entry point of the
+		 *   graphics pipeline includes an input variable decorated
+		 *   with SampleId or SamplePosition. In this case
+		 *   minSampleShadingFactor takes the value 1.0.
+		 * - Else if the sampleShadingEnable member of the
+		 *   VkPipelineMultisampleStateCreateInfo structure specified
+		 *   when creating the graphics pipeline is set to VK_TRUE. In
+		 *   this case minSampleShadingFactor takes the value of
+		 *   VkPipelineMultisampleStateCreateInfo::minSampleShading.
+		 *
+		 * Otherwise, sample shading is considered disabled."
+		 */
+		if (pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.force_persample) {
+			ps_iter_samples = ms->num_samples;
+		} else {
+			ps_iter_samples = radv_pipeline_get_ps_iter_samples(vkms);
+		}
+	} else {
+		ms->num_samples = 1;
 	}
 
 	const struct VkPipelineRasterizationStateRasterizationOrderAMD *raster_order =
@@ -2255,14 +2311,16 @@ radv_generate_graphics_pipeline_key(struct radv_pipeline *pipeline,
 		}
 	}
 
-	if (pCreateInfo->pTessellationState)
-		key.tess_input_vertices = pCreateInfo->pTessellationState->patchControlPoints;
+	const VkPipelineTessellationStateCreateInfo *tess =
+		radv_pipeline_get_tessellation_state(pCreateInfo);
+	if (tess)
+		key.tess_input_vertices = tess->patchControlPoints;
 
-
-	if (pCreateInfo->pMultisampleState &&
-	    pCreateInfo->pMultisampleState->rasterizationSamples > 1) {
-		uint32_t num_samples = pCreateInfo->pMultisampleState->rasterizationSamples;
-		uint32_t ps_iter_samples = radv_pipeline_get_ps_iter_samples(pCreateInfo->pMultisampleState);
+	const VkPipelineMultisampleStateCreateInfo *vkms =
+		radv_pipeline_get_multisample_state(pCreateInfo);
+	if (vkms && vkms->rasterizationSamples > 1) {
+		uint32_t num_samples = vkms->rasterizationSamples;
+		uint32_t ps_iter_samples = radv_pipeline_get_ps_iter_samples(vkms);
 		key.num_samples = num_samples;
 		key.log2_ps_iter_samples = util_logbase2(ps_iter_samples);
 	}
@@ -3180,7 +3238,8 @@ radv_gfx9_compute_bin_size(struct radv_pipeline *pipeline, const VkGraphicsPipel
 	unsigned effective_samples = total_samples;
 	unsigned color_bytes_per_pixel = 0;
 
-	const VkPipelineColorBlendStateCreateInfo *vkblend = pCreateInfo->pColorBlendState;
+	const VkPipelineColorBlendStateCreateInfo *vkblend =
+		radv_pipeline_get_color_blend_state(pCreateInfo);
 	if (vkblend) {
 		for (unsigned i = 0; i < subpass->color_count; i++) {
 			if (!vkblend->pAttachments[i].colorWriteMask)
@@ -3251,7 +3310,8 @@ radv_gfx10_compute_bin_size(struct radv_pipeline *pipeline, const VkGraphicsPipe
 	unsigned color_bytes_per_pixel = 0;
 	unsigned fmask_bytes_per_pixel = 0;
 
-	const VkPipelineColorBlendStateCreateInfo *vkblend = pCreateInfo->pColorBlendState;
+	const VkPipelineColorBlendStateCreateInfo *vkblend =
+		radv_pipeline_get_color_blend_state(pCreateInfo);
 	if (vkblend) {
 		for (unsigned i = 0; i < subpass->color_count; i++) {
 			if (!vkblend->pAttachments[i].colorWriteMask)
@@ -3328,7 +3388,8 @@ radv_pipeline_generate_disabled_binning_state(struct radeon_cmdbuf *ctx_cs,
 	if (pipeline->device->physical_device->rad_info.chip_class >= GFX10) {
 		RADV_FROM_HANDLE(radv_render_pass, pass, pCreateInfo->renderPass);
 		struct radv_subpass *subpass = pass->subpasses + pCreateInfo->subpass;
-		const VkPipelineColorBlendStateCreateInfo *vkblend = pCreateInfo->pColorBlendState;
+		const VkPipelineColorBlendStateCreateInfo *vkblend =
+			radv_pipeline_get_color_blend_state(pCreateInfo);
 		unsigned min_bytes_per_pixel = 0;
 
 		if (vkblend) {
@@ -3431,7 +3492,7 @@ radv_pipeline_generate_depth_stencil_state(struct radeon_cmdbuf *ctx_cs,
                                            const VkGraphicsPipelineCreateInfo *pCreateInfo,
                                            const struct radv_graphics_pipeline_create_info *extra)
 {
-	const VkPipelineDepthStencilStateCreateInfo *vkds = pCreateInfo->pDepthStencilState;
+	const VkPipelineDepthStencilStateCreateInfo *vkds = radv_pipeline_get_depth_stencil_state(pCreateInfo);
 	RADV_FROM_HANDLE(radv_render_pass, pass, pCreateInfo->renderPass);
 	struct radv_subpass *subpass = pass->subpasses + pCreateInfo->subpass;
 	struct radv_shader_variant *ps = pipeline->shaders[MESA_SHADER_FRAGMENT];
@@ -3638,7 +3699,10 @@ radv_pipeline_generate_multisample_state(struct radeon_cmdbuf *ctx_cs,
 	radeon_emit(ctx_cs, ms->pa_sc_aa_mask[1]);
 
 	radeon_set_context_reg(ctx_cs, R_028804_DB_EQAA, ms->db_eqaa);
+	radeon_set_context_reg(ctx_cs, R_028A48_PA_SC_MODE_CNTL_0, ms->pa_sc_mode_cntl_0);
 	radeon_set_context_reg(ctx_cs, R_028A4C_PA_SC_MODE_CNTL_1, ms->pa_sc_mode_cntl_1);
+	radeon_set_context_reg(ctx_cs, R_028BDC_PA_SC_LINE_CNTL, ms->pa_sc_line_cntl);
+	radeon_set_context_reg(ctx_cs, R_028BE0_PA_SC_AA_CONFIG, ms->pa_sc_aa_config);
 
 	/* The exclusion bits can be set to improve rasterization efficiency
 	 * if no sample lies on the pixel boundary (-8 sample offset). It's
@@ -3648,6 +3712,12 @@ radv_pipeline_generate_multisample_state(struct radeon_cmdbuf *ctx_cs,
 	radeon_set_context_reg(ctx_cs, R_02882C_PA_SU_PRIM_FILTER_CNTL,
 			       S_02882C_XMAX_RIGHT_EXCLUSION(exclusion) |
 			       S_02882C_YMAX_BOTTOM_EXCLUSION(exclusion));
+
+	/* GFX9: Flush DFSM when the AA mode changes. */
+	if (pipeline->device->dfsm_allowed) {
+		radeon_emit(ctx_cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
+		radeon_emit(ctx_cs, EVENT_TYPE(V_028A90_FLUSH_DFSM) | EVENT_INDEX(0));
+	}
 }
 
 static void
@@ -4481,10 +4551,6 @@ radv_pipeline_generate_pm4(struct radv_pipeline *pipeline,
 	if (pipeline->device->physical_device->rad_info.chip_class >= GFX10 && !radv_pipeline_has_ngg(pipeline))
 		gfx10_pipeline_generate_ge_cntl(ctx_cs, pipeline, tess);
 
-	radeon_set_context_reg(ctx_cs, R_0286E8_SPI_TMPRING_SIZE,
-			       S_0286E8_WAVES(pipeline->max_waves) |
-			       S_0286E8_WAVESIZE(pipeline->scratch_bytes_per_wave >> 10));
-
 	radeon_set_context_reg(ctx_cs, R_028B54_VGT_SHADER_STAGES_EN, radv_compute_vgt_shader_stages_en(pipeline));
 
 	if (pipeline->device->physical_device->rad_info.chip_class >= GFX7) {
@@ -4719,8 +4785,19 @@ radv_secure_compile(struct radv_pipeline *pipeline,
 	int fd_secure_input = device->sc_state->secure_compile_processes[process].fd_secure_input;
 	int fd_secure_output = device->sc_state->secure_compile_processes[process].fd_secure_output;
 
+	/* Fork a copy of the slim untainted secure compile process */
+	enum radv_secure_compile_type sc_type = RADV_SC_TYPE_FORK_DEVICE;
+	write(fd_secure_input, &sc_type, sizeof(sc_type));
+
+	if (!radv_sc_read(fd_secure_output, &sc_type, sizeof(sc_type), true) ||
+	    sc_type != RADV_SC_TYPE_INIT_SUCCESS)
+		return VK_ERROR_DEVICE_LOST;
+
+	fd_secure_input = device->sc_state->secure_compile_processes[process].fd_server;
+	fd_secure_output = device->sc_state->secure_compile_processes[process].fd_client;
+
 	/* Write pipeline / shader module out to secure process via pipe */
-	enum radv_secure_compile_type sc_type = RADV_SC_TYPE_COMPILE_PIPELINE;
+	sc_type = RADV_SC_TYPE_COMPILE_PIPELINE;
 	write(fd_secure_input, &sc_type, sizeof(sc_type));
 
 	/* Write pipeline layout out to secure process */
@@ -4828,6 +4905,9 @@ radv_secure_compile(struct radv_pipeline *pipeline,
 			free(entry);
 		}
 	}
+
+	sc_type = RADV_SC_TYPE_DESTROY_DEVICE;
+	write(fd_secure_input, &sc_type, sizeof(sc_type));
 
 	mtx_lock(&device->sc_state->secure_compile_mutex);
 	device->sc_state->secure_compile_thread_counter--;
@@ -5071,10 +5151,6 @@ radv_compute_generate_pm4(struct radv_pipeline *pipeline)
 	if (device->physical_device->rad_info.chip_class >= GFX10) {
 		radeon_set_sh_reg(&pipeline->cs, R_00B8A0_COMPUTE_PGM_RSRC3, compute_shader->config.rsrc3);
 	}
-
-	radeon_set_sh_reg(&pipeline->cs, R_00B860_COMPUTE_TMPRING_SIZE,
-			  S_00B860_WAVES(pipeline->max_waves) |
-			  S_00B860_WAVESIZE(pipeline->scratch_bytes_per_wave >> 10));
 
 	/* Calculate best compute resource limits. */
 	threads_per_threadgroup = compute_shader->info.cs.block_size[0] *
@@ -5333,6 +5409,7 @@ VkResult radv_GetPipelineExecutablePropertiesKHR(
 			break;
 		}
 
+		pProperties[executable_idx].subgroupSize = pipeline->shaders[i]->info.wave_size;
 		desc_copy(pProperties[executable_idx].name, name);
 		desc_copy(pProperties[executable_idx].description, description);
 
@@ -5344,6 +5421,7 @@ VkResult radv_GetPipelineExecutablePropertiesKHR(
 				break;
 
 			pProperties[executable_idx].stages = VK_SHADER_STAGE_GEOMETRY_BIT;
+			pProperties[executable_idx].subgroupSize = 64;
 			desc_copy(pProperties[executable_idx].name, "GS Copy Shader");
 			desc_copy(pProperties[executable_idx].description,
 				  "Extra shader stage that loads the GS output ringbuffer into the rasterizer");
@@ -5351,9 +5429,6 @@ VkResult radv_GetPipelineExecutablePropertiesKHR(
 			++executable_idx;
 		}
 	}
-
-	for (unsigned i = 0; i < count; ++i)
-		pProperties[i].subgroupSize = 64;
 
 	VkResult result = *pExecutableCount < total_count ? VK_INCOMPLETE : VK_SUCCESS;
 	*pExecutableCount = count;

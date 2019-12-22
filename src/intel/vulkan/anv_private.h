@@ -127,7 +127,9 @@ struct gen_perf_config;
 #define SURFACE_STATE_POOL_MAX_ADDRESS     0x00017fffffffULL
 #define INSTRUCTION_STATE_POOL_MIN_ADDRESS 0x000180000000ULL /* 6 GiB */
 #define INSTRUCTION_STATE_POOL_MAX_ADDRESS 0x0001bfffffffULL
-#define HIGH_HEAP_MIN_ADDRESS              0x0001c0000000ULL /* 7 GiB */
+#define CLIENT_VISIBLE_HEAP_MIN_ADDRESS    0x0001c0000000ULL /* 7 GiB */
+#define CLIENT_VISIBLE_HEAP_MAX_ADDRESS    0x0002bfffffffULL
+#define HIGH_HEAP_MIN_ADDRESS              0x0002c0000000ULL /* 11 GiB */
 
 #define LOW_HEAP_SIZE               \
    (LOW_HEAP_MAX_ADDRESS - LOW_HEAP_MIN_ADDRESS + 1)
@@ -139,6 +141,8 @@ struct gen_perf_config;
    (SURFACE_STATE_POOL_MAX_ADDRESS - SURFACE_STATE_POOL_MIN_ADDRESS + 1)
 #define INSTRUCTION_STATE_POOL_SIZE \
    (INSTRUCTION_STATE_POOL_MAX_ADDRESS - INSTRUCTION_STATE_POOL_MIN_ADDRESS + 1)
+#define CLIENT_VISIBLE_HEAP_SIZE               \
+   (CLIENT_VISIBLE_HEAP_MAX_ADDRESS - CLIENT_VISIBLE_HEAP_MIN_ADDRESS + 1)
 
 /* Allowing different clear colors requires us to perform a depth resolve at
  * the end of certain render passes. This is because while slow clears store
@@ -662,7 +666,17 @@ struct anv_bo {
 
    /** True if this BO wraps a host pointer */
    bool from_host_ptr:1;
+
+   /** See also ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS */
+   bool has_client_visible_address:1;
 };
+
+static inline struct anv_bo *
+anv_bo_ref(struct anv_bo *bo)
+{
+   p_atomic_inc(&bo->refcount);
+   return bo;
+}
 
 static inline struct anv_bo *
 anv_bo_unwrap(struct anv_bo *bo)
@@ -900,13 +914,10 @@ anv_state_table_get(struct anv_state_table *table, uint32_t idx)
 struct anv_bo_pool {
    struct anv_device *device;
 
-   uint64_t bo_flags;
-
    struct util_sparse_array_free_list free_list[16];
 };
 
-void anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,
-                      uint64_t bo_flags);
+void anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device);
 void anv_bo_pool_finish(struct anv_bo_pool *pool);
 VkResult anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
                            struct anv_bo **bo_out);
@@ -939,9 +950,6 @@ struct anv_memory_type {
    /* Standard bits passed on to the client */
    VkMemoryPropertyFlags   propertyFlags;
    uint32_t                heapIndex;
-
-   /* Driver-internal book-keeping */
-   VkBufferUsageFlags      valid_buffer_usage;
 };
 
 struct anv_memory_heap {
@@ -950,9 +958,6 @@ struct anv_memory_heap {
    VkMemoryHeapFlags flags;
 
    /* Driver-internal book-keeping */
-   uint64_t          vma_start;
-   uint64_t          vma_size;
-   bool              supports_48bit_addresses;
    VkDeviceSize      used;
 };
 
@@ -984,15 +989,18 @@ struct anv_physical_device {
     struct isl_device                           isl_dev;
     struct gen_perf_config *                    perf;
     int                                         cmd_parser_version;
+    bool                                        has_softpin;
     bool                                        has_exec_async;
     bool                                        has_exec_capture;
     bool                                        has_exec_fence;
     bool                                        has_syncobj;
     bool                                        has_syncobj_wait;
     bool                                        has_context_priority;
-    bool                                        use_softpin;
     bool                                        has_context_isolation;
     bool                                        has_mem_available;
+    uint64_t                                    gtt_size;
+
+    bool                                        use_softpin;
     bool                                        always_use_bindless;
 
     /** True if we can access buffers using A64 messages */
@@ -1001,6 +1009,8 @@ struct anv_physical_device {
     bool                                        has_bindless_images;
     /** True if we can use bindless access for samplers */
     bool                                        has_bindless_samplers;
+
+    bool                                        always_flush_cache;
 
     struct anv_device_extension_table           supported_extensions;
     struct anv_physical_device_dispatch_table   dispatch;
@@ -1212,9 +1222,8 @@ struct anv_device {
 
     pthread_mutex_t                             vma_mutex;
     struct util_vma_heap                        vma_lo;
+    struct util_vma_heap                        vma_cva;
     struct util_vma_heap                        vma_hi;
-    uint64_t                                    vma_lo_available;
-    uint64_t                                    vma_hi_available;
 
     /** List of all anv_device_memory objects */
     struct list_head                            memory_objects;
@@ -1337,7 +1346,10 @@ enum anv_bo_alloc_flags {
    /** Specifies that the BO should be captured in error states */
    ANV_BO_ALLOC_CAPTURE =        (1 << 4),
 
-   /** Specifies that the BO will have an address assigned by the caller */
+   /** Specifies that the BO will have an address assigned by the caller
+    *
+    * Such BOs do not exist in any VMA heap.
+    */
    ANV_BO_ALLOC_FIXED_ADDRESS = (1 << 5),
 
    /** Enables implicit synchronization on the BO
@@ -1351,17 +1363,23 @@ enum anv_bo_alloc_flags {
     * This is equivalent to EXEC_OBJECT_WRITE.
     */
    ANV_BO_ALLOC_IMPLICIT_WRITE = (1 << 7),
+
+   /** Has an address which is visible to the client */
+   ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS = (1 << 8),
 };
 
 VkResult anv_device_alloc_bo(struct anv_device *device, uint64_t size,
                              enum anv_bo_alloc_flags alloc_flags,
+                             uint64_t explicit_address,
                              struct anv_bo **bo);
 VkResult anv_device_import_bo_from_host_ptr(struct anv_device *device,
                                             void *host_ptr, uint32_t size,
                                             enum anv_bo_alloc_flags alloc_flags,
+                                            uint64_t client_address,
                                             struct anv_bo **bo_out);
 VkResult anv_device_import_bo(struct anv_device *device, int fd,
                               enum anv_bo_alloc_flags alloc_flags,
+                              uint64_t client_address,
                               struct anv_bo **bo);
 VkResult anv_device_export_bo(struct anv_device *device,
                               struct anv_bo *bo, int *fd_out);
@@ -1435,7 +1453,8 @@ int anv_gem_syncobj_wait(struct anv_device *device,
                          uint32_t *handles, uint32_t num_handles,
                          int64_t abs_timeout_ns, bool wait_all);
 
-bool anv_vma_alloc(struct anv_device *device, struct anv_bo *bo);
+bool anv_vma_alloc(struct anv_device *device, struct anv_bo *bo,
+                   uint64_t client_address);
 void anv_vma_free(struct anv_device *device, struct anv_bo *bo);
 
 struct anv_reloc_list {
@@ -2502,6 +2521,27 @@ struct anv_attachment_state {
    struct anv_image_view *                      image_view;
 };
 
+/** State tracking for vertex buffer flushes
+ *
+ * On Gen8-9, the VF cache only considers the bottom 32 bits of memory
+ * addresses.  If you happen to have two vertex buffers which get placed
+ * exactly 4 GiB apart and use them in back-to-back draw calls, you can get
+ * collisions.  In order to solve this problem, we track vertex address ranges
+ * which are live in the cache and invalidate the cache if one ever exceeds 32
+ * bits.
+ */
+struct anv_vb_cache_range {
+   /* Virtual address at which the live vertex buffer cache range starts for
+    * this vertex buffer index.
+    */
+   uint64_t start;
+
+   /* Virtual address of the byte after where vertex buffer cache range ends.
+    * This is exclusive such that end - start is the size of the range.
+    */
+   uint64_t end;
+};
+
 /** State tracking for particular pipeline bind point
  *
  * This struct is the base struct for anv_cmd_graphics_state and
@@ -2529,6 +2569,11 @@ struct anv_cmd_graphics_state {
 
    anv_cmd_dirty_mask_t dirty;
    uint32_t vb_dirty;
+
+   struct anv_vb_cache_range ib_bound_range;
+   struct anv_vb_cache_range ib_dirty_range;
+   struct anv_vb_cache_range vb_bound_ranges[33];
+   struct anv_vb_cache_range vb_dirty_ranges[33];
 
    struct anv_dynamic_state dynamic;
 
@@ -2766,6 +2811,7 @@ void anv_cmd_emit_conditional_render_predicate(struct anv_cmd_buffer *cmd_buffer
 enum anv_fence_type {
    ANV_FENCE_TYPE_NONE = 0,
    ANV_FENCE_TYPE_BO,
+   ANV_FENCE_TYPE_WSI_BO,
    ANV_FENCE_TYPE_SYNCOBJ,
    ANV_FENCE_TYPE_WSI,
 };
@@ -2825,6 +2871,9 @@ struct anv_fence {
    struct anv_fence_impl temporary;
 };
 
+void anv_fence_reset_temporary(struct anv_device *device,
+                               struct anv_fence *fence);
+
 struct anv_event {
    uint64_t                                     semaphore;
    struct anv_state                             state;
@@ -2834,6 +2883,7 @@ enum anv_semaphore_type {
    ANV_SEMAPHORE_TYPE_NONE = 0,
    ANV_SEMAPHORE_TYPE_DUMMY,
    ANV_SEMAPHORE_TYPE_BO,
+   ANV_SEMAPHORE_TYPE_WSI_BO,
    ANV_SEMAPHORE_TYPE_SYNC_FILE,
    ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ,
    ANV_SEMAPHORE_TYPE_TIMELINE,
@@ -2868,10 +2918,11 @@ struct anv_semaphore_impl {
    enum anv_semaphore_type type;
 
    union {
-      /* A BO representing this semaphore when type == ANV_SEMAPHORE_TYPE_BO.
-       * This BO will be added to the object list on any execbuf2 calls for
-       * which this semaphore is used as a wait or signal fence.  When used as
-       * a signal fence, the EXEC_OBJECT_WRITE flag will be set.
+      /* A BO representing this semaphore when type == ANV_SEMAPHORE_TYPE_BO
+       * or type == ANV_SEMAPHORE_TYPE_WSI_BO.  This BO will be added to the
+       * object list on any execbuf2 calls for which this semaphore is used as
+       * a wait or signal fence.  When used as a signal fence or when type ==
+       * ANV_SEMAPHORE_TYPE_WSI_BO, the EXEC_OBJECT_WRITE flag will be set.
        */
       struct anv_bo *bo;
 

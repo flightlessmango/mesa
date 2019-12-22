@@ -29,7 +29,6 @@
 
 #include "anv_private.h"
 
-#include "util/simple_mtx.h"
 #include "util/anon_file.h"
 
 #ifdef HAVE_VALGRIND
@@ -487,29 +486,24 @@ anv_block_pool_expand_range(struct anv_block_pool *pool,
     * hard work for us.  When using softpin, we're in control and the fixed
     * addresses we choose are fine for base addresses.
     */
-   enum anv_bo_alloc_flags bo_alloc_flags = 0;
+   enum anv_bo_alloc_flags bo_alloc_flags = ANV_BO_ALLOC_CAPTURE;
    if (!pool->use_softpin)
       bo_alloc_flags |= ANV_BO_ALLOC_32BIT_ADDRESS;
-
-   uint64_t bo_flags = 0;
-   if (pool->device->instance->physicalDevice.has_exec_capture)
-      bo_flags |= EXEC_OBJECT_CAPTURE;
 
    if (pool->use_softpin) {
       uint32_t new_bo_size = size - pool->size;
       struct anv_bo *new_bo;
+      assert(center_bo_offset == 0);
       VkResult result = anv_device_alloc_bo(pool->device, new_bo_size,
                                             bo_alloc_flags |
                                             ANV_BO_ALLOC_FIXED_ADDRESS |
                                             ANV_BO_ALLOC_MAPPED |
                                             ANV_BO_ALLOC_SNOOPED,
+                                            pool->start_address + pool->size,
                                             &new_bo);
       if (result != VK_SUCCESS)
          return result;
 
-      assert(center_bo_offset == 0);
-
-      new_bo->offset = pool->start_address + pool->size;
       pool->bos[pool->nbos++] = new_bo;
 
       /* This pointer will always point to the first BO in the list */
@@ -532,6 +526,7 @@ anv_block_pool_expand_range(struct anv_block_pool *pool,
       VkResult result = anv_device_import_bo_from_host_ptr(pool->device,
                                                            map, size,
                                                            bo_alloc_flags,
+                                                           0 /* client_address */,
                                                            &new_bo);
       if (result != VK_SUCCESS) {
          munmap(map, size);
@@ -1264,11 +1259,9 @@ anv_state_stream_alloc(struct anv_state_stream *stream,
 }
 
 void
-anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,
-                 uint64_t bo_flags)
+anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device)
 {
    pool->device = device;
-   pool->bo_flags = bo_flags;
    for (unsigned i = 0; i < ARRAY_SIZE(pool->free_list); i++) {
       util_sparse_array_free_list_init(&pool->free_list[i],
                                        &device->bo_cache.bo_map, 0,
@@ -1317,7 +1310,9 @@ anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
    VkResult result = anv_device_alloc_bo(pool->device,
                                          pow2_size,
                                          ANV_BO_ALLOC_MAPPED |
-                                         ANV_BO_ALLOC_SNOOPED,
+                                         ANV_BO_ALLOC_SNOOPED |
+                                         ANV_BO_ALLOC_CAPTURE,
+                                         0 /* explicit_address */,
                                          &bo);
    if (result != VK_SUCCESS)
       return result;
@@ -1456,7 +1451,9 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
     * so nothing will ever touch the top page.
     */
    VkResult result = anv_device_alloc_bo(device, size,
-                                         ANV_BO_ALLOC_32BIT_ADDRESS, &bo);
+                                         ANV_BO_ALLOC_32BIT_ADDRESS,
+                                         0 /* explicit_address */,
+                                         &bo);
    if (result != VK_SUCCESS)
       return NULL; /* TODO */
 
@@ -1530,6 +1527,7 @@ VkResult
 anv_device_alloc_bo(struct anv_device *device,
                     uint64_t size,
                     enum anv_bo_alloc_flags alloc_flags,
+                    uint64_t explicit_address,
                     struct anv_bo **bo_out)
 {
    const uint32_t bo_flags =
@@ -1550,6 +1548,8 @@ anv_device_alloc_bo(struct anv_device *device,
       .size = size,
       .flags = bo_flags,
       .is_external = (alloc_flags & ANV_BO_ALLOC_EXTERNAL),
+      .has_client_visible_address =
+         (alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0,
    };
 
    if (alloc_flags & ANV_BO_ALLOC_MAPPED) {
@@ -1582,8 +1582,9 @@ anv_device_alloc_bo(struct anv_device *device,
 
    if (alloc_flags & ANV_BO_ALLOC_FIXED_ADDRESS) {
       new_bo.has_fixed_address = true;
+      new_bo.offset = explicit_address;
    } else {
-      if (!anv_vma_alloc(device, &new_bo)) {
+      if (!anv_vma_alloc(device, &new_bo, explicit_address)) {
          if (new_bo.map)
             anv_gem_munmap(new_bo.map, size);
          anv_gem_close(device, new_bo.gem_handle);
@@ -1610,6 +1611,7 @@ VkResult
 anv_device_import_bo_from_host_ptr(struct anv_device *device,
                                    void *host_ptr, uint32_t size,
                                    enum anv_bo_alloc_flags alloc_flags,
+                                   uint64_t client_address,
                                    struct anv_bo **bo_out)
 {
    assert(!(alloc_flags & (ANV_BO_ALLOC_MAPPED |
@@ -1640,6 +1642,24 @@ anv_device_import_bo_from_host_ptr(struct anv_device *device,
                           VK_ERROR_INVALID_EXTERNAL_HANDLE,
                           "same host pointer imported two different ways");
       }
+
+      if (bo->has_client_visible_address !=
+          ((alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0)) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_errorf(device->instance, NULL,
+                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                          "The same BO was imported with and without buffer "
+                          "device address");
+      }
+
+      if (client_address && client_address != gen_48b_address(bo->offset)) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_errorf(device->instance, NULL,
+                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                          "The same BO was imported at two different "
+                          "addresses");
+      }
+
       __sync_fetch_and_add(&bo->refcount, 1);
    } else {
       struct anv_bo new_bo = {
@@ -1651,9 +1671,12 @@ anv_device_import_bo_from_host_ptr(struct anv_device *device,
          .flags = bo_flags,
          .is_external = true,
          .from_host_ptr = true,
+         .has_client_visible_address =
+            (alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0,
       };
 
-      if (!anv_vma_alloc(device, &new_bo)) {
+      assert(client_address == gen_48b_address(client_address));
+      if (!anv_vma_alloc(device, &new_bo, client_address)) {
          anv_gem_close(device, new_bo.gem_handle);
          pthread_mutex_unlock(&cache->mutex);
          return vk_errorf(device->instance, NULL,
@@ -1674,6 +1697,7 @@ VkResult
 anv_device_import_bo(struct anv_device *device,
                      int fd,
                      enum anv_bo_alloc_flags alloc_flags,
+                     uint64_t client_address,
                      struct anv_bo **bo_out)
 {
    assert(!(alloc_flags & (ANV_BO_ALLOC_MAPPED |
@@ -1736,6 +1760,23 @@ anv_device_import_bo(struct anv_device *device,
                           "The same BO was imported on two different heaps");
       }
 
+      if (bo->has_client_visible_address !=
+          ((alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0)) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_errorf(device->instance, NULL,
+                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                          "The same BO was imported with and without buffer "
+                          "device address");
+      }
+
+      if (client_address && client_address != gen_48b_address(bo->offset)) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_errorf(device->instance, NULL,
+                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                          "The same BO was imported at two different "
+                          "addresses");
+      }
+
       bo->flags = new_flags;
 
       __sync_fetch_and_add(&bo->refcount, 1);
@@ -1754,9 +1795,12 @@ anv_device_import_bo(struct anv_device *device,
          .size = size,
          .flags = bo_flags,
          .is_external = true,
+         .has_client_visible_address =
+            (alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0,
       };
 
-      if (!anv_vma_alloc(device, &new_bo)) {
+      assert(client_address == gen_48b_address(client_address));
+      if (!anv_vma_alloc(device, &new_bo, client_address)) {
          anv_gem_close(device, new_bo.gem_handle);
          pthread_mutex_unlock(&cache->mutex);
          return vk_errorf(device->instance, NULL,

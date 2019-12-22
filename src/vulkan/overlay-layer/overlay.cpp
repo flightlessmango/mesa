@@ -28,6 +28,8 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
 
+#include "git_sha1.h"
+
 #include "imgui.h"
 
 #include "overlay_params.h"
@@ -37,6 +39,7 @@
 #include "util/list.h"
 #include "util/ralloc.h"
 #include "util/os_time.h"
+#include "util/os_socket.h"
 #include "util/simple_mtx.h"
 
 #include "vk_enum_to_str.h"
@@ -62,6 +65,14 @@ struct instance_data {
    bool pipeline_statistics_enabled;
 
    bool first_line_printed;
+
+   int control_client;
+
+   /* Dumping of frame stats to a file has been enabled. */
+   bool capture_enabled;
+
+   /* Dumping of frame stats to a file has been enabled and started. */
+   bool capture_started;
 };
 
 struct frame_stat {
@@ -327,6 +338,7 @@ static struct instance_data *new_instance_data(VkInstance instance)
 {
    struct instance_data *data = rzalloc(NULL, struct instance_data);
    data->instance = instance;
+   data->control_client = -1;
    map_object(HKEY(data->instance), data);
    return data;
 }
@@ -335,6 +347,8 @@ static void destroy_instance_data(struct instance_data *data)
 {
    if (data->params.output_file)
       fclose(data->params.output_file);
+   if (data->params.control >= 0)
+      os_socket_close(data->params.control);
    unmap_object(HKEY(data->instance));
    ralloc_free(data);
 }
@@ -565,17 +579,221 @@ static const char *param_unit(enum overlay_param_enabled param)
    }
 }
 
+static void parse_command(struct instance_data *instance_data,
+                          const char *cmd, unsigned cmdlen,
+                          const char *param, unsigned paramlen)
+{
+   if (!strncmp(cmd, "capture", cmdlen)) {
+      int value = atoi(param);
+      bool enabled = value > 0;
+
+      if (enabled) {
+         instance_data->capture_enabled = true;
+      } else {
+         instance_data->capture_enabled = false;
+         instance_data->capture_started = false;
+      }
+   }
+}
+
+#define BUFSIZE 4096
+
+/**
+ * This function will process commands through the control file.
+ *
+ * A command starts with a colon, followed by the command, and followed by an
+ * option '=' and a parameter.  It has to end with a semi-colon. A full command
+ * + parameter looks like:
+ *
+ *    :cmd=param;
+ */
+static void process_char(struct instance_data *instance_data, char c)
+{
+   static char cmd[BUFSIZE];
+   static char param[BUFSIZE];
+
+   static unsigned cmdpos = 0;
+   static unsigned parampos = 0;
+   static bool reading_cmd = false;
+   static bool reading_param = false;
+
+   switch (c) {
+   case ':':
+      cmdpos = 0;
+      parampos = 0;
+      reading_cmd = true;
+      reading_param = false;
+      break;
+   case ';':
+      if (!reading_cmd)
+         break;
+      cmd[cmdpos++] = '\0';
+      param[parampos++] = '\0';
+      parse_command(instance_data, cmd, cmdpos, param, parampos);
+      reading_cmd = false;
+      reading_param = false;
+      break;
+   case '=':
+      if (!reading_cmd)
+         break;
+      reading_param = true;
+      break;
+   default:
+      if (!reading_cmd)
+         break;
+
+      if (reading_param) {
+         /* overflow means an invalid parameter */
+         if (parampos >= BUFSIZE - 1) {
+            reading_cmd = false;
+            reading_param = false;
+            break;
+         }
+
+         param[parampos++] = c;
+      } else {
+         /* overflow means an invalid command */
+         if (cmdpos >= BUFSIZE - 1) {
+            reading_cmd = false;
+            break;
+         }
+
+         cmd[cmdpos++] = c;
+      }
+   }
+}
+
+static void control_send(struct instance_data *instance_data,
+                         const char *cmd, unsigned cmdlen,
+                         const char *param, unsigned paramlen)
+{
+   unsigned msglen = 0;
+   char buffer[BUFSIZE];
+
+   assert(cmdlen + paramlen + 3 < BUFSIZE);
+
+   buffer[msglen++] = ':';
+
+   memcpy(&buffer[msglen], cmd, cmdlen);
+   msglen += cmdlen;
+
+   if (paramlen > 0) {
+      buffer[msglen++] = '=';
+      memcpy(&buffer[msglen], param, paramlen);
+      msglen += paramlen;
+      buffer[msglen++] = ';';
+   }
+
+   os_socket_send(instance_data->control_client, buffer, msglen, 0);
+}
+
+static void control_send_connection_string(struct device_data *device_data)
+{
+   struct instance_data *instance_data = device_data->instance;
+
+   const char *controlVersionCmd = "MesaOverlayControlVersion";
+   const char *controlVersionString = "1";
+
+   control_send(instance_data, controlVersionCmd, strlen(controlVersionCmd),
+                controlVersionString, strlen(controlVersionString));
+
+   const char *deviceCmd = "DeviceName";
+   const char *deviceName = device_data->properties.deviceName;
+
+   control_send(instance_data, deviceCmd, strlen(deviceCmd),
+                deviceName, strlen(deviceName));
+
+   const char *mesaVersionCmd = "MesaVersion";
+   const char *mesaVersionString = "Mesa " PACKAGE_VERSION MESA_GIT_SHA1;
+
+   control_send(instance_data, mesaVersionCmd, strlen(mesaVersionCmd),
+                mesaVersionString, strlen(mesaVersionString));
+}
+
+static void control_client_check(struct device_data *device_data)
+{
+   struct instance_data *instance_data = device_data->instance;
+
+   /* Already connected, just return. */
+   if (instance_data->control_client >= 0)
+      return;
+
+   int socket = os_socket_accept(instance_data->params.control);
+   if (socket == -1) {
+      if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ECONNABORTED)
+         fprintf(stderr, "ERROR on socket: %s\n", strerror(errno));
+      return;
+   }
+
+   if (socket >= 0) {
+      os_socket_block(socket, false);
+      instance_data->control_client = socket;
+      control_send_connection_string(device_data);
+   }
+}
+
+static void control_client_disconnected(struct instance_data *instance_data)
+{
+   os_socket_close(instance_data->control_client);
+   instance_data->control_client = -1;
+}
+
+static void process_control_socket(struct instance_data *instance_data)
+{
+   const int client = instance_data->control_client;
+   if (client >= 0) {
+      char buf[BUFSIZE];
+
+      while (true) {
+         ssize_t n = os_socket_recv(client, buf, BUFSIZE, 0);
+
+         if (n == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+               /* nothing to read, try again later */
+               break;
+            }
+
+            if (errno != ECONNRESET)
+               fprintf(stderr, "ERROR on connection: %s\n", strerror(errno));
+
+            control_client_disconnected(instance_data);
+         } else if (n == 0) {
+            /* recv() returns 0 when the client disconnects */
+            control_client_disconnected(instance_data);
+         }
+
+         for (ssize_t i = 0; i < n; i++) {
+            process_char(instance_data, buf[i]);
+         }
+
+         /* If we try to read BUFSIZE and receive BUFSIZE bytes from the
+          * socket, there's a good chance that there's still more data to be
+          * read, so we will try again. Otherwise, simply be done for this
+          * iteration and try again on the next frame.
+          */
+         if (n < BUFSIZE)
+            break;
+      }
+   }
+}
+
 static void snapshot_swapchain_frame(struct swapchain_data *data)
 {
    struct device_data *device_data = data->device;
    struct instance_data *instance_data = device_data->instance;
    uint32_t f_idx = data->n_frames % ARRAY_SIZE(data->frames_stats);
    uint64_t now = os_time_get(); /* us */
+
+   if (instance_data->params.control >= 0) {
+      control_client_check(device_data);
+      process_control_socket(instance_data);
+   }
+
    double elapsed = (double)(now - data->last_fps_update); /* us */
    elapsedF2 = (double)(now - last_f2_press);
    elapsedF12 = (double)(now - last_f12_press);
    fps = 1000000.0f * data->n_frames_since_update / elapsed;
-   
+
    if (data->last_present_time) {
       data->frame_stats.stats[OVERLAY_PARAM_ENABLED_frame_timing] =
          now - data->last_present_time;
@@ -586,25 +804,25 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
       data->frames_stats[f_idx].stats[s] += device_data->frame_stats.stats[s] + data->frame_stats.stats[s];
       data->accumulated_stats.stats[s] += device_data->frame_stats.stats[s] + data->frame_stats.stats[s];
    }
-   
+
    if (elapsedF2 >= 500000 && !mango_output == NULL){
      if (key_is_pressed(XK_F2)){
        loggingOn = !loggingOn;
        last_f2_press = now;
-       
+
        if (loggingOn)
          pthread_create(&f2, NULL, &logging, NULL);
 
      }
    }
-   
+
    if (elapsedF12 >= 500000){
      if (key_is_pressed(XK_F12)){
-       displayHud = !displayHud;		
+       displayHud = !displayHud;
        last_f12_press = now;
      }
    }
-   
+
    if (!sysInfoFetched) {
      deviceName = device_data->properties.deviceName;
      ram =  exec("cat /proc/meminfo | grep 'MemTotal' | awk '{print $2}'");
@@ -626,34 +844,48 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
    if (!checkHudSize){
       if(!hud_width_env == NULL)
          hud_width = std::stoi(hud_width_env);
-      
+
       if(!hud_height_env == NULL)
          hud_height = std::stoi(hud_height_env);
 
       checkHudSize = true;
    }
 
-   if (data->last_fps_update) {
-      if (elapsed >= instance_data->params.fps_sampling_period) {
-         // get cpu usage
-         coreCounting();
-         updateCpuStrings();
-         pthread_create(&cpuThread, NULL, &getCpuUsage, NULL);
-         data->cpuString = cpuArray[0].output.c_str();
-         // get gpu usage
-         if (deviceName.find("GeForce") != std::string::npos)
-           pthread_create(&gpuThread, NULL, &getNvidiaGpuUsage, NULL);
-         
-         if (deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos)
-           pthread_create(&gpuThread, NULL, &getAmdGpuUsage, NULL);
+   /* If capture has been enabled but it hasn't started yet, it means we are on
+    * the first snapshot after it has been enabled. At this point we want to
+    * use the stats captured so far to update the display, but we don't want
+    * this data to cause noise to the stats that we want to capture from now
+    * on.
+    *
+    * capture_begin == true will trigger an update of the fps on display, and a
+    * flush of the data, but no stats will be written to the output file. This
+    * way, we will have only stats from after the capture has been enabled
+    * written to the output_file.
+    */
+   const bool capture_begin =
+      instance_data->capture_enabled && !instance_data->capture_started;
 
-         // update variables for logging
-         cpuLoadLog = cpuArray[0].value;
-         gpuLoadLog = gpuLoad; 
-         
-         data->frametimeDisplay = data->frametime;
-         data->fps = fps;
-         if (instance_data->params.output_file) {
+   if (data->last_fps_update) {
+      if (capture_begin ||
+          elapsed >= instance_data->params.fps_sampling_period) {
+            coreCounting();
+            updateCpuStrings();
+            pthread_create(&cpuThread, NULL, &getCpuUsage, NULL);
+            data->cpuString = cpuArray[0].output.c_str();
+            // get gpu usage
+            if (deviceName.find("GeForce") != std::string::npos)
+              pthread_create(&gpuThread, NULL, &getNvidiaGpuUsage, NULL);
+
+            if (deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos)
+              pthread_create(&gpuThread, NULL, &getAmdGpuUsage, NULL);
+
+            // update variables for logging
+            cpuLoadLog = cpuArray[0].value;
+            gpuLoadLog = gpuLoad;
+
+            data->frametimeDisplay = data->frametime;
+            data->fps = fps;
+         if (instance_data->capture_started) {
             if (!instance_data->first_line_printed) {
                bool first_column = true;
 
@@ -692,6 +924,9 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          memset(&data->accumulated_stats, 0, sizeof(data->accumulated_stats));
          data->n_frames_since_update = 0;
          data->last_fps_update = now;
+
+         if (capture_begin)
+            instance_data->capture_started = true;
       }
    } else {
       data->last_fps_update = now;
@@ -770,28 +1005,28 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::NewFrame();
    position_layer(data);
    int x, y;
-   
+
    if (hud_width == 0){
       x = 280;
    } else {
       x = hud_width;
    }
-   
+
    if (hud_height == 0){
       y = 160;
    } else {
       y = hud_height;
    }
-   
+
    if(displayHud)
 	   ImGui::Begin("Main", &open, ImVec2(x, y), 0.5f, ImGuiWindowFlags_NoDecoration);
 
 	 if(!displayHud)
 	   ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);
 
-	 if (displayHud){ 
+	 if (displayHud){
    // ImGui::Text("Device: %s", device_data->properties.deviceName);
-   // 
+   //
    // const char *format_name = vk_Format_to_str(data->format);
    // format_name = format_name ? (format_name + strlen("VK_FORMAT_")) : "unknown";
    // ImGui::Text("Swapchain format: %s", format_name);
@@ -803,7 +1038,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
    data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
    if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps])
       ImGui::Text("FPS: %.1f" "%s" "%.1fms" , data->fps, "  ", data->frametimeDisplay);
-   
+
    /* Recompute min/max */
    for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {
       data->stats_min.stats[s] = UINT64_MAX;
@@ -2363,6 +2598,13 @@ static VkResult overlay_CreateInstance(
    instance_data_map_physical_devices(instance_data, true);
 
    parse_overlay_env(&instance_data->params, getenv("VK_LAYER_MESA_OVERLAY_CONFIG"));
+
+   /* If there's no control file, and an output_file was specified, start
+    * capturing fps data right away.
+    */
+   instance_data->capture_enabled =
+      instance_data->params.output_file && instance_data->params.control < 0;
+   instance_data->capture_started = instance_data->capture_enabled;
 
    for (int i = OVERLAY_PARAM_ENABLED_vertices;
         i <= OVERLAY_PARAM_ENABLED_compute_invocations; i++) {

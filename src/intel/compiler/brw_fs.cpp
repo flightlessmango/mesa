@@ -3143,107 +3143,6 @@ mask_relative_to(const fs_reg &r, const fs_reg &s, unsigned ds)
 }
 
 bool
-fs_visitor::opt_peephole_csel()
-{
-   if (devinfo->gen < 8)
-      return false;
-
-   bool progress = false;
-
-   foreach_block_reverse(block, cfg) {
-      int ip = block->end_ip + 1;
-
-      foreach_inst_in_block_reverse_safe(fs_inst, inst, block) {
-         ip--;
-
-         if (inst->opcode != BRW_OPCODE_SEL ||
-             inst->predicate != BRW_PREDICATE_NORMAL ||
-             (inst->dst.type != BRW_REGISTER_TYPE_F &&
-              inst->dst.type != BRW_REGISTER_TYPE_D &&
-              inst->dst.type != BRW_REGISTER_TYPE_UD))
-            continue;
-
-         /* Because it is a 3-src instruction, CSEL cannot have an immediate
-          * value as a source, but we can sometimes handle zero.
-          */
-         if ((inst->src[0].file != VGRF && inst->src[0].file != ATTR &&
-              inst->src[0].file != UNIFORM) ||
-             (inst->src[1].file != VGRF && inst->src[1].file != ATTR &&
-              inst->src[1].file != UNIFORM && !inst->src[1].is_zero()))
-            continue;
-
-         foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
-            if (!scan_inst->flags_written())
-               continue;
-
-            if ((scan_inst->opcode != BRW_OPCODE_CMP &&
-                 scan_inst->opcode != BRW_OPCODE_MOV) ||
-                scan_inst->predicate != BRW_PREDICATE_NONE ||
-                (scan_inst->src[0].file != VGRF &&
-                 scan_inst->src[0].file != ATTR &&
-                 scan_inst->src[0].file != UNIFORM) ||
-                scan_inst->src[0].type != BRW_REGISTER_TYPE_F)
-               break;
-
-            if (scan_inst->opcode == BRW_OPCODE_CMP && !scan_inst->src[1].is_zero())
-               break;
-
-            const brw::fs_builder ibld(this, block, inst);
-
-            const enum brw_conditional_mod cond =
-               inst->predicate_inverse
-               ? brw_negate_cmod(scan_inst->conditional_mod)
-               : scan_inst->conditional_mod;
-
-            fs_inst *csel_inst = NULL;
-
-            if (inst->src[1].file != IMM) {
-               csel_inst = ibld.CSEL(inst->dst,
-                                     inst->src[0],
-                                     inst->src[1],
-                                     scan_inst->src[0],
-                                     cond);
-            } else if (cond == BRW_CONDITIONAL_NZ) {
-               /* Consider the sequence
-                *
-                * cmp.nz.f0  null<1>F   g3<8,8,1>F   0F
-                * (+f0) sel  g124<1>UD  g2<8,8,1>UD  0x00000000UD
-                *
-                * The sel will pick the immediate value 0 if r0 is ±0.0.
-                * Therefore, this sequence is equivalent:
-                *
-                * cmp.nz.f0  null<1>F   g3<8,8,1>F   0F
-                * (+f0) sel  g124<1>F   g2<8,8,1>F   (abs)g3<8,8,1>F
-                *
-                * The abs is ensures that the result is 0UD when g3 is -0.0F.
-                * By normal cmp-sel merging, this is also equivalent:
-                *
-                * csel.nz    g124<1>F   g2<4,4,1>F   (abs)g3<4,4,1>F  g3<4,4,1>F
-                */
-               csel_inst = ibld.CSEL(inst->dst,
-                                     inst->src[0],
-                                     scan_inst->src[0],
-                                     scan_inst->src[0],
-                                     cond);
-
-               csel_inst->src[1].abs = true;
-            }
-
-            if (csel_inst != NULL) {
-               progress = true;
-               csel_inst->saturate = inst->saturate;
-               inst->remove(block);
-            }
-
-            break;
-         }
-      }
-   }
-
-   return progress;
-}
-
-bool
 fs_visitor::compute_to_mrf()
 {
    bool progress = false;
@@ -4009,7 +3908,10 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
 {
    const fs_builder ibld(this, block, inst);
 
-   if (inst->src[1].file == IMM && inst->src[1].ud < (1 << 16)) {
+   const bool ud = (inst->src[1].type == BRW_REGISTER_TYPE_UD);
+   if (inst->src[1].file == IMM &&
+       (( ud && inst->src[1].ud <= UINT16_MAX) ||
+        (!ud && inst->src[1].d <= INT16_MAX && inst->src[1].d >= INT16_MIN))) {
       /* The MUL instruction isn't commutative. On Gen <= 6, only the low
        * 16-bits of src0 are read, and on Gen >= 7 only the low 16-bits of
        * src1 are used.
@@ -4022,7 +3924,6 @@ fs_visitor::lower_mul_dword_inst(fs_inst *inst, bblock_t *block)
          ibld.MOV(imm, inst->src[1]);
          ibld.MUL(inst->dst, imm, inst->src[0]);
       } else {
-         const bool ud = (inst->src[1].type == BRW_REGISTER_TYPE_UD);
          ibld.MUL(inst->dst, inst->src[0],
                   ud ? brw_imm_uw(inst->src[1].ud)
                      : brw_imm_w(inst->src[1].d));
@@ -7396,12 +7297,6 @@ fs_visitor::optimize()
       OPT(compact_virtual_grfs);
    } while (progress);
 
-   /* Do this after cmod propagation has had every possible opportunity to
-    * propagate results into SEL instructions.
-    */
-   if (OPT(opt_peephole_csel))
-      OPT(dead_code_eliminate);
-
    progress = false;
    pass_num = 0;
 
@@ -7441,6 +7336,11 @@ fs_visitor::optimize()
 
    if (OPT(lower_load_payload)) {
       split_virtual_grfs();
+
+      /* Lower 64 bit MOVs generated by payload lowering. */
+      if (!devinfo->has_64bit_types)
+         OPT(opt_algebraic);
+
       OPT(register_coalesce);
       OPT(lower_simd_width);
       OPT(compute_to_mrf);
@@ -8379,6 +8279,16 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
       simd8_cfg = v8.cfg;
       prog_data->base.dispatch_grf_start_reg = v8.payload.num_regs;
       prog_data->reg_blocks_8 = brw_register_blocks(v8.grf_used);
+   }
+
+   /* Limit dispatch width to simd8 with dual source blending on gen8.
+    * See: https://gitlab.freedesktop.org/mesa/mesa/issues/1917
+    */
+   if (devinfo->gen == 8 && prog_data->dual_src_blend &&
+       !(INTEL_DEBUG & DEBUG_NO8)) {
+      assert(!use_rep_send);
+      v8.limit_dispatch_width(8, "gen8 workaround: "
+                              "using SIMD8 when dual src blending.\n");
    }
 
    if (v8.max_dispatch_width >= 16 &&

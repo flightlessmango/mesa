@@ -52,13 +52,14 @@ dump_shader_info(struct ir3_shader_variant *v, bool binning_pass,
 
 	pipe_debug_message(debug, SHADER_INFO,
 			"%s shader: %u inst, %u nops, %u non-nops, %u dwords, "
-			"%u half, %u full, %u constlen, "
+			"%u last-baryf, %u half, %u full, %u constlen, "
 			"%u (ss), %u (sy), %d max_sun, %d loops\n",
 			ir3_shader_stage(v),
 			v->info.instrs_count,
 			v->info.nops_count,
 			v->info.instrs_count - v->info.nops_count,
 			v->info.sizedwords,
+			v->info.last_baryf,
 			v->info.max_half_reg + 1,
 			v->info.max_reg + 1,
 			v->constlen,
@@ -235,6 +236,11 @@ ir3_user_consts_size(struct ir3_ubo_analysis_state *state,
 	}
 }
 
+/**
+ * Uploads sub-ranges of UBOs to the hardware's constant buffer (UBO access
+ * outside of these ranges will be done using full UBO accesses in the
+ * shader).
+ */
 void
 ir3_emit_user_consts(struct fd_screen *screen, const struct ir3_shader_variant *v,
 		struct fd_ringbuffer *ring, struct fd_constbuf_stateobj *constbuf)
@@ -242,31 +248,28 @@ ir3_emit_user_consts(struct fd_screen *screen, const struct ir3_shader_variant *
 	struct ir3_ubo_analysis_state *state;
 	state = &v->shader->ubo_state;
 
-	for (uint32_t i = 0; i < ARRAY_SIZE(state->range); i++) {
+	uint32_t i;
+	foreach_bit(i, state->enabled & constbuf->enabled_mask) {
 		struct pipe_constant_buffer *cb = &constbuf->cb[i];
 
-		if (state->range[i].start < state->range[i].end &&
-			constbuf->enabled_mask & (1 << i)) {
+		uint32_t size = state->range[i].end - state->range[i].start;
+		uint32_t offset = cb->buffer_offset + state->range[i].start;
 
-			uint32_t size = state->range[i].end - state->range[i].start;
-			uint32_t offset = cb->buffer_offset + state->range[i].start;
+		/* and even if the start of the const buffer is before
+		 * first_immediate, the end may not be:
+		 */
+		size = MIN2(size, (16 * v->constlen) - state->range[i].offset);
 
-			/* and even if the start of the const buffer is before
-			 * first_immediate, the end may not be:
-			 */
-			size = MIN2(size, (16 * v->constlen) - state->range[i].offset);
+		if (size == 0)
+			continue;
 
-			if (size == 0)
-				continue;
+		/* things should be aligned to vec4: */
+		debug_assert((state->range[i].offset % 16) == 0);
+		debug_assert((size % 16) == 0);
+		debug_assert((offset % 16) == 0);
 
-			/* things should be aligned to vec4: */
-			debug_assert((state->range[i].offset % 16) == 0);
-			debug_assert((size % 16) == 0);
-			debug_assert((offset % 16) == 0);
-
-			emit_const(screen, ring, v, state->range[i].offset / 4,
-							offset, size / 4, cb->user_buffer, cb->buffer);
-		}
+		emit_const(screen, ring, v, state->range[i].offset / 4,
+				offset, size / 4, cb->user_buffer, cb->buffer);
 	}
 }
 
@@ -343,18 +346,19 @@ ir3_emit_image_dims(struct fd_screen *screen, const struct ir3_shader_variant *v
 
 			dims[off + 0] = util_format_get_blocksize(img->format);
 			if (img->resource->target != PIPE_BUFFER) {
-				unsigned lvl = img->u.tex.level;
+				struct fdl_slice *slice =
+					fd_resource_slice(rsc, img->u.tex.level);
 				/* note for 2d/cube/etc images, even if re-interpreted
 				 * as a different color format, the pixel size should
 				 * be the same, so use original dimensions for y and z
 				 * stride:
 				 */
-				dims[off + 1] = rsc->slices[lvl].pitch * rsc->cpp;
+				dims[off + 1] = slice->pitch * rsc->layout.cpp;
 				/* see corresponding logic in fd_resource_offset(): */
-				if (rsc->layer_first) {
-					dims[off + 2] = rsc->layer_size;
+				if (rsc->layout.layer_first) {
+					dims[off + 2] = rsc->layout.layer_size;
 				} else {
-					dims[off + 2] = rsc->slices[lvl].size0;
+					dims[off + 2] = slice->size0;
 				}
 			} else {
 				/* For buffer-backed images, the log2 of the format's

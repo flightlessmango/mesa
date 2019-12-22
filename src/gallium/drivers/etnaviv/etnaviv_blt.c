@@ -215,7 +215,7 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
 {
    struct etna_context *ctx = etna_context(pctx);
    struct etna_surface *surf = etna_surface(dst);
-   uint32_t new_clear_value = etna_clear_blit_pack_rgba(surf->base.format, color->f);
+   uint64_t new_clear_value = etna_clear_blit_pack_rgba(surf->base.format, color);
 
    struct etna_resource *res = etna_resource(surf->base.texture);
    struct blt_clear_op clr = {};
@@ -232,13 +232,13 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
       clr.dest.ts_addr.offset = 0;
       clr.dest.ts_addr.flags = ETNA_RELOC_WRITE;
       clr.dest.ts_clear_value[0] = new_clear_value;
-      clr.dest.ts_clear_value[1] = new_clear_value;
+      clr.dest.ts_clear_value[1] = new_clear_value >> 32;
       clr.dest.ts_mode = surf->level->ts_mode;
       clr.dest.ts_compress_fmt = surf->level->ts_compress_fmt;
    }
 
    clr.clear_value[0] = new_clear_value;
-   clr.clear_value[1] = new_clear_value;
+   clr.clear_value[1] = new_clear_value >> 32;
    clr.clear_bits[0] = 0xffffffff; /* TODO: Might want to clear only specific channels? */
    clr.clear_bits[1] = 0xffffffff;
    clr.rect_x = 0; /* What about scissors? */
@@ -251,6 +251,7 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    /* This made the TS valid */
    if (surf->surf.ts_size) {
       ctx->framebuffer.TS_COLOR_CLEAR_VALUE = new_clear_value;
+      ctx->framebuffer.TS_COLOR_CLEAR_VALUE_EXT = new_clear_value >> 32;
       surf->level->ts_valid = true;
       ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
@@ -290,6 +291,10 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    if (buffers & PIPE_CLEAR_STENCIL)
       new_clear_bits |= clear_bits_stencil;
 
+   /* if all bits are cleared, update TS clear value */
+   if (new_clear_bits == 0xffffffff)
+      surf->level->clear_value = new_clear_value;
+
    /* TODO unduplicate this */
    struct etna_resource *res = etna_resource(surf->base.texture);
    struct blt_clear_op clr = {};
@@ -305,8 +310,8 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
       clr.dest.ts_addr.bo = res->ts_bo;
       clr.dest.ts_addr.offset = 0;
       clr.dest.ts_addr.flags = ETNA_RELOC_WRITE;
-      clr.dest.ts_clear_value[0] = new_clear_value;
-      clr.dest.ts_clear_value[1] = new_clear_value;
+      clr.dest.ts_clear_value[0] = surf->level->clear_value;
+      clr.dest.ts_clear_value[1] = surf->level->clear_value;
       clr.dest.ts_mode = surf->level->ts_mode;
       clr.dest.ts_compress_fmt = surf->level->ts_compress_fmt;
    }
@@ -324,12 +329,11 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
 
    /* This made the TS valid */
    if (surf->surf.ts_size) {
-      ctx->framebuffer.TS_DEPTH_CLEAR_VALUE = new_clear_value;
+      ctx->framebuffer.TS_DEPTH_CLEAR_VALUE = surf->level->clear_value;
       surf->level->ts_valid = true;
       ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
 
-   surf->level->clear_value = new_clear_value;
    resource_written(ctx, surf->base.texture);
    etna_resource(surf->base.texture)->seqno++;
 }
@@ -376,7 +380,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
    assert(blit_info->src.level <= src->base.last_level);
    assert(blit_info->dst.level <= dst->base.last_level);
 
-   if (!translate_samples_to_xyscale(src->base.nr_samples, &msaa_xscale, &msaa_yscale, NULL))
+   if (!translate_samples_to_xyscale(src->base.nr_samples, &msaa_xscale, &msaa_yscale))
       return false;
 
    /* The width/height are in pixels; they do not change as a result of

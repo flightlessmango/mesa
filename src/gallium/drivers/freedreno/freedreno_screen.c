@@ -82,13 +82,15 @@ static const struct debug_named_value debug_options[] = {
 		{"inorder",   FD_DBG_INORDER,"Disable reordering for draws/blits"},
 		{"bstat",     FD_DBG_BSTAT,  "Print batch stats at context destroy"},
 		{"nogrow",    FD_DBG_NOGROW, "Disable \"growable\" cmdstream buffers, even if kernel supports it"},
-		{"lrz",       FD_DBG_LRZ,    "Enable experimental LRZ support (a5xx+)"},
+		{"lrz",       FD_DBG_LRZ,    "Enable experimental LRZ support (a5xx)"},
 		{"noindirect",FD_DBG_NOINDR, "Disable hw indirect draws (emulate on CPU)"},
 		{"noblit",    FD_DBG_NOBLIT, "Disable blitter (fallback to generic blit path)"},
 		{"hiprio",    FD_DBG_HIPRIO, "Force high-priority context"},
 		{"ttile",     FD_DBG_TTILE,  "Enable texture tiling (a2xx/a3xx/a5xx)"},
 		{"perfcntrs", FD_DBG_PERFC,  "Expose performance counters"},
 		{"noubwc",    FD_DBG_NOUBWC, "Disable UBWC for all internal buffers"},
+		{"nolrz",     FD_DBG_NOLRZ,  "Disable LRZ (a6xx)"},
+		{"notile",    FD_DBG_NOTILE, "Disable tiling for all internal buffers"},
 		DEBUG_NAMED_VALUE_END
 };
 
@@ -318,9 +320,6 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		if (is_a6xx(screen)) return 1;
 		return 0;
 
-	case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
-		return 0;
-
 	case PIPE_CAP_CONTEXT_PRIORITY_MASK:
 		return screen->priority_mask;
 
@@ -352,6 +351,9 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		 * for GL_MAX_TESS_PATCH_COMPONENTS).
 		 */
 		return 128;
+
+	case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
+		return 64 * 1024 * 1024;
 
 	case PIPE_CAP_SHAREABLE_SHADERS:
 	case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
@@ -939,6 +941,11 @@ fd_screen_create(struct fd_device *dev, struct renderonly *ro)
 		screen->gmem_alignw = 32;
 		screen->gmem_alignh = 32;
 		screen->num_vsc_pipes = 8;
+	}
+
+	if (fd_mesa_debug & FD_DBG_PERFC) {
+		screen->perfcntr_groups = fd_perfcntrs(screen->gpu_id,
+				&screen->num_perfcntr_groups);
 	}
 
 	/* NOTE: don't enable if we have too old of a kernel to support

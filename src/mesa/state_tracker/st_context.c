@@ -57,6 +57,7 @@
 #include "st_cb_memoryobjects.h"
 #include "st_cb_msaa.h"
 #include "st_cb_perfmon.h"
+#include "st_cb_perfquery.h"
 #include "st_cb_program.h"
 #include "st_cb_queryobj.h"
 #include "st_cb_readpixels.h"
@@ -137,18 +138,18 @@ st_query_memory_info(struct gl_context *ctx, struct gl_memory_info *out)
 static uint64_t
 st_get_active_states(struct gl_context *ctx)
 {
-   struct st_vertex_program *vp =
-      st_vertex_program(ctx->VertexProgram._Current);
-   struct st_common_program *tcp =
-      st_common_program(ctx->TessCtrlProgram._Current);
-   struct st_common_program *tep =
-      st_common_program(ctx->TessEvalProgram._Current);
-   struct st_common_program *gp =
-      st_common_program(ctx->GeometryProgram._Current);
-   struct st_common_program *fp =
-      st_common_program(ctx->FragmentProgram._Current);
-   struct st_common_program *cp =
-      st_common_program(ctx->ComputeProgram._Current);
+   struct st_program *vp =
+      st_program(ctx->VertexProgram._Current);
+   struct st_program *tcp =
+      st_program(ctx->TessCtrlProgram._Current);
+   struct st_program *tep =
+      st_program(ctx->TessEvalProgram._Current);
+   struct st_program *gp =
+      st_program(ctx->GeometryProgram._Current);
+   struct st_program *fp =
+      st_program(ctx->FragmentProgram._Current);
+   struct st_program *cp =
+      st_program(ctx->ComputeProgram._Current);
    uint64_t active_shader_states = 0;
 
    if (vp)
@@ -453,6 +454,7 @@ st_destroy_context_priv(struct st_context *st, bool destroy_pipe)
    st_destroy_bound_image_handles(st);
 
    for (i = 0; i < ARRAY_SIZE(st->state.frag_sampler_views); i++) {
+      pipe_sampler_view_reference(&st->state.vert_sampler_views[i], NULL);
       pipe_sampler_view_reference(&st->state.frag_sampler_views[i], NULL);
    }
 
@@ -719,6 +721,10 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       ctx->Extensions.AMD_performance_monitor = GL_TRUE;
    }
 
+   if (st_have_perfquery(st)) {
+      ctx->Extensions.INTEL_performance_query = GL_TRUE;
+   }
+
    /* Enable shader-based fallbacks for ARB_color_buffer_float if needed. */
    if (screen->get_param(screen, PIPE_CAP_VERTEX_COLOR_UNCLAMPED)) {
       if (!screen->get_param(screen, PIPE_CAP_VERTEX_COLOR_CLAMPED)) {
@@ -753,6 +759,8 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
     */
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoSat =
       !screen->get_param(screen, PIPE_CAP_VERTEX_SHADER_SATURATE);
+
+   ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].PositionAlwaysInvariant = options->vs_position_always_invariant;
 
    if (ctx->Const.GLSLVersion < 400) {
       for (i = 0; i < MESA_SHADER_STAGES; i++)
@@ -883,6 +891,7 @@ st_init_driver_functions(struct pipe_screen *screen,
    st_init_memoryobject_functions(functions);
    st_init_msaa_functions(functions);
    st_init_perfmon_functions(functions);
+   st_init_perfquery_functions(functions);
    st_init_program_functions(functions);
    st_init_query_functions(functions);
    st_init_cond_render_functions(functions);
@@ -1055,7 +1064,7 @@ st_destroy_context(struct st_context *st)
 
    st_reference_prog(st, &st->fp, NULL);
    st_reference_prog(st, &st->gp, NULL);
-   st_reference_vertprog(st, &st->vp, NULL);
+   st_reference_prog(st, &st->vp, NULL);
    st_reference_prog(st, &st->tcp, NULL);
    st_reference_prog(st, &st->tep, NULL);
    st_reference_prog(st, &st->cp, NULL);
@@ -1074,7 +1083,7 @@ st_destroy_context(struct st_context *st)
 
    st_destroy_program_variants(st);
 
-   _mesa_free_context_data(ctx, false);
+   _mesa_free_context_data(ctx);
 
    /* This will free the st_context too, so 'st' must not be accessed
     * afterwards. */

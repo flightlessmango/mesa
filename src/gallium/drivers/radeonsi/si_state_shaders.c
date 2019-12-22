@@ -1240,7 +1240,7 @@ static void gfx10_shader_ngg(struct si_screen *sscreen, struct si_shader *shader
 
 	shader->ge_cntl =
 		S_03096C_PRIM_GRP_SIZE(shader->ngg.max_gsprims) |
-		S_03096C_VERT_GRP_SIZE(shader->ngg.hw_max_esverts) |
+		S_03096C_VERT_GRP_SIZE(256) | /* 256 = disable vertex grouping */
 		S_03096C_BREAK_WAVE_AT_EOI(break_wave_at_eoi);
 
 	/* Bug workaround for a possible hang with non-tessellation cases.
@@ -2793,9 +2793,7 @@ static void *si_create_shader_selector(struct pipe_context *ctx,
 
 		/* EN_MAX_VERT_OUT_PER_GS_INSTANCE does not work with tesselation. */
 		sel->tess_turns_off_ngg =
-			(sscreen->info.family == CHIP_NAVI10 ||
-			 sscreen->info.family == CHIP_NAVI12 ||
-			 sscreen->info.family == CHIP_NAVI14) &&
+			sscreen->info.chip_class == GFX10 &&
 			sel->gs_num_invocations * sel->gs_max_out_vertices > 256;
 		break;
 
@@ -3915,6 +3913,9 @@ bool si_update_shaders(struct si_context *sctx)
 	unsigned old_spi_shader_col_format =
 		old_ps ? old_ps->key.part.ps.epilog.spi_shader_col_format : 0;
 	int r;
+
+	if (!sctx->compiler.passes)
+		si_init_compiler(sctx->screen, &sctx->compiler);
 
 	compiler_state.compiler = &sctx->compiler;
 	compiler_state.debug = sctx->debug;

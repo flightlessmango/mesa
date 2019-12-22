@@ -39,6 +39,7 @@
 #include "lima_bo.h"
 #include "lima_fence.h"
 #include "lima_format.h"
+#include "lima_util.h"
 #include "ir/lima_ir.h"
 
 #include "xf86drm.h"
@@ -50,10 +51,7 @@ lima_screen_destroy(struct pipe_screen *pscreen)
 {
    struct lima_screen *screen = lima_screen(pscreen);
 
-   if (lima_dump_command_stream) {
-      fclose(lima_dump_command_stream);
-      lima_dump_command_stream = NULL;
-   }
+   lima_dump_file_close();
 
    slab_destroy_parent(&screen->transfer_pool);
 
@@ -104,6 +102,7 @@ lima_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_ACCELERATED:
    case PIPE_CAP_UMA:
    case PIPE_CAP_NATIVE_FENCE_FD:
+   case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
       return 1;
 
    /* Unimplemented, but for exporting OpenGL 2.0 */
@@ -179,6 +178,9 @@ get_vertex_shader_param(struct lima_screen *screen,
    case PIPE_SHADER_CAP_MAX_TEX_INDIRECTIONS:
       return 16384; /* need investigate */
 
+   case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
+      return 1024;
+
    case PIPE_SHADER_CAP_MAX_INPUTS:
       return 16; /* attributes */
 
@@ -186,7 +188,8 @@ get_vertex_shader_param(struct lima_screen *screen,
       return LIMA_MAX_VARYING_NUM; /* varying */
 
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
-      return 4096; /* need investigate */
+      return 16 * 1024 * sizeof(float);
+
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
       return 1;
 
@@ -195,6 +198,9 @@ get_vertex_shader_param(struct lima_screen *screen,
 
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return 256; /* need investigate */
+
+   case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
+      return 32;
 
    default:
       return 0;
@@ -215,8 +221,12 @@ get_fragment_shader_param(struct lima_screen *screen,
    case PIPE_SHADER_CAP_MAX_INPUTS:
       return LIMA_MAX_VARYING_NUM - 1; /* varying, minus gl_Position */
 
+   case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
+      return 1024;
+
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
-      return 4096; /* need investigate */
+      return 16 * 1024 * sizeof(float);
+
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
       return 1;
 
@@ -236,6 +246,9 @@ get_fragment_shader_param(struct lima_screen *screen,
    case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
    case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
       return 0;
+
+   case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
+      return 32;
 
    default:
       return 0;
@@ -405,6 +418,7 @@ lima_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
                                    int *count)
 {
    uint64_t available_modifiers[] = {
+      DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED,
       DRM_FORMAT_MOD_LINEAR,
    };
 
@@ -444,14 +458,8 @@ lima_screen_parse_env(void)
 {
    lima_debug = debug_get_option_lima_debug();
 
-   if (lima_debug & LIMA_DEBUG_DUMP) {
-      const char *dump_command = "lima.dump";
-      printf("lima: dump command stream to file %s\n", dump_command);
-      lima_dump_command_stream = fopen(dump_command, "w");
-      if (!lima_dump_command_stream)
-         fprintf(stderr, "lima: fail to open command stream log file %s\n",
-                 dump_command);
-   }
+   if (lima_debug & LIMA_DEBUG_DUMP)
+      lima_dump_file_open();
 
    lima_ctx_num_plb = debug_get_num_option("LIMA_CTX_NUM_PLB", LIMA_CTX_PLB_DEF_NUM);
    if (lima_ctx_num_plb > LIMA_CTX_PLB_MAX_NUM ||

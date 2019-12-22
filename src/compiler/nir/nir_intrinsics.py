@@ -847,6 +847,10 @@ store("raw_output_pan", 1, [])
 load("raw_output_pan", 0, [], [CAN_ELIMINATE, CAN_REORDER])
 load("output_u8_as_fp16_pan", 0, [], [CAN_ELIMINATE, CAN_REORDER])
 
+# Loads the sampler paramaters <min_lod, max_lod, lod_bias>
+# src[] = { sampler_index }
+load("sampler_lod_parameters_pan", 1, [CAN_ELIMINATE, CAN_REORDER])
+
 # V3D-specific instrinc for tile buffer color reads.
 #
 # The hardware requires that we read the samples and components of a pixel
@@ -864,3 +868,7 @@ load("tlb_color_v3d", 1, [BASE, COMPONENT], [])
 # src[] = { value, render_target }
 # BASE = sample index
 store("tlb_sample_color_v3d", 2, [BASE, COMPONENT, TYPE], [])
+
+# V3D-specific intrinsic to load the number of layers attached to
+# the target framebuffer
+intrinsic("load_fb_layers_v3d", dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])

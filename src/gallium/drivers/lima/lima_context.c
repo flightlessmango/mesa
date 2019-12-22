@@ -29,7 +29,6 @@
 #include "util/u_debug.h"
 #include "util/ralloc.h"
 #include "util/u_inlines.h"
-#include "util/u_suballoc.h"
 #include "util/hash_table.h"
 
 #include "lima_screen.h"
@@ -70,19 +69,15 @@ lima_ctx_buff_map(struct lima_context *ctx, enum lima_ctx_buff buff)
 
 void *
 lima_ctx_buff_alloc(struct lima_context *ctx, enum lima_ctx_buff buff,
-                    unsigned size, bool uploader)
+                    unsigned size)
 {
    struct lima_ctx_buff_state *cbs = ctx->buffer_state + buff;
    void *ret = NULL;
 
    cbs->size = align(size, 0x40);
 
-   if (uploader)
-      u_upload_alloc(ctx->uploader, 0, cbs->size, 0x40, &cbs->offset,
-                     &cbs->res, &ret);
-   else
-      u_suballocator_alloc(ctx->suballocator, cbs->size, 0x10,
-                           &cbs->offset, &cbs->res);
+   u_upload_alloc(ctx->uploader, 0, cbs->size, 0x40, &cbs->offset,
+                  &cbs->res, &ret);
 
    return ret;
 }
@@ -128,9 +123,6 @@ lima_context_destroy(struct pipe_context *pctx)
    if (ctx->blitter)
       util_blitter_destroy(ctx->blitter);
 
-   if (ctx->suballocator)
-      u_suballocator_destroy(ctx->suballocator);
-
    if (ctx->uploader)
       u_upload_destroy(ctx->uploader);
 
@@ -145,6 +137,9 @@ lima_context_destroy(struct pipe_context *pctx)
 
    if (ctx->plb_gp_stream)
       lima_bo_unreference(ctx->plb_gp_stream);
+
+   if (ctx->gp_output)
+      lima_bo_unreference(ctx->gp_output);
 
    if (ctx->plb_pp_stream)
       assert(!_mesa_hash_table_num_entries(ctx->plb_pp_stream));
@@ -216,13 +211,6 @@ lima_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
       goto err_out;
    ctx->base.stream_uploader = ctx->uploader;
    ctx->base.const_uploader = ctx->uploader;
-
-   /* for varying output which need not mmap */
-   ctx->suballocator =
-      u_suballocator_create(&ctx->base, 1024 * 1024, 0,
-                            PIPE_USAGE_STREAM, 0, false);
-   if (!ctx->suballocator)
-      goto err_out;
 
    util_dynarray_init(&ctx->vs_cmd_array, ctx);
    util_dynarray_init(&ctx->plbu_cmd_array, ctx);

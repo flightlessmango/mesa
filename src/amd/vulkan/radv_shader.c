@@ -31,6 +31,7 @@
 #include "radv_private.h"
 #include "radv_shader.h"
 #include "radv_shader_helper.h"
+#include "radv_shader_args.h"
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
 #include "spirv/nir_spirv.h"
@@ -248,7 +249,7 @@ radv_optimize_nir(struct nir_shader *shader, bool optimize_conservatively,
 		NIR_PASS(progress, shader, nir_opt_copy_prop_vars);
 		NIR_PASS(progress, shader, nir_opt_dead_write_vars);
 		NIR_PASS(progress, shader, nir_remove_dead_variables,
-			 nir_var_function_temp);
+			 nir_var_function_temp | nir_var_shader_in | nir_var_shader_out);
 
                 NIR_PASS_V(shader, nir_lower_alu_to_scalar, NULL, NULL);
                 NIR_PASS_V(shader, nir_lower_phis_to_scalar);
@@ -298,6 +299,17 @@ radv_optimize_nir(struct nir_shader *shader, bool optimize_conservatively,
 	NIR_PASS(progress, shader, nir_opt_conditional_discard);
         NIR_PASS(progress, shader, nir_opt_shrink_load);
         NIR_PASS(progress, shader, nir_opt_move, nir_move_load_ubo);
+}
+
+static void
+shared_var_info(const struct glsl_type *type, unsigned *size, unsigned *align)
+{
+	assert(glsl_type_is_vector_or_scalar(type));
+
+	uint32_t comp_size = glsl_type_is_boolean(type) ? 4 : glsl_get_bit_size(type) / 8;
+	unsigned length = glsl_get_vector_elements(type);
+	*size = comp_size * length,
+	*align = comp_size;
 }
 
 nir_shader *
@@ -363,6 +375,7 @@ radv_shader_compile_to_nir(struct radv_device *device,
 				.float16 = !device->physical_device->use_aco,
 				.float64 = true,
 				.geometry_streams = true,
+				.image_ms_array = true,
 				.image_read_without_format = true,
 				.image_write_without_format = true,
 				.int8 = !device->physical_device->use_aco,
@@ -501,6 +514,14 @@ radv_shader_compile_to_nir(struct radv_device *device,
 	 * to remove any copies introduced by nir_opt_find_array_copies().
 	 */
 	nir_lower_var_copies(nir);
+
+	/* Lower deref operations for compute shared memory. */
+	if (nir->info.stage == MESA_SHADER_COMPUTE) {
+		NIR_PASS_V(nir, nir_lower_vars_to_explicit_types,
+			   nir_var_mem_shared, shared_var_info);
+		NIR_PASS_V(nir, nir_lower_explicit_io,
+			   nir_var_mem_shared, nir_address_format_32bit_offset);
+	}
 
 	/* Lower large variables that are always constant with load_constant
 	 * intrinsics, which get turned into PC-relative loads from a data
@@ -1095,19 +1116,29 @@ shader_variant_compile(struct radv_device *device,
 	options->has_ls_vgpr_init_bug = device->physical_device->rad_info.has_ls_vgpr_init_bug;
 	options->use_ngg_streamout = device->physical_device->use_ngg_streamout;
 
+	struct radv_shader_args args = {};
+	args.options = options;
+	args.shader_info = info;
+	args.is_gs_copy_shader = gs_copy_shader;
+	radv_declare_shader_args(&args, 
+				 gs_copy_shader ? MESA_SHADER_VERTEX
+						: shaders[shader_count - 1]->info.stage,
+				 shader_count >= 2,
+				 shader_count >= 2 ? shaders[shader_count - 2]->info.stage
+						   : MESA_SHADER_VERTEX);
+
 	if (!use_aco || options->dump_shader || options->record_ir)
 		ac_init_llvm_once();
 
 	if (use_aco) {
-		aco_compile_shader(shader_count, shaders, &binary, info, options);
+		aco_compile_shader(shader_count, shaders, &binary, &args);
 		binary->info = *info;
 	} else {
 		enum ac_target_machine_options tm_options = 0;
 		struct ac_llvm_compiler ac_llvm;
 		bool thread_compiler;
 
-		if (options->supports_spill)
-			tm_options |= AC_TM_SUPPORTS_SPILL;
+		tm_options |= AC_TM_SUPPORTS_SPILL;
 		if (device->instance->perftest_flags & RADV_PERFTEST_SISCHED)
 			tm_options |= AC_TM_SISCHED;
 		if (options->check_ir)
@@ -1124,10 +1155,10 @@ shader_variant_compile(struct radv_device *device,
 		if (gs_copy_shader) {
 			assert(shader_count == 1);
 			radv_compile_gs_copy_shader(&ac_llvm, *shaders, &binary,
-						    info, options);
+						    &args);
 		} else {
-			radv_compile_nir_shader(&ac_llvm, &binary, info,
-						shaders, shader_count, options);
+			radv_compile_nir_shader(&ac_llvm, &binary, &args,
+						shaders, shader_count);
 		}
 
 		binary->info = *info;
@@ -1188,7 +1219,7 @@ radv_shader_variant_compile(struct radv_device *device,
 	if (key)
 		options.key = *key;
 
-	options.supports_spill = true;
+	options.explicit_scratch_args = use_aco;
 	options.robust_buffer_access = device->robust_buffer_access;
 
 	return shader_variant_compile(device, module, shaders, shader_count, shaders[shader_count - 1]->info.stage, info,

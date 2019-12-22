@@ -47,6 +47,7 @@ enum {
         PAN_SYSVAL_TEXTURE_SIZE = 3,
         PAN_SYSVAL_SSBO = 4,
         PAN_SYSVAL_NUM_WORK_GROUPS = 5,
+        PAN_SYSVAL_SAMPLER = 7,
 } pan_sysval;
 
 #define PAN_TXS_SYSVAL_ID(texidx, dim, is_array)          \
@@ -90,7 +91,7 @@ typedef struct {
 } midgard_program;
 
 int
-midgard_compile_shader_nir(nir_shader *nir, midgard_program *program, bool is_blend, unsigned gpu_id);
+midgard_compile_shader_nir(nir_shader *nir, midgard_program *program, bool is_blend, unsigned blend_rt, unsigned gpu_id, bool shaderdb);
 
 /* NIR options are shared between the standalone compiler and the online
  * compiler. Defining it here is the simplest, though maybe not the Right

@@ -1136,6 +1136,11 @@ anv_execbuf_add_bo(struct anv_device *device,
       obj->rsvd2 = 0;
    }
 
+   if (extra_flags & EXEC_OBJECT_WRITE) {
+      obj->flags |= EXEC_OBJECT_WRITE;
+      obj->flags &= ~EXEC_OBJECT_ASYNC;
+   }
+
    if (relocs != NULL) {
       assert(obj->relocation_count == 0);
 
@@ -1687,11 +1692,8 @@ anv_queue_execbuf_locked(struct anv_queue *queue,
 
    int ret = queue->device->no_hw ? 0 :
       anv_gem_execbuffer(queue->device, &execbuf.execbuf);
-   if (ret) {
-      result = anv_queue_set_lost(queue,
-                                  "execbuf2 failed: %s",
-                                  strerror(ret));
-   }
+   if (ret)
+      result = anv_queue_set_lost(queue, "execbuf2 failed: %m");
 
    struct drm_i915_gem_exec_object2 *objects = execbuf.objects;
    for (uint32_t k = 0; k < execbuf.bo_count; k++) {

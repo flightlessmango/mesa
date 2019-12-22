@@ -15,22 +15,16 @@ apt-get -y install --no-install-recommends \
 	git \
 	ccache \
 	pkg-config \
-	python3-mako \
-	python-numpy \
-	python-six \
-	python-mako \
-	python3-pip \
 	python3-setuptools \
-	python3-six \
-	python3-wheel \
-	python3-jinja2 \
+	python-mako \
+	python3-mako \
 	bison \
 	flex \
 	gettext \
 	cmake \
 	bc \
 	libssl-dev \
-	lqa \
+	lavacli \
 	csvkit \
 	curl \
 	unzip \
@@ -74,15 +68,6 @@ apt-get -y install --no-install-recommends \
 	libegl1-mesa-dev:${DEBIAN_ARCH} \
 	libpng-dev:${DEBIAN_ARCH}
 
-
-############### Install lavacli (remove after it's back into Debian testing)
-mkdir -p lavacli
-wget -qO- https://git.lavasoftware.org/lava/lavacli/-/archive/v0.9.8/lavacli-v0.9.8.tar.gz | tar -xz --strip-components=1 -C lavacli
-pushd lavacli
-python3 ./setup.py install
-popd
-
-
 ############### Cross-build dEQP
 mkdir -p /artifacts/rootfs/deqp
 
@@ -123,7 +108,7 @@ rm -rf /artifacts/rootfs/deqp/framework
 find . -name CMakeFiles | xargs rm -rf
 find . -name lib\*.a | xargs rm -rf
 du -sh *
-rm -rf /VK-GL-CTS-opengl-es-cts-3.2.5.0
+rm -rf /VK-GL-CTS
 
 
 ############### Cross-build Volt dEQP runner

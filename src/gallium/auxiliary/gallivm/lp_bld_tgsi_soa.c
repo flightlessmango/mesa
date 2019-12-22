@@ -69,10 +69,6 @@
 #include "lp_bld_sample.h"
 #include "lp_bld_struct.h"
 
-/* SM 4.0 says that subroutines can nest 32 deep and 
- * we need one more for our main function */
-#define LP_MAX_NUM_FUNCS 33
-
 #define DUMP_GS_EMITS 0
 
 /*
@@ -105,34 +101,12 @@ emit_dump_reg(struct gallivm_state *gallivm,
    lp_build_print_value(gallivm, buf, value);
 }
 
-/*
- * Return the context for the current function.
- * (always 'main', if shader doesn't do any function calls)
- */
 static inline struct function_ctx *
 func_ctx(struct lp_exec_mask *mask)
 {
    assert(mask->function_stack_size > 0);
    assert(mask->function_stack_size <= LP_MAX_NUM_FUNCS);
    return &mask->function_stack[mask->function_stack_size - 1];
-}
-
-/*
- * Returns true if we're in a loop.
- * It's global, meaning that it returns true even if there's
- * no loop inside the current function, but we were inside
- * a loop inside another function, from which this one was called.
- */
-static inline boolean
-mask_has_loop(struct lp_exec_mask *mask)
-{
-   int i;
-   for (i = mask->function_stack_size - 1; i >= 0; --i) {
-      const struct function_ctx *ctx = &mask->function_stack[i];
-      if (ctx->loop_stack_size > 0)
-         return TRUE;
-   }
-   return FALSE;
 }
 
 /*
@@ -154,370 +128,14 @@ mask_vec(struct lp_build_tgsi_context *bld_base)
                        exec_mask->exec_mask, "");
 }
 
-/*
- * Returns true if we're inside a switch statement.
- * It's global, meaning that it returns true even if there's
- * no switch in the current function, but we were inside
- * a switch inside another function, from which this one was called.
- */
-static inline boolean
-mask_has_switch(struct lp_exec_mask *mask)
-{
-   int i;
-   for (i = mask->function_stack_size - 1; i >= 0; --i) {
-      const struct function_ctx *ctx = &mask->function_stack[i];
-      if (ctx->switch_stack_size > 0)
-         return TRUE;
-   }
-   return FALSE;
-}
-
-/*
- * Returns true if we're inside a conditional.
- * It's global, meaning that it returns true even if there's
- * no conditional in the current function, but we were inside
- * a conditional inside another function, from which this one was called.
- */
-static inline boolean
-mask_has_cond(struct lp_exec_mask *mask)
-{
-   int i;
-   for (i = mask->function_stack_size - 1; i >= 0; --i) {
-      const struct function_ctx *ctx = &mask->function_stack[i];
-      if (ctx->cond_stack_size > 0)
-         return TRUE;
-   }
-   return FALSE;
-}
-
-
-/*
- * Initialize a function context at the specified index.
- */
-static void
-lp_exec_mask_function_init(struct lp_exec_mask *mask, int function_idx)
-{
-   LLVMTypeRef int_type = LLVMInt32TypeInContext(mask->bld->gallivm->context);
-   LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   struct function_ctx *ctx =  &mask->function_stack[function_idx];
-
-   ctx->cond_stack_size = 0;
-   ctx->loop_stack_size = 0;
-   ctx->switch_stack_size = 0;
-
-   if (function_idx == 0) {
-      ctx->ret_mask = mask->ret_mask;
-   }
-
-   ctx->loop_limiter = lp_build_alloca(mask->bld->gallivm,
-                                       int_type, "looplimiter");
-   LLVMBuildStore(
-      builder,
-      LLVMConstInt(int_type, LP_MAX_TGSI_LOOP_ITERATIONS, false),
-      ctx->loop_limiter);
-}
-
-static void lp_exec_mask_init(struct lp_exec_mask *mask, struct lp_build_context *bld)
-{
-   mask->bld = bld;
-   mask->has_mask = FALSE;
-   mask->ret_in_main = FALSE;
-   /* For the main function */
-   mask->function_stack_size = 1;
-
-   mask->int_vec_type = lp_build_int_vec_type(bld->gallivm, mask->bld->type);
-   mask->exec_mask = mask->ret_mask = mask->break_mask = mask->cont_mask =
-         mask->cond_mask = mask->switch_mask =
-         LLVMConstAllOnes(mask->int_vec_type);
-
-   mask->function_stack = CALLOC(LP_MAX_NUM_FUNCS,
-                                 sizeof(mask->function_stack[0]));
-   lp_exec_mask_function_init(mask, 0);
-}
-
-static void
-lp_exec_mask_fini(struct lp_exec_mask *mask)
-{
-   FREE(mask->function_stack);
-}
-
-static void lp_exec_mask_update(struct lp_exec_mask *mask)
-{
-   LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   boolean has_loop_mask = mask_has_loop(mask);
-   boolean has_cond_mask = mask_has_cond(mask);
-   boolean has_switch_mask = mask_has_switch(mask);
-   boolean has_ret_mask = mask->function_stack_size > 1 ||
-         mask->ret_in_main;
-
-   if (has_loop_mask) {
-      /*for loops we need to update the entire mask at runtime */
-      LLVMValueRef tmp;
-      assert(mask->break_mask);
-      tmp = LLVMBuildAnd(builder,
-                         mask->cont_mask,
-                         mask->break_mask,
-                         "maskcb");
-      mask->exec_mask = LLVMBuildAnd(builder,
-                                     mask->cond_mask,
-                                     tmp,
-                                     "maskfull");
-   } else
-      mask->exec_mask = mask->cond_mask;
-
-   if (has_switch_mask) {
-      mask->exec_mask = LLVMBuildAnd(builder,
-                                     mask->exec_mask,
-                                     mask->switch_mask,
-                                     "switchmask");
-   }
-
-   if (has_ret_mask) {
-      mask->exec_mask = LLVMBuildAnd(builder,
-                                     mask->exec_mask,
-                                     mask->ret_mask,
-                                     "callmask");
-   }
-
-   mask->has_mask = (has_cond_mask ||
-                     has_loop_mask ||
-                     has_switch_mask ||
-                     has_ret_mask);
-}
-
-static void lp_exec_mask_cond_push(struct lp_exec_mask *mask,
-                                   LLVMValueRef val)
-{
-   LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   struct function_ctx *ctx = func_ctx(mask);
-
-   if (ctx->cond_stack_size >= LP_MAX_TGSI_NESTING) {
-      ctx->cond_stack_size++;
-      return;
-   }
-   if (ctx->cond_stack_size == 0 && mask->function_stack_size == 1) {
-      assert(mask->cond_mask == LLVMConstAllOnes(mask->int_vec_type));
-   }
-   ctx->cond_stack[ctx->cond_stack_size++] = mask->cond_mask;
-   assert(LLVMTypeOf(val) == mask->int_vec_type);
-   mask->cond_mask = LLVMBuildAnd(builder,
-                                  mask->cond_mask,
-                                  val,
-                                  "");
-   lp_exec_mask_update(mask);
-}
-
-static void lp_exec_mask_cond_invert(struct lp_exec_mask *mask)
-{
-   LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   struct function_ctx *ctx = func_ctx(mask);
-   LLVMValueRef prev_mask;
-   LLVMValueRef inv_mask;
-
-   assert(ctx->cond_stack_size);
-   if (ctx->cond_stack_size >= LP_MAX_TGSI_NESTING)
-      return;
-   prev_mask = ctx->cond_stack[ctx->cond_stack_size - 1];
-   if (ctx->cond_stack_size == 1 && mask->function_stack_size == 1) {
-      assert(prev_mask == LLVMConstAllOnes(mask->int_vec_type));
-   }
-
-   inv_mask = LLVMBuildNot(builder, mask->cond_mask, "");
-
-   mask->cond_mask = LLVMBuildAnd(builder,
-                                  inv_mask,
-                                  prev_mask, "");
-   lp_exec_mask_update(mask);
-}
-
-static void lp_exec_mask_cond_pop(struct lp_exec_mask *mask)
-{
-   struct function_ctx *ctx = func_ctx(mask);
-   assert(ctx->cond_stack_size);
-   --ctx->cond_stack_size;
-   if (ctx->cond_stack_size >= LP_MAX_TGSI_NESTING)
-      return;
-   mask->cond_mask = ctx->cond_stack[ctx->cond_stack_size];
-   lp_exec_mask_update(mask);
-}
-
-static void lp_exec_bgnloop(struct lp_exec_mask *mask)
-{
-   LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   struct function_ctx *ctx = func_ctx(mask);
-
-   if (ctx->loop_stack_size >= LP_MAX_TGSI_NESTING) {
-      ++ctx->loop_stack_size;
-      return;
-   }
-
-   ctx->break_type_stack[ctx->loop_stack_size + ctx->switch_stack_size] =
-      ctx->break_type;
-   ctx->break_type = LP_EXEC_MASK_BREAK_TYPE_LOOP;
-
-   ctx->loop_stack[ctx->loop_stack_size].loop_block = ctx->loop_block;
-   ctx->loop_stack[ctx->loop_stack_size].cont_mask = mask->cont_mask;
-   ctx->loop_stack[ctx->loop_stack_size].break_mask = mask->break_mask;
-   ctx->loop_stack[ctx->loop_stack_size].break_var = ctx->break_var;
-   ++ctx->loop_stack_size;
-
-   ctx->break_var = lp_build_alloca(mask->bld->gallivm, mask->int_vec_type, "");
-   LLVMBuildStore(builder, mask->break_mask, ctx->break_var);
-
-   ctx->loop_block = lp_build_insert_new_block(mask->bld->gallivm, "bgnloop");
-
-   LLVMBuildBr(builder, ctx->loop_block);
-   LLVMPositionBuilderAtEnd(builder, ctx->loop_block);
-
-   mask->break_mask = LLVMBuildLoad(builder, ctx->break_var, "");
-
-   lp_exec_mask_update(mask);
-}
-
-static void lp_exec_break(struct lp_exec_mask *mask,
+static void lp_exec_tgsi_break(struct lp_exec_mask *mask,
                           struct lp_build_tgsi_context * bld_base)
 {
-   LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   struct function_ctx *ctx = func_ctx(mask);
-
-   if (ctx->break_type == LP_EXEC_MASK_BREAK_TYPE_LOOP) {
-      LLVMValueRef exec_mask = LLVMBuildNot(builder,
-                                            mask->exec_mask,
-                                            "break");
-
-      mask->break_mask = LLVMBuildAnd(builder,
-                                      mask->break_mask,
-                                      exec_mask, "break_full");
-   }
-   else {
-      enum tgsi_opcode opcode =
-         bld_base->instructions[bld_base->pc + 1].Instruction.Opcode;
-      boolean break_always = (opcode == TGSI_OPCODE_ENDSWITCH ||
-                              opcode == TGSI_OPCODE_CASE);
-
-
-      if (ctx->switch_in_default) {
-         /*
-          * stop default execution but only if this is an unconditional switch.
-          * (The condition here is not perfect since dead code after break is
-          * allowed but should be sufficient since false negatives are just
-          * unoptimized - so we don't have to pre-evaluate that).
-          */
-         if(break_always && ctx->switch_pc) {
-            bld_base->pc = ctx->switch_pc;
-            return;
-         }
-      }
-
-      if (break_always) {
-         mask->switch_mask = LLVMConstNull(mask->bld->int_vec_type);
-      }
-      else {
-         LLVMValueRef exec_mask = LLVMBuildNot(builder,
-                                               mask->exec_mask,
-                                               "break");
-         mask->switch_mask = LLVMBuildAnd(builder,
-                                          mask->switch_mask,
-                                          exec_mask, "break_switch");
-      }
-   }
-
-   lp_exec_mask_update(mask);
-}
-
-static void lp_exec_continue(struct lp_exec_mask *mask)
-{
-   LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   LLVMValueRef exec_mask = LLVMBuildNot(builder,
-                                         mask->exec_mask,
-                                         "");
-
-   mask->cont_mask = LLVMBuildAnd(builder,
-                                  mask->cont_mask,
-                                  exec_mask, "");
-
-   lp_exec_mask_update(mask);
-}
-
-
-static void lp_exec_endloop(struct gallivm_state *gallivm,
-                            struct lp_exec_mask *mask)
-{
-   LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   struct function_ctx *ctx = func_ctx(mask);
-   LLVMBasicBlockRef endloop;
-   LLVMTypeRef int_type = LLVMInt32TypeInContext(mask->bld->gallivm->context);
-   LLVMTypeRef reg_type = LLVMIntTypeInContext(gallivm->context,
-                                               mask->bld->type.width *
-                                               mask->bld->type.length);
-   LLVMValueRef i1cond, i2cond, icond, limiter;
-
-   assert(mask->break_mask);
-
-   
-   assert(ctx->loop_stack_size);
-   if (ctx->loop_stack_size > LP_MAX_TGSI_NESTING) {
-      --ctx->loop_stack_size;
-      return;
-   }
-
-   /*
-    * Restore the cont_mask, but don't pop
-    */
-   mask->cont_mask = ctx->loop_stack[ctx->loop_stack_size - 1].cont_mask;
-   lp_exec_mask_update(mask);
-
-   /*
-    * Unlike the continue mask, the break_mask must be preserved across loop
-    * iterations
-    */
-   LLVMBuildStore(builder, mask->break_mask, ctx->break_var);
-
-   /* Decrement the loop limiter */
-   limiter = LLVMBuildLoad(builder, ctx->loop_limiter, "");
-
-   limiter = LLVMBuildSub(
-      builder,
-      limiter,
-      LLVMConstInt(int_type, 1, false),
-      "");
-
-   LLVMBuildStore(builder, limiter, ctx->loop_limiter);
-
-   /* i1cond = (mask != 0) */
-   i1cond = LLVMBuildICmp(
-      builder,
-      LLVMIntNE,
-      LLVMBuildBitCast(builder, mask->exec_mask, reg_type, ""),
-      LLVMConstNull(reg_type), "i1cond");
-
-   /* i2cond = (looplimiter > 0) */
-   i2cond = LLVMBuildICmp(
-      builder,
-      LLVMIntSGT,
-      limiter,
-      LLVMConstNull(int_type), "i2cond");
-
-   /* if( i1cond && i2cond ) */
-   icond = LLVMBuildAnd(builder, i1cond, i2cond, "");
-
-   endloop = lp_build_insert_new_block(mask->bld->gallivm, "endloop");
-
-   LLVMBuildCondBr(builder,
-                   icond, ctx->loop_block, endloop);
-
-   LLVMPositionBuilderAtEnd(builder, endloop);
-
-   assert(ctx->loop_stack_size);
-   --ctx->loop_stack_size;
-   mask->cont_mask = ctx->loop_stack[ctx->loop_stack_size].cont_mask;
-   mask->break_mask = ctx->loop_stack[ctx->loop_stack_size].break_mask;
-   ctx->loop_block = ctx->loop_stack[ctx->loop_stack_size].loop_block;
-   ctx->break_var = ctx->loop_stack[ctx->loop_stack_size].break_var;
-   ctx->break_type = ctx->break_type_stack[ctx->loop_stack_size +
-         ctx->switch_stack_size];
-
-   lp_exec_mask_update(mask);
+   enum tgsi_opcode opcode =
+      bld_base->instructions[bld_base->pc + 1].Instruction.Opcode;
+   bool break_always = (opcode == TGSI_OPCODE_ENDSWITCH ||
+                        opcode == TGSI_OPCODE_CASE);
+   lp_exec_break(mask, &bld_base->pc, break_always);
 }
 
 static void lp_exec_switch(struct lp_exec_mask *mask,
@@ -747,34 +365,6 @@ static void lp_exec_default(struct lp_exec_mask *mask,
    }
 }
 
-
-/* stores val into an address pointed to by dst_ptr.
- * mask->exec_mask is used to figure out which bits of val
- * should be stored into the address
- * (0 means don't store this bit, 1 means do store).
- */
-static void lp_exec_mask_store(struct lp_exec_mask *mask,
-                               struct lp_build_context *bld_store,
-                               LLVMValueRef val,
-                               LLVMValueRef dst_ptr)
-{
-   LLVMBuilderRef builder = mask->bld->gallivm->builder;
-   LLVMValueRef exec_mask = mask->has_mask ? mask->exec_mask : NULL;
-
-   assert(lp_check_value(bld_store->type, val));
-   assert(LLVMGetTypeKind(LLVMTypeOf(dst_ptr)) == LLVMPointerTypeKind);
-   assert(LLVMGetElementType(LLVMTypeOf(dst_ptr)) == LLVMTypeOf(val) ||
-          LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(dst_ptr))) == LLVMArrayTypeKind);
-
-   if (exec_mask) {
-      LLVMValueRef res, dst;
-
-      dst = LLVMBuildLoad(builder, dst_ptr, "");
-      res = lp_build_select(bld_store, exec_mask, val, dst);
-      LLVMBuildStore(builder, res, dst_ptr);
-   } else
-      LLVMBuildStore(builder, val, dst_ptr);
-}
 
 static void lp_exec_mask_call(struct lp_exec_mask *mask,
                               int func,
@@ -1716,6 +1306,11 @@ emit_fetch_system_value(
       atype = TGSI_TYPE_UNSIGNED;
       break;
 
+   case TGSI_SEMANTIC_BASEINSTANCE:
+      res = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.base_instance);
+      atype = TGSI_TYPE_UNSIGNED;
+      break;
+
    case TGSI_SEMANTIC_PRIMID:
       res = bld->system_values.prim_id;
       atype = TGSI_TYPE_UNSIGNED;
@@ -1743,6 +1338,15 @@ emit_fetch_system_value(
 
    case TGSI_SEMANTIC_GRID_SIZE:
       res = lp_build_extract_broadcast(gallivm, lp_type_int_vec(32, 96), bld_base->uint_bld.type, bld->system_values.grid_size, lp_build_const_int32(gallivm, swizzle));
+      atype = TGSI_TYPE_UNSIGNED;
+      break;
+
+   case TGSI_SEMANTIC_FACE:
+      res = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.front_facing);
+      break;
+
+   case TGSI_SEMANTIC_DRAWID:
+      res = lp_build_broadcast_scalar(&bld_base->uint_bld, bld->system_values.draw_id);
       atype = TGSI_TYPE_UNSIGNED;
       break;
 
@@ -2095,7 +1699,8 @@ lp_build_lod_property(
     * constant coords maybe).
     * There's at least hope for sample opcodes as well as size queries.
     */
-   if (reg->Register.File == TGSI_FILE_CONSTANT ||
+   if (inst->Instruction.Opcode == TGSI_OPCODE_TEX_LZ ||
+       reg->Register.File == TGSI_FILE_CONSTANT ||
        reg->Register.File == TGSI_FILE_IMMEDIATE) {
       lod_property = LP_SAMPLER_LOD_SCALAR;
    }
@@ -2220,8 +1825,10 @@ emit_tex( struct lp_build_tgsi_soa_context *bld,
    /* Note lod and especially projected are illegal in a LOT of cases */
    if (modifier == LP_BLD_TEX_MODIFIER_LOD_BIAS ||
        modifier == LP_BLD_TEX_MODIFIER_EXPLICIT_LOD) {
-      if (inst->Texture.Texture == TGSI_TEXTURE_SHADOWCUBE ||
-          inst->Texture.Texture == TGSI_TEXTURE_CUBE_ARRAY) {
+      if (inst->Instruction.Opcode == TGSI_OPCODE_TEX_LZ) {
+         lod = bld->bld_base.base.zero;
+      } else if (inst->Texture.Texture == TGSI_TEXTURE_SHADOWCUBE ||
+                 inst->Texture.Texture == TGSI_TEXTURE_CUBE_ARRAY) {
          /* note that shadow cube array with bias/explicit lod does not exist */
          lod = lp_build_emit_fetch(&bld->bld_base, inst, 1, 0);
       }
@@ -2578,7 +2185,8 @@ emit_fetch_texels( struct lp_build_tgsi_soa_context *bld,
    /* always have lod except for buffers and msaa targets ? */
    if (target != TGSI_TEXTURE_BUFFER &&
        target != TGSI_TEXTURE_2D_MSAA &&
-       target != TGSI_TEXTURE_2D_ARRAY_MSAA) {
+       target != TGSI_TEXTURE_2D_ARRAY_MSAA &&
+       inst->Instruction.Opcode != TGSI_OPCODE_TXF_LZ) {
       sample_key |= LP_SAMPLER_LOD_EXPLICIT << LP_SAMPLER_LOD_CONTROL_SHIFT;
       explicit_lod = lp_build_emit_fetch(&bld->bld_base, inst, 0, 3);
       lod_property = lp_build_lod_property(&bld->bld_base, inst, 0);
@@ -3499,13 +3107,46 @@ load_emit(
    LLVMBuilderRef builder = bld->bld_base.base.gallivm->builder;
    const struct tgsi_full_src_register *bufreg = &emit_data->inst->Src[0];
    unsigned buf = bufreg->Register.Index;
-   assert(bufreg->Register.File == TGSI_FILE_BUFFER || bufreg->Register.File == TGSI_FILE_IMAGE || bufreg->Register.File == TGSI_FILE_MEMORY);
+   assert(bufreg->Register.File == TGSI_FILE_BUFFER ||
+          bufreg->Register.File == TGSI_FILE_IMAGE ||
+          bufreg->Register.File == TGSI_FILE_MEMORY ||
+          bufreg->Register.File == TGSI_FILE_CONSTBUF);
    bool is_shared = bufreg->Register.File == TGSI_FILE_MEMORY;
    struct lp_build_context *uint_bld = &bld_base->uint_bld;
 
-   if (bufreg->Register.File == TGSI_FILE_IMAGE)
+   if (bufreg->Register.File == TGSI_FILE_IMAGE) {
       img_load_emit(action, bld_base, emit_data);
-   else if (0) {
+   } else if (bufreg->Register.File == TGSI_FILE_CONSTBUF) {
+      LLVMValueRef consts_ptr = bld->consts[buf];
+      LLVMValueRef num_consts = bld->consts_sizes[buf];
+
+      LLVMValueRef indirect_index;
+      LLVMValueRef overflow_mask;
+
+      indirect_index = lp_build_emit_fetch(bld_base, emit_data->inst, 1, 0);
+      indirect_index = lp_build_shr_imm(uint_bld, indirect_index, 4);
+
+      /* All fetches are from the same constant buffer, so
+       * we need to propagate the size to a vector to do a
+       * vector comparison */
+      num_consts = lp_build_broadcast_scalar(uint_bld, num_consts);
+
+      /* Gather values from the constant buffer */
+      unsigned chan_index;
+      TGSI_FOR_EACH_DST0_ENABLED_CHANNEL(emit_data->inst, chan_index) {
+         /* Construct a boolean vector telling us which channels
+          * overflow the bound constant buffer */
+         overflow_mask = lp_build_compare(gallivm, uint_bld->type, PIPE_FUNC_GEQUAL,
+                                          indirect_index, num_consts);
+
+         /* index_vec = indirect_index * 4 */
+         LLVMValueRef index_vec = lp_build_shl_imm(uint_bld, indirect_index, 2);
+         index_vec = lp_build_add(uint_bld, index_vec,
+                                  lp_build_const_int_vec(gallivm, uint_bld->type, chan_index));
+
+         emit_data->output[chan_index] = build_gather(bld_base, consts_ptr, index_vec, overflow_mask, NULL);
+      }
+   } else if (0) {
       /* for indirect support with ARB_gpu_shader5 */
    } else {
       LLVMValueRef index;
@@ -4107,7 +3748,7 @@ brk_emit(
 {
    struct lp_build_tgsi_soa_context * bld = lp_soa_context(bld_base);
 
-   lp_exec_break(&bld->exec_mask, bld_base);
+   lp_exec_tgsi_break(&bld->exec_mask, bld_base);
 }
 
 static void
@@ -4191,7 +3832,7 @@ bgnloop_emit(
 {
    struct lp_build_tgsi_soa_context * bld = lp_soa_context(bld_base);
 
-   lp_exec_bgnloop(&bld->exec_mask);
+   lp_exec_bgnloop(&bld->exec_mask, true);
 }
 
 static void
@@ -4502,9 +4143,11 @@ lp_build_tgsi_soa(struct gallivm_state *gallivm,
    bld.bld_base.op_actions[TGSI_OPCODE_TXB].emit = txb_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_TXD].emit = txd_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_TXL].emit = txl_emit;
+   bld.bld_base.op_actions[TGSI_OPCODE_TEX_LZ].emit = txl_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_TXP].emit = txp_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_TXQ].emit = txq_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_TXF].emit = txf_emit;
+   bld.bld_base.op_actions[TGSI_OPCODE_TXF_LZ].emit = txf_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_TEX2].emit = tex2_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_TXB2].emit = txb2_emit;
    bld.bld_base.op_actions[TGSI_OPCODE_TXL2].emit = txl2_emit;

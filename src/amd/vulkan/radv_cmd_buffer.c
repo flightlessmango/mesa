@@ -332,8 +332,10 @@ radv_reset_cmd_buffer(struct radv_cmd_buffer *cmd_buffer)
 	}
 
 	cmd_buffer->push_constant_stages = 0;
-	cmd_buffer->scratch_size_needed = 0;
-	cmd_buffer->compute_scratch_size_needed = 0;
+	cmd_buffer->scratch_size_per_wave_needed = 0;
+	cmd_buffer->scratch_waves_wanted = 0;
+	cmd_buffer->compute_scratch_size_per_wave_needed = 0;
+	cmd_buffer->compute_scratch_waves_wanted = 0;
 	cmd_buffer->esgs_ring_size_needed = 0;
 	cmd_buffer->gsvs_ring_size_needed = 0;
 	cmd_buffer->tess_rings_needed = false;
@@ -863,7 +865,6 @@ radv_update_multisample_state(struct radv_cmd_buffer *cmd_buffer,
 			      struct radv_pipeline *pipeline)
 {
 	int num_samples = pipeline->graphics.ms.num_samples;
-	struct radv_multisample_state *ms = &pipeline->graphics.ms;
 	struct radv_pipeline *old_pipeline = cmd_buffer->state.emitted_pipeline;
 
 	if (pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.needs_sample_positions)
@@ -872,19 +873,7 @@ radv_update_multisample_state(struct radv_cmd_buffer *cmd_buffer,
 	if (old_pipeline && num_samples == old_pipeline->graphics.ms.num_samples)
 		return;
 
-	radeon_set_context_reg_seq(cmd_buffer->cs, R_028BDC_PA_SC_LINE_CNTL, 2);
-	radeon_emit(cmd_buffer->cs, ms->pa_sc_line_cntl);
-	radeon_emit(cmd_buffer->cs, ms->pa_sc_aa_config);
-
-	radeon_set_context_reg(cmd_buffer->cs, R_028A48_PA_SC_MODE_CNTL_0, ms->pa_sc_mode_cntl_0);
-
 	radv_emit_default_sample_locations(cmd_buffer->cs, num_samples);
-
-	/* GFX9: Flush DFSM when the AA mode changes. */
-	if (cmd_buffer->device->dfsm_allowed) {
-		radeon_emit(cmd_buffer->cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
-		radeon_emit(cmd_buffer->cs, EVENT_TYPE(V_028A90_FLUSH_DFSM) | EVENT_INDEX(0));
-	}
 
 	cmd_buffer->state.context_roll_without_scissor_emitted = true;
 }
@@ -1147,9 +1136,10 @@ radv_emit_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer)
 	radv_update_multisample_state(cmd_buffer, pipeline);
 	radv_update_binning_state(cmd_buffer, pipeline);
 
-	cmd_buffer->scratch_size_needed =
-	                          MAX2(cmd_buffer->scratch_size_needed,
-	                               pipeline->max_waves * pipeline->scratch_bytes_per_wave);
+	cmd_buffer->scratch_size_per_wave_needed = MAX2(cmd_buffer->scratch_size_per_wave_needed,
+	                                                pipeline->scratch_bytes_per_wave);
+	cmd_buffer->scratch_waves_wanted = MAX2(cmd_buffer->scratch_waves_wanted,
+	                                        pipeline->max_waves);
 
 	if (!cmd_buffer->state.emitted_pipeline ||
 	    cmd_buffer->state.emitted_pipeline->graphics.can_use_guardband !=
@@ -2425,8 +2415,14 @@ radv_flush_vertex_descriptors(struct radv_cmd_buffer *cmd_buffer,
 				  S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W);
 
 			if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX10) {
+				/* OOB_SELECT chooses the out-of-bounds check:
+				 * - 1: index >= NUM_RECORDS (Structured)
+				 * - 3: offset >= NUM_RECORDS (Raw)
+				 */
+                               int oob_select = stride ? V_008F0C_OOB_SELECT_STRUCTURED : V_008F0C_OOB_SELECT_RAW;
+
                                desc[3] |= S_008F0C_FORMAT(V_008F0C_IMG_FORMAT_32_UINT) |
-                                          S_008F0C_OOB_SELECT(1) |
+                                          S_008F0C_OOB_SELECT(oob_select) |
                                           S_008F0C_RESOURCE_LEVEL(1);
                        } else {
                                desc[3] |= S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_UINT) |
@@ -2532,7 +2528,7 @@ radv_flush_streamout_descriptors(struct radv_cmd_buffer *cmd_buffer)
 
 			if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX10) {
 				desc[3] |= S_008F0C_FORMAT(V_008F0C_IMG_FORMAT_32_FLOAT) |
-					   S_008F0C_OOB_SELECT(3) |
+					   S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_RAW) |
 					   S_008F0C_RESOURCE_LEVEL(1);
 			} else {
 				desc[3] |= S_008F0C_DATA_FORMAT(V_008F0C_BUF_DATA_FORMAT_32);
@@ -2863,7 +2859,8 @@ radv_dst_access_flush(struct radv_cmd_buffer *cmd_buffer,
 			flush_bits |= RADV_CMD_FLAG_INV_VCACHE;
 			/* Unlike LLVM, ACO uses SMEM for SSBOs and we have to
 			 * invalidate the scalar cache. */
-			if (cmd_buffer->device->physical_device->use_aco)
+			if (cmd_buffer->device->physical_device->use_aco &&
+			    cmd_buffer->device->physical_device->rad_info.chip_class >= GFX8)
 				flush_bits |= RADV_CMD_FLAG_INV_SCACHE;
 
 			if (!image_is_coherent)
@@ -2960,7 +2957,7 @@ static void radv_handle_subpass_image_transition(struct radv_cmd_buffer *cmd_buf
 	struct radv_image_view *view = cmd_buffer->state.attachments[idx].iview;
 	struct radv_sample_locations_state *sample_locs;
 	VkImageSubresourceRange range;
-	range.aspectMask = 0;
+	range.aspectMask = view->aspect_mask;
 	range.baseMipLevel = view->base_mip;
 	range.levelCount = 1;
 	range.baseArrayLayer = view->base_layer;
@@ -2983,14 +2980,48 @@ static void radv_handle_subpass_image_transition(struct radv_cmd_buffer *cmd_buf
 	sample_locs = radv_get_attachment_sample_locations(cmd_buffer, idx,
 							   begin_subpass);
 
-	radv_handle_image_transition(cmd_buffer,
-				     view->image,
-				     cmd_buffer->state.attachments[idx].current_layout,
-				     cmd_buffer->state.attachments[idx].current_in_render_loop,
-				     att.layout, att.in_render_loop,
-				     0, 0, &range, sample_locs);
+	/* Determine if the subpass uses separate depth/stencil layouts. */
+	bool uses_separate_depth_stencil_layouts = false;
+	if ((cmd_buffer->state.attachments[idx].current_layout !=
+	     cmd_buffer->state.attachments[idx].current_stencil_layout) ||
+	    (att.layout != att.stencil_layout)) {
+		uses_separate_depth_stencil_layouts = true;
+	}
+
+	/* For separate layouts, perform depth and stencil transitions
+	 * separately.
+	 */
+	if (uses_separate_depth_stencil_layouts &&
+	    (range.aspectMask == (VK_IMAGE_ASPECT_DEPTH_BIT |
+				  VK_IMAGE_ASPECT_STENCIL_BIT))) {
+		/* Depth-only transitions. */
+		range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		radv_handle_image_transition(cmd_buffer,
+					     view->image,
+					     cmd_buffer->state.attachments[idx].current_layout,
+					     cmd_buffer->state.attachments[idx].current_in_render_loop,
+					     att.layout, att.in_render_loop,
+					     0, 0, &range, sample_locs);
+
+		/* Stencil-only transitions. */
+		range.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+		radv_handle_image_transition(cmd_buffer,
+					     view->image,
+					     cmd_buffer->state.attachments[idx].current_stencil_layout,
+					     cmd_buffer->state.attachments[idx].current_in_render_loop,
+					     att.stencil_layout, att.in_render_loop,
+					     0, 0, &range, sample_locs);
+	} else {
+		radv_handle_image_transition(cmd_buffer,
+					     view->image,
+					     cmd_buffer->state.attachments[idx].current_layout,
+					     cmd_buffer->state.attachments[idx].current_in_render_loop,
+					     att.layout, att.in_render_loop,
+					     0, 0, &range, sample_locs);
+	}
 
 	cmd_buffer->state.attachments[idx].current_layout = att.layout;
+	cmd_buffer->state.attachments[idx].current_stencil_layout = att.stencil_layout;
 	cmd_buffer->state.attachments[idx].current_in_render_loop = att.in_render_loop;
 
 
@@ -3147,6 +3178,7 @@ radv_cmd_state_setup_attachments(struct radv_cmd_buffer *cmd_buffer,
 		}
 
 		state->attachments[i].current_layout = att->initial_layout;
+		state->attachments[i].current_stencil_layout = att->stencil_initial_layout;
 		state->attachments[i].sample_location.count = 0;
 
 		struct radv_image_view *iview;
@@ -3470,7 +3502,7 @@ void radv_CmdBindDescriptorSets(
 
 			if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX10) {
 				dst[3] |= S_008F0C_FORMAT(V_008F0C_IMG_FORMAT_32_FLOAT) |
-					  S_008F0C_OOB_SELECT(3) |
+					  S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_RAW) |
 					  S_008F0C_RESOURCE_LEVEL(1);
 			} else {
 				dst[3] |= S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_FLOAT) |
@@ -3678,9 +3710,10 @@ radv_emit_compute_pipeline(struct radv_cmd_buffer *cmd_buffer)
 	radeon_check_space(cmd_buffer->device->ws, cmd_buffer->cs, pipeline->cs.cdw);
 	radeon_emit_array(cmd_buffer->cs, pipeline->cs.buf, pipeline->cs.cdw);
 
-	cmd_buffer->compute_scratch_size_needed =
-	                          MAX2(cmd_buffer->compute_scratch_size_needed,
-	                               pipeline->max_waves * pipeline->scratch_bytes_per_wave);
+	cmd_buffer->compute_scratch_size_per_wave_needed = MAX2(cmd_buffer->compute_scratch_size_per_wave_needed,
+	                                                        pipeline->scratch_bytes_per_wave);
+	cmd_buffer->compute_scratch_waves_wanted = MAX2(cmd_buffer->compute_scratch_waves_wanted,
+	                                                pipeline->max_waves);
 
 	radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs,
 			   pipeline->shaders[MESA_SHADER_COMPUTE]->bo);
@@ -4009,10 +4042,14 @@ void radv_CmdExecuteCommands(
 	for (uint32_t i = 0; i < commandBufferCount; i++) {
 		RADV_FROM_HANDLE(radv_cmd_buffer, secondary, pCmdBuffers[i]);
 
-		primary->scratch_size_needed = MAX2(primary->scratch_size_needed,
-		                                    secondary->scratch_size_needed);
-		primary->compute_scratch_size_needed = MAX2(primary->compute_scratch_size_needed,
-		                                            secondary->compute_scratch_size_needed);
+		primary->scratch_size_per_wave_needed = MAX2(primary->scratch_size_per_wave_needed,
+		                                             secondary->scratch_size_per_wave_needed);
+		primary->scratch_waves_wanted = MAX2(primary->scratch_waves_wanted,
+		                                     secondary->scratch_waves_wanted);
+		primary->compute_scratch_size_per_wave_needed = MAX2(primary->compute_scratch_size_per_wave_needed,
+		                                                     secondary->compute_scratch_size_per_wave_needed);
+		primary->compute_scratch_waves_wanted = MAX2(primary->compute_scratch_waves_wanted,
+		                                             secondary->compute_scratch_waves_wanted);
 
 		if (secondary->esgs_ring_size_needed > primary->esgs_ring_size_needed)
 			primary->esgs_ring_size_needed = secondary->esgs_ring_size_needed;
@@ -4222,7 +4259,8 @@ radv_cmd_buffer_end_subpass(struct radv_cmd_buffer *cmd_buffer)
 			continue;
 
 		VkImageLayout layout = state->pass->attachments[a].final_layout;
-		struct radv_subpass_attachment att = { a, layout };
+		VkImageLayout stencil_layout = state->pass->attachments[a].stencil_final_layout;
+		struct radv_subpass_attachment att = { a, layout, stencil_layout };
 		radv_handle_subpass_image_transition(cmd_buffer, att, false);
 	}
 }
@@ -5130,19 +5168,19 @@ void radv_CmdEndRenderPass2KHR(
  */
 static void radv_initialize_htile(struct radv_cmd_buffer *cmd_buffer,
                                   struct radv_image *image,
-                                  const VkImageSubresourceRange *range,
-                                  uint32_t clear_word)
+                                  const VkImageSubresourceRange *range)
 {
 	assert(range->baseMipLevel == 0);
 	assert(range->levelCount == 1 || range->levelCount == VK_REMAINING_ARRAY_LAYERS);
 	VkImageAspectFlags aspects = VK_IMAGE_ASPECT_DEPTH_BIT;
 	struct radv_cmd_state *state = &cmd_buffer->state;
+	uint32_t htile_value = vk_format_is_stencil(image->vk_format) ? 0xfffff30f : 0xfffc000f;
 	VkClearDepthStencilValue value = {};
 
 	state->flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB |
 			     RADV_CMD_FLAG_FLUSH_AND_INV_DB_META;
 
-	state->flush_bits |= radv_clear_htile(cmd_buffer, image, range, clear_word);
+	state->flush_bits |= radv_clear_htile(cmd_buffer, image, range, htile_value);
 
 	state->flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB_META;
 
@@ -5176,18 +5214,10 @@ static void radv_handle_depth_image_transition(struct radv_cmd_buffer *cmd_buffe
 		return;
 
 	if (src_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
-		uint32_t clear_value = vk_format_is_stencil(image->vk_format) ? 0xfffff30f : 0xfffc000f;
-
-		if (radv_layout_is_htile_compressed(image, dst_layout, dst_render_loop,
-						    dst_queue_mask)) {
-			clear_value = 0;
-		}
-
-		radv_initialize_htile(cmd_buffer, image, range, clear_value);
+		radv_initialize_htile(cmd_buffer, image, range);
 	} else if (!radv_layout_is_htile_compressed(image, src_layout, src_render_loop, src_queue_mask) &&
 	           radv_layout_is_htile_compressed(image, dst_layout, dst_render_loop, dst_queue_mask)) {
-		uint32_t clear_value = vk_format_is_stencil(image->vk_format) ? 0xfffff30f : 0xfffc000f;
-		radv_initialize_htile(cmd_buffer, image, range, clear_value);
+		radv_initialize_htile(cmd_buffer, image, range);
 	} else if (radv_layout_is_htile_compressed(image, src_layout, src_render_loop, src_queue_mask) &&
 	           !radv_layout_is_htile_compressed(image, dst_layout, dst_render_loop, dst_queue_mask)) {
 		cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_DB |
@@ -6181,6 +6211,8 @@ void radv_CmdWriteBufferMarkerAMD(
 
 	si_emit_cache_flush(cmd_buffer);
 
+	ASSERTED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cmd_buffer->cs, 12);
+
 	if (!(pipelineStage & ~VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT)) {
 		radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
 		radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_IMM) |
@@ -6200,4 +6232,6 @@ void radv_CmdWriteBufferMarkerAMD(
 					   va, marker,
 					   cmd_buffer->gfx9_eop_bug_va);
 	}
+
+	assert(cmd_buffer->cs->cdw <= cdw_max);
 }

@@ -724,25 +724,22 @@ static void gfx10_emit_ge_cntl(struct si_context *sctx, unsigned num_patches)
 	if (sctx->ngg) {
 		if (sctx->tes_shader.cso) {
 			ge_cntl = S_03096C_PRIM_GRP_SIZE(num_patches) |
-				  S_03096C_VERT_GRP_SIZE(0) |
+				  S_03096C_VERT_GRP_SIZE(256) | /* 256 = disable vertex grouping */
 				  S_03096C_BREAK_WAVE_AT_EOI(key.u.tess_uses_prim_id);
 		} else {
 			ge_cntl = si_get_vs_state(sctx)->ge_cntl;
 		}
 	} else {
 		unsigned primgroup_size;
-		unsigned vertgroup_size;
+		unsigned vertgroup_size = 256; /* 256 = disable vertex grouping */;
 
 		if (sctx->tes_shader.cso) {
 			primgroup_size = num_patches; /* must be a multiple of NUM_PATCHES */
-			vertgroup_size = 0;
 		} else if (sctx->gs_shader.cso) {
 			unsigned vgt_gs_onchip_cntl = sctx->gs_shader.current->ctx_reg.gs.vgt_gs_onchip_cntl;
 			primgroup_size = G_028A44_GS_PRIMS_PER_SUBGRP(vgt_gs_onchip_cntl);
-			vertgroup_size = G_028A44_ES_VERTS_PER_SUBGRP(vgt_gs_onchip_cntl);
 		} else {
 			primgroup_size = 128; /* recommended without a GS and tess */
-			vertgroup_size = 0;
 		}
 
 		ge_cntl = S_03096C_PRIM_GRP_SIZE(primgroup_size) |
@@ -1996,6 +1993,7 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 	    (!sctx->tes_shader.cso || pd_msg("uses tess")) &&
 	    (!sctx->gs_shader.cso || pd_msg("uses GS")) &&
 	    (!sctx->ps_shader.cso->info.uses_primid || pd_msg("PS uses PrimID")) &&
+	    !rs->polygon_mode_enabled &&
 #if SI_PRIM_DISCARD_DEBUG /* same as cso->prim_discard_cs_allowed */
 	    (!sctx->vs_shader.cso->info.uses_bindless_images || pd_msg("uses bindless images")) &&
 	    (!sctx->vs_shader.cso->info.uses_bindless_samplers || pd_msg("uses bindless samplers")) &&
@@ -2140,6 +2138,20 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 		 * started. */
 		if (sctx->chip_class >= GFX7 && sctx->prefetch_L2_mask)
 			cik_emit_prefetch_L2(sctx, false);
+	}
+
+	/* Mark the displayable dcc buffer as dirty in order to update
+	 * it on the next call to si_flush_resource. */
+	if (sctx->screen->info.use_display_dcc_with_retile_blit) {
+		/* Don't use si_update_fb_dirtiness_after_rendering because it'll
+		 * cause unnecessary texture decompressions on each draw. */
+		unsigned displayable_dcc_cb_mask = sctx->framebuffer.displayable_dcc_cb_mask;
+		while (displayable_dcc_cb_mask) {
+			unsigned i = u_bit_scan(&displayable_dcc_cb_mask);
+			struct pipe_surface *surf = sctx->framebuffer.state.cbufs[i];
+			struct si_texture *tex = (struct si_texture*) surf->texture;
+			tex->displayable_dcc_dirty = true;
+		}
 	}
 
 	/* Clear the context roll flag after the draw call. */

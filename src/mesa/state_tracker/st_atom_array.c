@@ -386,7 +386,7 @@ set_vertex_attribs(struct st_context *st,
 void
 st_setup_arrays(struct st_context *st,
                 const struct st_vertex_program *vp,
-                const struct st_vp_variant *vp_variant,
+                const struct st_common_variant *vp_variant,
                 struct pipe_vertex_element *velements,
                 struct pipe_vertex_buffer *vbuffer, unsigned *num_vbuffers)
 {
@@ -456,7 +456,7 @@ st_setup_arrays(struct st_context *st,
 void
 st_setup_current(struct st_context *st,
                  const struct st_vertex_program *vp,
-                 const struct st_vp_variant *vp_variant,
+                 const struct st_common_variant *vp_variant,
                  struct pipe_vertex_element *velements,
                  struct pipe_vertex_buffer *vbuffer, unsigned *num_vbuffers)
 {
@@ -466,8 +466,6 @@ st_setup_current(struct st_context *st,
    /* Process values that should have better been uniforms in the application */
    GLbitfield curmask = inputs_read & _mesa_draw_current_bits(ctx);
    if (curmask) {
-      /* vertex program validation must be done before this */
-      const struct st_vertex_program *vp = st->vp;
       const ubyte *input_to_index = vp->input_to_index;
       /* For each attribute, upload the maximum possible size. */
       GLubyte data[VERT_ATTRIB_MAX * sizeof(GLdouble) * 4];
@@ -518,7 +516,7 @@ st_setup_current(struct st_context *st,
 void
 st_setup_current_user(struct st_context *st,
                       const struct st_vertex_program *vp,
-                      const struct st_vp_variant *vp_variant,
+                      const struct st_common_variant *vp_variant,
                       struct pipe_vertex_element *velements,
                       struct pipe_vertex_buffer *vbuffer, unsigned *num_vbuffers)
 {
@@ -550,8 +548,8 @@ st_update_array(struct st_context *st)
 {
    /* vertex program validation must be done before this */
    /* _NEW_PROGRAM, ST_NEW_VS_STATE */
-   const struct st_vertex_program *vp = st->vp;
-   const struct st_vp_variant *vp_variant = st->vp_variant;
+   const struct st_vertex_program *vp = (struct st_vertex_program *)st->vp;
+   const struct st_common_variant *vp_variant = st->vp_variant;
 
    struct pipe_vertex_buffer vbuffer[PIPE_MAX_ATTRIBS];
    unsigned num_vbuffers = 0, first_upload_vbuffer;
@@ -570,7 +568,7 @@ st_update_array(struct st_context *st)
    st_setup_current(st, vp, vp_variant, velements, vbuffer, &num_vbuffers);
 
    /* Set the array into cso */
-   num_velements = vp_variant->num_inputs;
+   num_velements = vp->num_inputs + vp_variant->key.passthrough_edgeflags;
    set_vertex_attribs(st, vbuffer, num_vbuffers, velements, num_velements);
 
    /* Unreference uploaded buffer resources. */

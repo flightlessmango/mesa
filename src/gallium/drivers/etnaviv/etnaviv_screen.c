@@ -403,11 +403,71 @@ gpu_supports_texture_format(struct etna_screen *screen, uint32_t fmt,
       supported = screen->specs.tex_astc;
    }
 
+   if (util_format_is_snorm(format))
+      supported = VIV_FEATURE(screen, chipMinorFeatures2, HALTI1);
+
+   if (util_format_is_pure_integer(format) || util_format_is_float(format))
+      supported = VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
+
+
    if (!supported)
       return false;
 
    if (texture_format_needs_swiz(format))
       return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
+
+   return true;
+}
+
+static bool
+gpu_supports_render_format(struct etna_screen *screen, enum pipe_format format,
+                           unsigned sample_count)
+{
+   const uint32_t fmt = translate_pe_format(format);
+
+   if (fmt == ETNA_NO_MATCH)
+      return false;
+
+   /* Validate MSAA; number of samples must be allowed, and render target
+    * must have MSAA'able format. */
+   if (sample_count > 1) {
+      if (!translate_samples_to_xyscale(sample_count, NULL, NULL))
+         return false;
+      if (translate_ts_format(format) == ETNA_NO_MATCH)
+         return false;
+   }
+
+   if (format == PIPE_FORMAT_R8_UNORM)
+      return VIV_FEATURE(screen, chipMinorFeatures5, HALTI5);
+
+   /* figure out 8bpp RS clear to enable these formats */
+   if (format == PIPE_FORMAT_R8_SINT || format == PIPE_FORMAT_R8_UINT)
+      return VIV_FEATURE(screen, chipMinorFeatures5, HALTI5);
+
+   if (util_format_is_srgb(format))
+      return VIV_FEATURE(screen, chipMinorFeatures5, HALTI3);
+
+   if (util_format_is_pure_integer(format) || util_format_is_float(format))
+      return VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
+
+   if (format == PIPE_FORMAT_R8G8_UNORM)
+      return VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
+
+   /* any other extended format is HALTI0 (only R10G10B10A2?) */
+   if (fmt >= PE_FORMAT_R16F)
+      return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
+
+   return true;
+}
+
+static bool
+gpu_supports_vertex_format(struct etna_screen *screen, enum pipe_format format)
+{
+   if (translate_vertex_format_type(format) == ETNA_NO_MATCH)
+      return false;
+
+   if (util_format_is_pure_integer(format))
+      return VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
 
    return true;
 }
@@ -430,19 +490,8 @@ etna_screen_is_format_supported(struct pipe_screen *pscreen,
       return false;
 
    if (usage & PIPE_BIND_RENDER_TARGET) {
-      /* if render target, must be RS-supported format */
-      if (translate_pe_format(format) != ETNA_NO_MATCH) {
-         /* Validate MSAA; number of samples must be allowed, and render target
-          * must have MSAA'able format. */
-         if (sample_count > 1) {
-            if (translate_samples_to_xyscale(sample_count, NULL, NULL, NULL) &&
-                translate_ts_format(format) != ETNA_NO_MATCH) {
-               allowed |= PIPE_BIND_RENDER_TARGET;
-            }
-         } else {
-            allowed |= PIPE_BIND_RENDER_TARGET;
-         }
-      }
+      if (gpu_supports_render_format(screen, format, sample_count))
+         allowed |= PIPE_BIND_RENDER_TARGET;
    }
 
    if (usage & PIPE_BIND_DEPTH_STENCIL) {
@@ -461,7 +510,7 @@ etna_screen_is_format_supported(struct pipe_screen *pscreen,
    }
 
    if (usage & PIPE_BIND_VERTEX_BUFFER) {
-      if (translate_vertex_format_type(format) != ETNA_NO_MATCH)
+      if (gpu_supports_vertex_format(screen, format))
          allowed |= PIPE_BIND_VERTEX_BUFFER;
    }
 

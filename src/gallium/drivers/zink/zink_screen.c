@@ -122,11 +122,7 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1 + util_logbase2(screen->props.limits.maxImageDimensionCube);
 
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
-      return 1;
-
    case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
-      return 0; /* TODO: re-enable after implementing nir_texop_txd */
-
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
    case PIPE_CAP_VERTEX_SHADER_SATURATE:
       return 1;
@@ -143,10 +139,8 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 0;
 #endif
 
-#if 0 /* TODO: Enable me */
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
       return 1;
-#endif
 
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
       return 1;
@@ -486,42 +480,44 @@ zink_is_format_supported(struct pipe_screen *pscreen,
 
    VkFormat vkformat = zink_get_format(screen, format);
    if (vkformat == VK_FORMAT_UNDEFINED)
-      return FALSE;
+      return false;
 
    if (sample_count >= 1) {
       VkSampleCountFlagBits sample_mask = vk_sample_count_flags(sample_count);
+      if (!sample_mask)
+         return false;
       const struct util_format_description *desc = util_format_description(format);
       if (util_format_is_depth_or_stencil(format)) {
          if (util_format_has_depth(desc)) {
             if (bind & PIPE_BIND_DEPTH_STENCIL &&
                 (screen->props.limits.framebufferDepthSampleCounts & sample_mask) != sample_mask)
-               return FALSE;
+               return false;
             if (bind & PIPE_BIND_SAMPLER_VIEW &&
                 (screen->props.limits.sampledImageDepthSampleCounts & sample_mask) != sample_mask)
-               return FALSE;
+               return false;
          }
          if (util_format_has_stencil(desc)) {
             if (bind & PIPE_BIND_DEPTH_STENCIL &&
                 (screen->props.limits.framebufferStencilSampleCounts & sample_mask) != sample_mask)
-               return FALSE;
+               return false;
             if (bind & PIPE_BIND_SAMPLER_VIEW &&
                 (screen->props.limits.sampledImageStencilSampleCounts & sample_mask) != sample_mask)
-               return FALSE;
+               return false;
          }
       } else if (util_format_is_pure_integer(format)) {
          if (bind & PIPE_BIND_RENDER_TARGET &&
              !(screen->props.limits.framebufferColorSampleCounts & sample_mask))
-            return FALSE;
+            return false;
          if (bind & PIPE_BIND_SAMPLER_VIEW &&
              !(screen->props.limits.sampledImageIntegerSampleCounts & sample_mask))
-            return FALSE;
+            return false;
       } else {
          if (bind & PIPE_BIND_RENDER_TARGET &&
              !(screen->props.limits.framebufferColorSampleCounts & sample_mask))
-            return FALSE;
+            return false;
          if (bind & PIPE_BIND_SAMPLER_VIEW &&
              !(screen->props.limits.sampledImageColorSampleCounts & sample_mask))
-            return FALSE;
+            return false;
       }
    }
 
@@ -531,34 +527,34 @@ zink_is_format_supported(struct pipe_screen *pscreen,
    if (target == PIPE_BUFFER) {
       if (bind & PIPE_BIND_VERTEX_BUFFER &&
           !(props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT))
-         return FALSE;
+         return false;
    } else {
       /* all other targets are texture-targets */
       if (bind & PIPE_BIND_RENDER_TARGET &&
           !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT))
-         return FALSE;
+         return false;
 
       if (bind & PIPE_BIND_BLENDABLE &&
          !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT))
-        return FALSE;
+        return false;
 
       if (bind & PIPE_BIND_SAMPLER_VIEW &&
           !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT))
-         return FALSE;
+         return false;
 
       if (bind & PIPE_BIND_DEPTH_STENCIL &&
           !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
-         return FALSE;
+         return false;
    }
 
    if (util_format_is_compressed(format)) {
       const struct util_format_description *desc = util_format_description(format);
       if (desc->layout == UTIL_FORMAT_LAYOUT_BPTC &&
           !screen->feats.textureCompressionBC)
-         return FALSE;
+         return false;
    }
 
-   return TRUE;
+   return true;
 }
 
 static void

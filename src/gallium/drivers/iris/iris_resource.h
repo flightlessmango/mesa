@@ -163,6 +163,13 @@ struct iris_resource {
    } aux;
 
    /**
+    * For external surfaces, this is format that was used to create or import
+    * the surface. For internal surfaces, this will always be
+    * PIPE_FORMAT_NONE.
+    */
+   enum pipe_format external_format;
+
+   /**
     * For external surfaces, this is DRM format modifier that was used to
     * create or import the surface.  For internal surfaces, this will always
     * be DRM_FORMAT_MOD_INVALID.
@@ -177,6 +184,33 @@ struct iris_resource {
 struct iris_state_ref {
    struct pipe_resource *res;
    uint32_t offset;
+};
+
+/**
+ * The SURFACE_STATE descriptors for a resource.
+ */
+struct iris_surface_state {
+   /**
+    * CPU-side copy of the packed SURFACE_STATE structures, already
+    * aligned so they can be uploaded as a contiguous pile of bytes.
+    *
+    * This can be updated and re-uploaded if (e.g.) addresses need to change.
+    */
+   uint32_t *cpu;
+
+   /**
+    * How many states are there?  (Each aux mode has its own state.)
+    */
+   unsigned num_states;
+
+   /**
+    * Address of the resource (res->bo->gtt_offset).  Note that "Surface
+    * Base Address" may be offset from this value.
+    */
+   uint64_t bo_address;
+
+   /** A reference to the GPU buffer holding our uploaded SURFACE_STATE */
+   struct iris_state_ref ref;
 };
 
 /**
@@ -200,7 +234,7 @@ struct iris_sampler_view {
    struct iris_resource *res;
 
    /** The resource (BO) holding our SURFACE_STATE. */
-   struct iris_state_ref surface_state;
+   struct iris_surface_state surface_state;
 };
 
 /**
@@ -210,7 +244,7 @@ struct iris_image_view {
    struct pipe_image_view base;
 
    /** The resource (BO) holding our SURFACE_STATE. */
-   struct iris_state_ref surface_state;
+   struct iris_surface_state surface_state;
 };
 
 /**
@@ -226,9 +260,9 @@ struct iris_surface {
    union isl_color_value clear_color;
 
    /** The resource (BO) holding our SURFACE_STATE. */
-   struct iris_state_ref surface_state;
+   struct iris_surface_state surface_state;
    /** The resource (BO) holding our SURFACE_STATE for read. */
-   struct iris_state_ref surface_state_read;
+   struct iris_surface_state surface_state_read;
 };
 
 /**

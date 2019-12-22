@@ -807,6 +807,8 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
       if (templ->usage == PIPE_USAGE_STAGING ||
           templ->bind & (PIPE_BIND_LINEAR | PIPE_BIND_CURSOR) )
          tiling_flags = ISL_TILING_LINEAR_BIT;
+      else if (templ->bind & PIPE_BIND_SCANOUT)
+         tiling_flags = ISL_TILING_X_BIT;
    }
 
    isl_surf_usage_flags_t usage = pipe_bind_to_isl_usage(templ->bind);
@@ -994,6 +996,7 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
    }
    assert(mod_inf);
 
+   res->external_format = whandle->format;
    res->mod_info = mod_inf;
 
    isl_surf_usage_flags_t isl_usage = pipe_bind_to_isl_usage(templ->bind);
@@ -1005,7 +1008,8 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
    if (templ->target == PIPE_BUFFER) {
       res->surf.tiling = ISL_TILING_LINEAR;
    } else {
-      if (whandle->modifier == DRM_FORMAT_MOD_INVALID || whandle->plane == 0) {
+      /* Create a surface for each plane specified by the external format. */
+      if (whandle->plane < util_format_get_num_planes(whandle->format)) {
          UNUSED const bool isl_surf_created_successfully =
             isl_surf_init(&screen->isl_dev, &res->surf,
                           .dim = target_to_isl_surf_dim(templ->target),
@@ -1183,6 +1187,8 @@ iris_resource_get_handle(struct pipe_screen *pscreen,
       whandle->stride = res->surf.row_pitch_B;
       bo = res->bo;
    }
+
+   whandle->format = res->external_format;
    whandle->modifier =
       res->mod_info ? res->mod_info->modifier
                     : tiling_to_modifier(res->bo->tiling_mode);
@@ -1265,7 +1271,7 @@ iris_invalidate_resource(struct pipe_context *ctx,
    /* Rebind the buffer, replacing any state referring to the old BO's
     * address, and marking state dirty so it's reemitted.
     */
-   ice->vtbl.rebind_buffer(ice, res, old_bo->gtt_offset);
+   ice->vtbl.rebind_buffer(ice, res);
 
    util_range_set_empty(&res->valid_buffer_range);
 

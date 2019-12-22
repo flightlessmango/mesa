@@ -26,6 +26,7 @@ apt-get -y install \
 	libvulkan-dev \
 	libvulkan1 \
 	meson \
+	netcat \
 	pkg-config \
 	procps \
 	python \
@@ -37,9 +38,9 @@ apt-get -y install \
 
 . .gitlab-ci/build-cts-runner.sh
 
-############### Build dEQP
+############### Build dEQP GL
 
-. .gitlab-ci/build-deqp.sh
+. .gitlab-ci/build-deqp-gl.sh
 
 
 ############### Uninstall the build software

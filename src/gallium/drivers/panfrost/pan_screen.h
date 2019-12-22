@@ -80,7 +80,9 @@ struct panfrost_screen {
 
         /* Properties of the GPU in use */
         unsigned gpu_id;
-        bool require_sfbd;
+        unsigned core_count;
+        unsigned thread_tls_alloc;
+        unsigned quirks;
 
         drmVersionPtr kernel_version;
 

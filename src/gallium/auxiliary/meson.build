@@ -284,8 +284,6 @@ files_libgallium = files(
   'util/u_linear.h',
   'util/u_log.c',
   'util/u_log.h',
-  'util/u_mm.c',
-  'util/u_mm.h',
   'util/u_network.c',
   'util/u_network.h',
   'util/u_pack_color.h',
@@ -307,6 +305,8 @@ files_libgallium = files(
   'util/u_screen.h',
   'util/u_simple_shaders.c',
   'util/u_simple_shaders.h',
+  'util/u_split_draw.c',
+  'util/u_split_draw.h',
   'util/u_split_prim.h',
   'util/u_sse.h',
   'util/u_suballoc.c',
@@ -336,6 +336,8 @@ files_libgallium = files(
   'util/u_viewport.h',
   'nir/tgsi_to_nir.c',
   'nir/tgsi_to_nir.h',
+  'nir/nir_draw_helpers.c',
+  'nir/nir_draw_helpers.h',
 )
 
 if dep_libdrm.found()
@@ -381,11 +383,16 @@ if with_llvm
     'gallivm/lp_bld_init.h',
     'gallivm/lp_bld_intr.c',
     'gallivm/lp_bld_intr.h',
+    'gallivm/lp_bld_ir_common.c',
+    'gallivm/lp_bld_ir_common.h',
     'gallivm/lp_bld_limits.h',
     'gallivm/lp_bld_logic.c',
     'gallivm/lp_bld_logic.h',
     'gallivm/lp_bld_misc.cpp',
     'gallivm/lp_bld_misc.h',
+    'gallivm/lp_bld_nir.h',
+    'gallivm/lp_bld_nir.c',
+    'gallivm/lp_bld_nir_soa.c',
     'gallivm/lp_bld_pack.c',
     'gallivm/lp_bld_pack.h',
     'gallivm/lp_bld_printf.c',
@@ -415,6 +422,8 @@ if with_llvm
     'draw/draw_llvm_sample.c',
     'draw/draw_pt_fetch_shade_pipeline_llvm.c',
     'draw/draw_vs_llvm.c',
+    'nir/nir_to_tgsi_info.c',
+    'nir/nir_to_tgsi_info.h',
   )
 endif
 

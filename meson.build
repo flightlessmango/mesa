@@ -53,6 +53,7 @@ with_glx_read_only_text = get_option('glx-read-only-text')
 with_glx_direct = get_option('glx-direct')
 with_osmesa = get_option('osmesa')
 with_swr_arches = get_option('swr-arches')
+with_vulkan_overlay_layer = get_option('vulkan-overlay-layer')
 with_tools = get_option('tools')
 if with_tools.contains('all')
   with_tools = [
@@ -68,6 +69,9 @@ if with_tools.contains('all')
     'xvmc',
   ]
 endif
+
+with_intel_tools = with_tools.contains('intel') or with_tools.contains('intel-ui')
+with_imgui = with_intel_tools or with_vulkan_overlay_layer
 
 dri_drivers_path = get_option('dri-drivers-path')
 if dri_drivers_path == ''
@@ -162,7 +166,8 @@ if gallium_drivers.contains('auto')
     # TODO: PPC, Sparc
     if ['x86', 'x86_64'].contains(host_machine.cpu_family())
       gallium_drivers = [
-        'r300', 'r600', 'radeonsi', 'nouveau', 'virgl', 'svga', 'swrast'
+        'r300', 'r600', 'radeonsi', 'nouveau', 'virgl', 'svga', 'swrast',
+        'iris'
       ]
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
       gallium_drivers = [
@@ -992,10 +997,10 @@ else
     c_vis_args += '-fvisibility=hidden'
   endif
 
-  # Check for C and C++ arguments for MSVC2013 compatibility. These are only
-  # used in parts of the mesa code base that need to compile with old versions
-  # of MSVC, mainly common code
-  foreach a : ['-Werror=pointer-arith', '-Werror=vla']
+  # Check for C and C++ arguments for MSVC compatibility. These are only used
+  # in parts of the mesa code base that need to compile with MSVC, mainly
+  # common code
+  foreach a : ['-Werror=pointer-arith', '-Werror=vla', '-Werror=gnu-empty-initializer']
     if cc.has_argument(a)
       c_msvc_compat_args += a
     endif
@@ -1223,14 +1228,12 @@ ld_args_build_id = cc.get_supported_link_arguments('-Wl,--build-id=sha1')
 
 # check for dl support
 dep_dl = null_dep
-if host_machine.system() != 'windows'
-  if not cc.has_function('dlopen')
-    dep_dl = cc.find_library('dl')
-  endif
-  if cc.has_function('dladdr', dependencies : dep_dl)
-    # This is really only required for megadrivers
-    pre_args += '-DHAVE_DLADDR'
-  endif
+if not cc.has_function('dlopen')
+  dep_dl = cc.find_library('dl', required : host_machine.system() != 'windows')
+endif
+if cc.has_function('dladdr', dependencies : dep_dl)
+  # This is really only required for megadrivers
+  pre_args += '-DHAVE_DLADDR'
 endif
 
 if cc.has_function('dl_iterate_phdr')
@@ -1358,7 +1361,7 @@ if dep_libdrm.found()
   endif
 endif
 
-llvm_modules = ['bitwriter', 'engine', 'mcdisassembler', 'mcjit']
+llvm_modules = ['bitwriter', 'engine', 'mcdisassembler', 'mcjit', 'core', 'executionengine', 'scalaropts', 'transformutils', 'instcombine']
 llvm_optional_modules = ['coroutines']
 if with_amd_vk or with_gallium_radeonsi or with_gallium_r600
   llvm_modules += ['amdgpu', 'native', 'bitreader', 'ipo']

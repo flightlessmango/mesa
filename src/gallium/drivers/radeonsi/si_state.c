@@ -919,6 +919,8 @@ static void *si_create_rs_state(struct pipe_context *ctx,
 	rs->flatshade_first = state->flatshade_first;
 	rs->sprite_coord_enable = state->sprite_coord_enable;
 	rs->rasterizer_discard = state->rasterizer_discard;
+	rs->polygon_mode_enabled = state->fill_front != PIPE_POLYGON_MODE_FILL ||
+				   state->fill_back != PIPE_POLYGON_MODE_FILL;
 	rs->pa_sc_line_stipple = state->line_stipple_enable ?
 				S_028A0C_LINE_PATTERN(state->line_stipple_pattern) |
 				S_028A0C_REPEAT_COUNT(state->line_stipple_factor) : 0;
@@ -976,8 +978,7 @@ static void *si_create_rs_state(struct pipe_context *ctx,
 		S_028814_POLY_OFFSET_FRONT_ENABLE(util_get_offset(state, state->fill_front)) |
 		S_028814_POLY_OFFSET_BACK_ENABLE(util_get_offset(state, state->fill_back)) |
 		S_028814_POLY_OFFSET_PARA_ENABLE(state->offset_point || state->offset_line) |
-		S_028814_POLY_MODE(state->fill_front != PIPE_POLYGON_MODE_FILL ||
-				   state->fill_back != PIPE_POLYGON_MODE_FILL) |
+		S_028814_POLY_MODE(rs->polygon_mode_enabled) |
 		S_028814_POLYMODE_FRONT_PTYPE(si_translate_fill(state->fill_front)) |
 		S_028814_POLYMODE_BACK_PTYPE(si_translate_fill(state->fill_back)));
 
@@ -2984,6 +2985,7 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 
 	sctx->framebuffer.compressed_cb_mask = 0;
 	sctx->framebuffer.uncompressed_cb_mask = 0;
+	sctx->framebuffer.displayable_dcc_cb_mask = 0;
 	sctx->framebuffer.nr_samples = util_framebuffer_get_num_samples(state);
 	sctx->framebuffer.nr_color_samples = sctx->framebuffer.nr_samples;
 	sctx->framebuffer.log_samples = util_logbase2(sctx->framebuffer.nr_samples);
@@ -3023,6 +3025,9 @@ static void si_set_framebuffer_state(struct pipe_context *ctx,
 			sctx->framebuffer.compressed_cb_mask |= 1 << i;
 		else
 			sctx->framebuffer.uncompressed_cb_mask |= 1 << i;
+
+		if (tex->surface.dcc_offset)
+			sctx->framebuffer.displayable_dcc_cb_mask |= 1 << i;
 
 		/* Don't update nr_color_samples for non-AA buffers.
 		 * (e.g. destination of MSAA resolve)
@@ -3845,7 +3850,7 @@ si_make_buffer_descriptor(struct si_screen *screen, struct si_resource *buf,
 		 *       else: swizzle_address >= NUM_RECORDS
 		 */
 		state[7] |= S_008F0C_FORMAT(fmt->img_format) |
-			    S_008F0C_OOB_SELECT(0) |
+			    S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_STRUCTURED_WITH_OFFSET) |
 			    S_008F0C_RESOURCE_LEVEL(1);
 	} else {
 		int first_non_void;
@@ -5456,15 +5461,17 @@ static void si_init_config(struct si_context *sctx)
 		si_pm4_set_reg(pm4, R_008A14_PA_CL_ENHANCE, S_008A14_NUM_CLIP_SEQ(3) |
 			       S_008A14_CLIP_VTX_REORDER_ENA(1));
 
+	/* CLEAR_STATE doesn't restore these correctly. */
+	si_pm4_set_reg(pm4, R_028240_PA_SC_GENERIC_SCISSOR_TL, S_028240_WINDOW_OFFSET_DISABLE(1));
+	si_pm4_set_reg(pm4, R_028244_PA_SC_GENERIC_SCISSOR_BR,
+		       S_028244_BR_X(16384) | S_028244_BR_Y(16384));
+
 	/* CLEAR_STATE doesn't clear these correctly on certain generations.
 	 * I don't know why. Deduced by trial and error.
 	 */
 	if (sctx->chip_class <= GFX7 || !has_clear_state) {
 		si_pm4_set_reg(pm4, R_028B28_VGT_STRMOUT_DRAW_OPAQUE_OFFSET, 0);
 		si_pm4_set_reg(pm4, R_028204_PA_SC_WINDOW_SCISSOR_TL, S_028204_WINDOW_OFFSET_DISABLE(1));
-		si_pm4_set_reg(pm4, R_028240_PA_SC_GENERIC_SCISSOR_TL, S_028240_WINDOW_OFFSET_DISABLE(1));
-		si_pm4_set_reg(pm4, R_028244_PA_SC_GENERIC_SCISSOR_BR,
-			       S_028244_BR_X(16384) | S_028244_BR_Y(16384));
 		si_pm4_set_reg(pm4, R_028030_PA_SC_SCREEN_SCISSOR_TL, 0);
 		si_pm4_set_reg(pm4, R_028034_PA_SC_SCREEN_SCISSOR_BR,
 			       S_028034_BR_X(16384) | S_028034_BR_Y(16384));

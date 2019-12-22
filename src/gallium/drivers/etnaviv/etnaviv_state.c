@@ -126,7 +126,7 @@ etna_update_render_resource(struct pipe_context *pctx, struct etna_resource *bas
 
 static void
 etna_set_framebuffer_state(struct pipe_context *pctx,
-      const struct pipe_framebuffer_state *sv)
+      const struct pipe_framebuffer_state *fb)
 {
    struct etna_context *ctx = etna_context(pctx);
    struct compiled_framebuffer_state *cs = &ctx->framebuffer;
@@ -136,17 +136,24 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
    /* Set up TS as well. Warning: this state is used by both the RS and PE */
    uint32_t ts_mem_config = 0;
    uint32_t pe_mem_config = 0;
+   uint32_t pe_logic_op = 0;
 
-   if (sv->nr_cbufs > 0) { /* at least one color buffer? */
-      struct etna_surface *cbuf = etna_surface(sv->cbufs[0]);
+   if (fb->nr_cbufs > 0) { /* at least one color buffer? */
+      struct etna_surface *cbuf = etna_surface(fb->cbufs[0]);
       struct etna_resource *res = etna_resource(cbuf->base.texture);
       bool color_supertiled = (res->layout & ETNA_LAYOUT_BIT_SUPER) != 0;
+      uint32_t fmt = translate_pe_format(cbuf->base.format);
 
       assert(res->layout & ETNA_LAYOUT_BIT_TILE); /* Cannot render to linear surfaces */
       etna_update_render_resource(pctx, etna_resource(cbuf->prsc));
 
-      cs->PE_COLOR_FORMAT =
-         VIVS_PE_COLOR_FORMAT_FORMAT(translate_pe_format(cbuf->base.format)) |
+      if (fmt >= PE_FORMAT_R16F)
+          cs->PE_COLOR_FORMAT = VIVS_PE_COLOR_FORMAT_FORMAT_EXT(fmt) |
+                                VIVS_PE_COLOR_FORMAT_FORMAT_MASK;
+      else
+          cs->PE_COLOR_FORMAT = VIVS_PE_COLOR_FORMAT_FORMAT(fmt);
+
+      cs->PE_COLOR_FORMAT |=
          VIVS_PE_COLOR_FORMAT_COMPONENTS__MASK |
          VIVS_PE_COLOR_FORMAT_OVERWRITE |
          COND(color_supertiled, VIVS_PE_COLOR_FORMAT_SUPER_TILED) |
@@ -181,6 +188,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
 
       if (cbuf->surf.ts_size) {
          cs->TS_COLOR_CLEAR_VALUE = cbuf->level->clear_value;
+         cs->TS_COLOR_CLEAR_VALUE_EXT = cbuf->level->clear_value >> 32;
 
          cs->TS_COLOR_STATUS_BASE = cbuf->ts_reloc;
          cs->TS_COLOR_STATUS_BASE.flags = ETNA_RELOC_READ | ETNA_RELOC_WRITE;
@@ -202,6 +210,13 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       }
 
       nr_samples_color = cbuf->base.texture->nr_samples;
+
+      if (util_format_is_srgb(cbuf->base.format))
+         pe_logic_op |= VIVS_PE_LOGIC_OP_SRGB;
+
+      cs->PS_CONTROL = COND(util_format_is_unorm(cbuf->base.format), VIVS_PS_CONTROL_SATURATE_RT0);
+      cs->PS_CONTROL_EXT =
+         VIVS_PS_CONTROL_EXT_OUTPUT_MODE0(translate_output_mode(cbuf->base.format, ctx->specs.halti >= 5));
    } else {
       /* Clearing VIVS_PE_COLOR_FORMAT_COMPONENTS__MASK and
        * VIVS_PE_COLOR_FORMAT_OVERWRITE prevents us from overwriting the
@@ -216,8 +231,8 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
          cs->PE_PIPE_COLOR_ADDR[i] = ctx->dummy_rt_reloc;
    }
 
-   if (sv->zsbuf != NULL) {
-      struct etna_surface *zsbuf = etna_surface(sv->zsbuf);
+   if (fb->zsbuf != NULL) {
+      struct etna_surface *zsbuf = etna_surface(fb->zsbuf);
       struct etna_resource *res = etna_resource(zsbuf->base.texture);
 
       etna_update_render_resource(pctx, etna_resource(zsbuf->prsc));
@@ -335,10 +350,10 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
    /* Scissor setup */
    cs->SE_SCISSOR_LEFT = 0; /* affected by rasterizer and scissor state as well */
    cs->SE_SCISSOR_TOP = 0;
-   cs->SE_SCISSOR_RIGHT = (sv->width << 16) + ETNA_SE_SCISSOR_MARGIN_RIGHT;
-   cs->SE_SCISSOR_BOTTOM = (sv->height << 16) + ETNA_SE_SCISSOR_MARGIN_BOTTOM;
-   cs->SE_CLIP_RIGHT = (sv->width << 16) + ETNA_SE_CLIP_MARGIN_RIGHT;
-   cs->SE_CLIP_BOTTOM = (sv->height << 16) + ETNA_SE_CLIP_MARGIN_BOTTOM;
+   cs->SE_SCISSOR_RIGHT = (fb->width << 16) + ETNA_SE_SCISSOR_MARGIN_RIGHT;
+   cs->SE_SCISSOR_BOTTOM = (fb->height << 16) + ETNA_SE_SCISSOR_MARGIN_BOTTOM;
+   cs->SE_CLIP_RIGHT = (fb->width << 16) + ETNA_SE_CLIP_MARGIN_RIGHT;
+   cs->SE_CLIP_BOTTOM = (fb->height << 16) + ETNA_SE_CLIP_MARGIN_BOTTOM;
 
    cs->TS_MEM_CONFIG = ts_mem_config;
    cs->PE_MEM_CONFIG = pe_mem_config;
@@ -346,11 +361,13 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
    /* Single buffer setup. There is only one switch for this, not a separate
     * one per color buffer / depth buffer. To keep the logic simple always use
     * single buffer when this feature is available.
+    * note: the blob will use 2 in some situations, figure out why?
     */
-   cs->PE_LOGIC_OP = VIVS_PE_LOGIC_OP_SINGLE_BUFFER(ctx->specs.single_buffer ? 3 : 0);
+   pe_logic_op |= VIVS_PE_LOGIC_OP_SINGLE_BUFFER(ctx->specs.single_buffer ? 3 : 0);
+   cs->PE_LOGIC_OP = pe_logic_op;
 
    /* keep copy of original structure */
-   util_copy_framebuffer_state(&ctx->framebuffer_s, sv);
+   util_copy_framebuffer_state(&ctx->framebuffer_s, fb);
    ctx->dirty |= ETNA_DIRTY_FRAMEBUFFER | ETNA_DIRTY_DERIVE_TS;
 }
 
@@ -590,7 +607,11 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
             COND(nonconsecutive, VIVS_NFE_GENERIC_ATTRIB_CONFIG1_NONCONSECUTIVE) |
             VIVS_NFE_GENERIC_ATTRIB_CONFIG1_END(end_offset - start_offset);
       }
-      cs->NFE_GENERIC_ATTRIB_SCALE[idx] = 0x3f800000; /* 1 for integer, 1.0 for float */
+
+      if (util_format_is_pure_integer(elements[idx].src_format))
+         cs->NFE_GENERIC_ATTRIB_SCALE[idx] = 1;
+      else
+         cs->NFE_GENERIC_ATTRIB_SCALE[idx] = fui(1.0f);
    }
 
    return cs;

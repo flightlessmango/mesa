@@ -155,10 +155,10 @@ hud_draw_string(struct hud_context *hud, unsigned x, unsigned y,
    if (!*s)
       return;
 
-   hud_draw_background_quad(hud,
-                            x, y,
-                            x + strlen(buf)*hud->font.glyph_width,
-                            y + hud->font.glyph_height);
+   // hud_draw_background_quad(hud,
+   //                          x, y,
+   //                          x + strlen(buf)*hud->font.glyph_width,
+   //                          y + hud->font.glyph_height);
 
    while (*s) {
       unsigned x1 = x;
@@ -339,7 +339,7 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
    /* draw background */
    hud_draw_background_quad(hud,
                             pane->x1, pane->y1,
-                            pane->x2, pane->y2);
+                            pane->x2, pane->y2 + 42);
 
    /* draw numbers on the right-hand side */
    // for (i = 0; i <= last_line; i++) {
@@ -356,17 +356,19 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
    /* draw info below the pane */
    i = 0;
    LIST_FOR_EACH_ENTRY(gr, &pane->graph_list, head) {
-      unsigned x = pane->x1 - 20;
+      unsigned x = pane->x1 - 15;
       unsigned y = pane->y2 + 2 + i*hud->font.glyph_height;
 
       number_to_human_readable(gr->current_value, pane->type, str, gr->name);
       if (strcmp(gr->name, "frametime (ms)") != 0 && strcmp(gr->name, "FPS") != 0)
-         hud_draw_string(hud, x, y, "  %s: %s", gr->name, str);
+         hud_draw_string(hud, x, y - 76 + 10, "  %s: %s", gr->name, str);
+
+      printf("%i\n", y - 76 + 5);
 
       if (strcmp(gr->name, "FPS") == 0){
          char frametime[32];
          number_to_human_readable(1000 / gr->current_value, pane->type, frametime, gr->name);
-         hud_draw_string(hud, x + 16, y, "%s: %s, %s%s", gr->name, str, frametime, "ms");
+         hud_draw_string(hud, x + 16, y - 76 + 10, "%s: %s, %s%s", gr->name, str, frametime, "ms");
       }
       i++;
    }
@@ -448,7 +450,7 @@ hud_pane_draw_colored_objects(struct hud_context *hud,
 
    /* draw the line strips */
    LIST_FOR_EACH_ENTRY(gr, &pane->graph_list, head) {
-      hud_draw_graph_line_strip(hud, gr, pane->inner_x1, pane->inner_y2, pane->yscale);
+      hud_draw_graph_line_strip(hud, gr, pane->inner_x1, pane->inner_y2 + 42, pane->yscale);
    }
 }
 

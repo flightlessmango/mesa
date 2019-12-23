@@ -49,7 +49,6 @@ query_fps(struct hud_graph *gr, struct pipe_context *pipe)
    elapsedF2 = (double)(now - last_f2_press);
 
    info->frames++;
-   printf("%i\n", loggingOn);
 
    if (elapsedF2 >= 500000 && !loggingOn){
       if (key_is_pressed(XK_F2)){

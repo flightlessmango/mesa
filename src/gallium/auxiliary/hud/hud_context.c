@@ -360,45 +360,52 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
       unsigned y = pane->y2 + 2 + i*hud->font.glyph_height;
 
       number_to_human_readable(gr->current_value, pane->type, str, gr->name);
+      if (strcmp(gr->name, "frametime (ms)") != 0 && strcmp(gr->name, "FPS") != 0)
       hud_draw_string(hud, x, y, "  %s: %s", gr->name, str);
+
+      if (strcmp(gr->name, "FPS") == 0){
+         char frametime[32];
+         number_to_human_readable(1000 / gr->current_value, pane->type, frametime, gr->name);
+         hud_draw_string(hud, x, y, "%s: %s, %s%s", gr->name, str, frametime, "ms");
+      }
       i++;
    }
 
    /* draw border */
-   assert(hud->whitelines.num_vertices + num/2 + 8 <= hud->whitelines.max_num_vertices);
-   line_verts[num++] = (float) pane->x1;
-   line_verts[num++] = (float) pane->y1;
-   line_verts[num++] = (float) pane->x2;
-   line_verts[num++] = (float) pane->y1;
+   // assert(hud->whitelines.num_vertices + num/2 + 8 <= hud->whitelines.max_num_vertices);
+   // line_verts[num++] = (float) pane->x1;
+   // line_verts[num++] = (float) pane->y1;
+   // line_verts[num++] = (float) pane->x2;
+   // line_verts[num++] = (float) pane->y1;
 
-   line_verts[num++] = (float) pane->x2;
-   line_verts[num++] = (float) pane->y1;
-   line_verts[num++] = (float) pane->x2;
-   line_verts[num++] = (float) pane->y2;
+   // line_verts[num++] = (float) pane->x2;
+   // line_verts[num++] = (float) pane->y1;
+   // line_verts[num++] = (float) pane->x2;
+   // line_verts[num++] = (float) pane->y2;
 
-   line_verts[num++] = (float) pane->x1;
-   line_verts[num++] = (float) pane->y2;
-   line_verts[num++] = (float) pane->x2;
-   line_verts[num++] = (float) pane->y2;
+   // line_verts[num++] = (float) pane->x1;
+   // line_verts[num++] = (float) pane->y2;
+   // line_verts[num++] = (float) pane->x2;
+   // line_verts[num++] = (float) pane->y2;
 
-   line_verts[num++] = (float) pane->x1;
-   line_verts[num++] = (float) pane->y1;
-   line_verts[num++] = (float) pane->x1;
-   line_verts[num++] = (float) pane->y2;
+   // line_verts[num++] = (float) pane->x1;
+   // line_verts[num++] = (float) pane->y1;
+   // line_verts[num++] = (float) pane->x1;
+   // line_verts[num++] = (float) pane->y2;
 
-   /* draw horizontal lines inside the graph */
-   for (i = 0; i <= last_line; i++) {
-      float y = round((pane->max_value * i / (double)last_line) *
-                      pane->yscale + pane->inner_y2);
+   // /* draw horizontal lines inside the graph */
+   // for (i = 0; i <= last_line; i++) {
+   //    float y = round((pane->max_value * i / (double)last_line) *
+   //                    pane->yscale + pane->inner_y2);
 
-      assert(hud->whitelines.num_vertices + num/2 + 2 <= hud->whitelines.max_num_vertices);
-      line_verts[num++] = pane->x1;
-      line_verts[num++] = y;
-      line_verts[num++] = pane->x2;
-      line_verts[num++] = y;
-   }
+   //    assert(hud->whitelines.num_vertices + num/2 + 2 <= hud->whitelines.max_num_vertices);
+   //    line_verts[num++] = pane->x1;
+   //    line_verts[num++] = y;
+   //    line_verts[num++] = pane->x2;
+   //    line_verts[num++] = y;
+   // }
 
-   hud->whitelines.num_vertices += num/2;
+   // hud->whitelines.num_vertices += num/2;
 }
 
 static void

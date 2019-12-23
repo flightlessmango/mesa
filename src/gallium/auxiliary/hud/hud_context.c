@@ -353,6 +353,9 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
    //    // hud_draw_string(hud, x, y, "%s", str);
    // }
 
+   if(loggingOn)
+      hud_draw_string(hud, (hud->fb_width / 2) - 140, 0, "%s %is", "Logging...", elapsedLog);
+      
    /* draw info below the pane */
    i = 0;
    LIST_FOR_EACH_ENTRY(gr, &pane->graph_list, head) {

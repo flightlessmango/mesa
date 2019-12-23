@@ -342,31 +342,31 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
                             pane->x2, pane->y2);
 
    /* draw numbers on the right-hand side */
-   for (i = 0; i <= last_line; i++) {
-      unsigned x = pane->x2 + 2;
-      unsigned y = pane->inner_y1 +
-                   pane->inner_height * (last_line - i) / last_line -
-                   hud->font.glyph_height / 2;
+   // for (i = 0; i <= last_line; i++) {
+   //    unsigned x = pane->x2 + 0;
+   //    unsigned y = pane->inner_y1 +
+   //                 pane->inner_height * (last_line - i) / last_line -
+   //                 hud->font.glyph_height / 2;
 
-      number_to_human_readable(pane->max_value * i / last_line,
-                               pane->type, str, "empty");
-      // hud_draw_string(hud, x, y, "%s", str);
-   }
+   //    number_to_human_readable(pane->max_value * i / last_line,
+   //                             pane->type, str, "empty");
+   //    // hud_draw_string(hud, x, y, "%s", str);
+   // }
 
    /* draw info below the pane */
    i = 0;
    LIST_FOR_EACH_ENTRY(gr, &pane->graph_list, head) {
-      unsigned x = pane->x1 + 2;
+      unsigned x = pane->x1 - 20;
       unsigned y = pane->y2 + 2 + i*hud->font.glyph_height;
 
       number_to_human_readable(gr->current_value, pane->type, str, gr->name);
       if (strcmp(gr->name, "frametime (ms)") != 0 && strcmp(gr->name, "FPS") != 0)
-      hud_draw_string(hud, x, y, "  %s: %s", gr->name, str);
+         hud_draw_string(hud, x, y, "  %s: %s", gr->name, str);
 
       if (strcmp(gr->name, "FPS") == 0){
          char frametime[32];
          number_to_human_readable(1000 / gr->current_value, pane->type, frametime, gr->name);
-         hud_draw_string(hud, x, y, "%s: %s, %s%s", gr->name, str, frametime, "ms");
+         hud_draw_string(hud, x + 16, y, "%s: %s, %s%s", gr->name, str, frametime, "ms");
       }
       i++;
    }
@@ -531,11 +531,11 @@ hud_draw_results(struct hud_context *hud, struct pipe_resource *tex)
    fb.width = hud->fb_width;
    fb.height = hud->fb_height;
 
-   viewport.scale[0] = 0.5f * hud->fb_width;
-   viewport.scale[1] = 0.5f * hud->fb_height;
+   viewport.scale[0] = 0.5f * hud->fb_width * 2.0f;
+   viewport.scale[1] = 0.5f * hud->fb_height * 2.0f;
    viewport.scale[2] = 1.0f;
-   viewport.translate[0] = 0.5f * hud->fb_width;
-   viewport.translate[1] = 0.5f * hud->fb_height;
+   viewport.translate[0] = 0.5f * hud->fb_width * 2.0f;
+   viewport.translate[1] = 0.5f * hud->fb_height * 2.0f;
    viewport.translate[2] = 0.0f;
 
    cso_set_framebuffer(cso, &fb);

@@ -292,9 +292,10 @@ number_to_human_readable(double num, enum pipe_driver_query_type type,
    else if (d >= 100 || d*10 == (int)(d*10))
       sprintf(out, "%.1f%s", d, units[unit]);
    else if (d >= 10 || d*100 == (int)(d*100))
-      sprintf(out, "%.2f%s", d, units[unit]);
+      sprintf(out, "%.1f%s", d, units[unit]);
    else
-      sprintf(out, "%.3f%s", d, units[unit]);
+      sprintf(out, "%.1f%s", d, units[unit]);
+
 }
 
 static void

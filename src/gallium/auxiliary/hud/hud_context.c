@@ -441,8 +441,8 @@ hud_pane_draw_colored_objects(struct hud_context *hud,
       unsigned x = pane->x1 + 2;
       unsigned y = pane->y2 + 2 + i*hud->font.glyph_height;
 
-      hud_draw_colored_quad(hud, PIPE_PRIM_QUADS, x + 1, y + 1, x + 12, y + 13,
-                            gr->color[0], gr->color[1], gr->color[2], 1);
+      // hud_draw_colored_quad(hud, PIPE_PRIM_QUADS, x + 1, y + 1, x + 12, y + 13,
+      //                       gr->color[0], gr->color[1], gr->color[2], 1);
       i++;
    }
 

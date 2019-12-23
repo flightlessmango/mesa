@@ -280,7 +280,7 @@ hud_cpu_graph_install(struct hud_pane *pane, unsigned cpu_index)
       return;
 
    if (cpu_index == ALL_CPUS)
-      strcpy(gr->name, "cpu");
+      strcpy(gr->name, "CPU");
    else
       sprintf(gr->name, "cpu%u", cpu_index);
 

@@ -966,6 +966,9 @@ hud_graph_add_value(struct hud_graph *gr, double value)
       }
    }
 
+   if (strcmp(gr->name, "GPU load") == 0)
+      strcpy(gr->name, "GPU");
+
    if (gr->index == gr->pane->max_num_vertices) {
       gr->vertices[0] = 0;
       gr->vertices[1] = gr->vertices[(gr->index-1)*2+1];

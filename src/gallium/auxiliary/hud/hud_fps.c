@@ -80,7 +80,7 @@ hud_fps_graph_install(struct hud_pane *pane)
    if (!gr)
       return;
 
-   strcpy(gr->name, "fps");
+   strcpy(gr->name, "FPS");
    gr->query_data = CALLOC_STRUCT(fps_info);
    if (!gr->query_data) {
       FREE(gr);

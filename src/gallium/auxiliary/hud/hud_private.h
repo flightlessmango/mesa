@@ -35,7 +35,18 @@
 #include <X11/Xlib.h>
 #include "X11/keysym.h"
 
+struct logData{
+   double fps,cpu,gpu;
+   int elapsed;
+};
+
+struct logData currentValues;
+
 Display *dpy;
+bool loggingOn;
+FILE *outFile;
+const char* duration_string;
+int duration, elapsedLog;
 
 enum hud_counter {
    HUD_COUNTER_OFFLOADED,
@@ -149,6 +160,7 @@ struct hud_pane {
 
 /* Mango */
 bool key_is_pressed(KeySym ks);
+void *logging(void *empty);
 
 /* core */
 void hud_pane_add_graph(struct hud_pane *pane, struct hud_graph *gr);

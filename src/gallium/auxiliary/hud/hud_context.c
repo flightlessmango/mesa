@@ -966,8 +966,16 @@ hud_graph_add_value(struct hud_graph *gr, double value)
       }
    }
 
-   if (strcmp(gr->name, "GPU load") == 0)
+   if (strcmp(gr->name, "GPU load") == 0){
+      currentValues.gpu = gr->current_value;
       strcpy(gr->name, "GPU");
+   }
+   
+   if (strcmp(gr->name, "CPU") == 0)
+      currentValues.cpu = gr->current_value;
+
+   if (strcmp(gr->name, "frametime (ms)") == 0)
+      currentValues.fps = 1000 / gr->current_value;
 
    if (gr->index == gr->pane->max_num_vertices) {
       gr->vertices[0] = 0;

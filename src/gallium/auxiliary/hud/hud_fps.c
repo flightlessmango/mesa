@@ -32,6 +32,8 @@
 #include "util/os_time.h"
 #include "util/u_memory.h"
 #include "keybinds.h"
+#include "logging.h"
+#include <pthread.h>
 
 struct fps_info {
    boolean frametime;
@@ -44,8 +46,17 @@ query_fps(struct hud_graph *gr, struct pipe_context *pipe)
 {
    struct fps_info *info = gr->query_data;
    uint64_t now = os_time_get();
+   elapsedF2 = (double)(now - last_f2_press);
 
    info->frames++;
+   printf("%i\n", loggingOn);
+
+   if (elapsedF2 >= 500000 && !loggingOn){
+      if (key_is_pressed(XK_F2)){
+         last_f2_press = now;
+         pthread_create(&f2, NULL, &logging, NULL);
+      }
+   }
 
    if (info->last_time) {
       if (info->frametime) {

@@ -363,8 +363,6 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
       if (strcmp(gr->name, "frametime (ms)") != 0 && strcmp(gr->name, "FPS") != 0)
          hud_draw_string(hud, x, y - 76 + 10, "  %s: %s", gr->name, str);
 
-      printf("%i\n", y - 76 + 5);
-
       if (strcmp(gr->name, "FPS") == 0){
          char frametime[32];
          number_to_human_readable(1000 / gr->current_value, pane->type, frametime, gr->name);

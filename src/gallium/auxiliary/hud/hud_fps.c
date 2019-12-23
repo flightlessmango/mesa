@@ -31,6 +31,7 @@
 #include "hud/hud_private.h"
 #include "util/os_time.h"
 #include "util/u_memory.h"
+#include "keybinds.h"
 
 struct fps_info {
    boolean frametime;
@@ -75,6 +76,7 @@ free_query_data(void *p, struct pipe_context *pipe)
 void
 hud_fps_graph_install(struct hud_pane *pane)
 {
+   dpy = XOpenDisplay(":0");
    struct hud_graph *gr = CALLOC_STRUCT(hud_graph);
 
    if (!gr)

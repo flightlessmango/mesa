@@ -32,6 +32,10 @@
 #include "pipe/p_state.h"
 #include "util/list.h"
 #include "hud/font.h"
+#include <X11/Xlib.h>
+#include "X11/keysym.h"
+
+Display *dpy;
 
 enum hud_counter {
    HUD_COUNTER_OFFLOADED,
@@ -143,6 +147,8 @@ struct hud_pane {
    unsigned next_color;
 };
 
+/* Mango */
+bool key_is_pressed(KeySym ks);
 
 /* core */
 void hud_pane_add_graph(struct hud_pane *pane, struct hud_graph *gr);

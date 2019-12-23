@@ -974,27 +974,32 @@ hud_graph_add_value(struct hud_graph *gr, double value)
    if (strcmp(gr->name, "CPU") == 0)
       currentValues.cpu = gr->current_value;
 
-   if (strcmp(gr->name, "frametime (ms)") == 0)
+   if (strcmp(gr->name, "frametime (ms)") == 0) {
       currentValues.fps = 1000 / gr->current_value;
 
-   if (gr->index == gr->pane->max_num_vertices) {
-      gr->vertices[0] = 0;
-      gr->vertices[1] = gr->vertices[(gr->index-1)*2+1];
-      gr->index = 1;
-   }
-   gr->vertices[(gr->index)*2+0] = (float) (gr->index * 2);
-   gr->vertices[(gr->index)*2+1] = (float) value;
-   gr->index++;
+      // restrict frametime graph value to 50 so it's consistent with other huds
+      if(value > 50.0f)
+         value = 50.0f;
 
-   if (gr->num_vertices < gr->pane->max_num_vertices) {
-      gr->num_vertices++;
-   }
+      if (gr->index == gr->pane->max_num_vertices) {
+         gr->vertices[0] = 0;
+         gr->vertices[1] = gr->vertices[(gr->index-1)*2+1];
+         gr->index = 1;
+      }
+      gr->vertices[(gr->index)*2+0] = (float) (gr->index * 2);
+      gr->vertices[(gr->index)*2+1] = (float) value;
+      gr->index++;
 
-   if (gr->pane->dyn_ceiling == true) {
-      hud_pane_update_dyn_ceiling(gr, gr->pane);
-   }
-   if (value > gr->pane->max_value) {
-      hud_pane_set_max_value(gr->pane, value);
+      if (gr->num_vertices < gr->pane->max_num_vertices) {
+         gr->num_vertices++;
+      }
+
+      if (gr->pane->dyn_ceiling == true) {
+         hud_pane_update_dyn_ceiling(gr, gr->pane);
+      }
+      if (value > gr->pane->max_value) {
+         hud_pane_set_max_value(gr->pane, value);
+      }
    }
 }
 

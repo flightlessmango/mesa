@@ -207,7 +207,7 @@ hud_draw_string(struct hud_context *hud, unsigned x, unsigned y,
 
 static void
 number_to_human_readable(double num, enum pipe_driver_query_type type,
-                         char *out)
+                         char *out, char *name)
 {
    static const char *byte_units[] =
       {" B", " KB", " MB", " GB", " TB", " PB", " EB"};
@@ -295,7 +295,10 @@ number_to_human_readable(double num, enum pipe_driver_query_type type,
       sprintf(out, "%.1f%s", d, units[unit]);
    else
       sprintf(out, "%.1f%s", d, units[unit]);
-
+  
+   if (strcmp(name, "CPU") == 0 || strcmp(name, "GPU") == 0 ){
+      sprintf(out, "%.0f%s%%", d, units[unit]);
+   }
 }
 
 static void
@@ -346,7 +349,7 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
                    hud->font.glyph_height / 2;
 
       number_to_human_readable(pane->max_value * i / last_line,
-                               pane->type, str);
+                               pane->type, str, "empty");
       hud_draw_string(hud, x, y, "%s", str);
    }
 
@@ -356,7 +359,7 @@ hud_pane_accumulate_vertices(struct hud_context *hud,
       unsigned x = pane->x1 + 2;
       unsigned y = pane->y2 + 2 + i*hud->font.glyph_height;
 
-      number_to_human_readable(gr->current_value, pane->type, str);
+      number_to_human_readable(gr->current_value, pane->type, str, gr->name);
       hud_draw_string(hud, x, y, "  %s: %s", gr->name, str);
       i++;
    }
@@ -412,7 +415,7 @@ hud_pane_accumulate_vertices_simple(struct hud_context *hud,
       unsigned x = pane->x1;
       unsigned y = pane->y_simple + i*hud->font.glyph_height;
 
-      number_to_human_readable(gr->current_value, pane->type, str);
+      number_to_human_readable(gr->current_value, pane->type, str, gr->name);
       hud_draw_string(hud, x, y, "%s: %s", gr->name, str);
       i++;
    }

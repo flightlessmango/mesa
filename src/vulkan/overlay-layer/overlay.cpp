@@ -53,8 +53,11 @@ bool open = false, displayHud = true, checkHudSize = false;
 pthread_t cpuThread, gpuThread;
 string gpuString;
 int hud_width, hud_height;
+float offset_x, offset_y;
 const char* hud_width_env = std::getenv("HUD_WIDTH");
 const char* hud_height_env = std::getenv("HUD_HEIGHT");
+const char* offset_x_env = std::getenv("X_OFFSET");
+const char* offset_y_env = std::getenv("Y_OFFSET");
 
 /* Mapped from VkInstace/VkPhysicalDevice */
 struct instance_data {
@@ -976,9 +979,17 @@ static void position_layer(struct swapchain_data *data)
 
    ImGui::SetNextWindowBgAlpha(0.5);
    ImGui::SetNextWindowSize(data->window_size, ImGuiCond_Always);
+
+   if (!offset_x_env == NULL)
+     offset_x = std::stof(offset_x_env);
+
+   if (!offset_y_env == NULL)
+     offset_y = std::stof(offset_y_env);
+
+
    switch (instance_data->params.position) {
    case LAYER_POSITION_TOP_LEFT:
-      ImGui::SetNextWindowPos(ImVec2(margin, margin), ImGuiCond_Always);
+      ImGui::SetNextWindowPos(ImVec2(margin + offset_x, margin + offset_y), ImGuiCond_Always);
       break;
    case LAYER_POSITION_TOP_RIGHT:
       ImGui::SetNextWindowPos(ImVec2(data->width - data->window_size.x - margin, margin),

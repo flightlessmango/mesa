@@ -6,7 +6,8 @@
 double elapsedF2, elapsedF12;
 uint64_t last_f2_press, last_f12_press;
 pthread_t f2;
-Display *dpy = XOpenDisplay(":0");
+char *displayid = getenv("DISPLAY");
+Display *dpy = XOpenDisplay(displayid);
 
 bool key_is_pressed(KeySym ks) {
     char keys_return[32];

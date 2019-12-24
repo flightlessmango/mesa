@@ -28,6 +28,7 @@ struct Cpus{
 size_t numCpuCores = std::thread::hardware_concurrency();
 size_t arraySize = numCpuCores + 1;
 std::vector<Cpus> cpuArray;
+pthread_t cpuThread, gpuThread;
 
 string exec(string command) {
    char buffer[128];
@@ -160,6 +161,7 @@ void *getAmdGpuUsage(void *){
   gpu.pop_back();
   gpuLoadDisplay = gpu + "%";
   gpuLoad = stoi(gpu);
+  pthread_detach(gpuThread);
   return NULL;
 }
 
@@ -168,6 +170,7 @@ void *getNvidiaGpuUsage(void *){
   gpu.pop_back();
   gpuLoadDisplay = gpu + "%";
   gpuLoad = stoi(gpu);
+  pthread_detach(gpuThread);
   return NULL;
 }
 
@@ -187,7 +190,7 @@ void *getCpuUsage(void *)
 
 	// print output
 	PrintStats(entries1, entries2);
-
+	pthread_detach(cpuThread);
 	return NULL;
 }
 

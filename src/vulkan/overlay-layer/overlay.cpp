@@ -50,7 +50,6 @@
 #include "keybinds.h"
 
 bool open = false, displayHud = true, checkHudSize = false;
-pthread_t cpuThread, gpuThread;
 string gpuString;
 int hud_width, hud_height;
 float offset_x, offset_y;

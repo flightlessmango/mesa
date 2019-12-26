@@ -4,11 +4,13 @@
 #include <chrono>
 #include <thread>
 
+#include "util/os_time.h"
+
 using namespace std;
 
 string os, cpu, gpu, ram, kernel, driver, deviceName;
 bool sysInfoFetched; 
-int gpuLoadLog,cpuLoadLog;
+int gpuLoadLog,cpuLoadLog,log_period;
 
 struct logData{
   double fps;
@@ -17,12 +19,15 @@ struct logData{
   double previous;
 };
 
-double fps;
+double fps, elapsedLog;
 std::vector<logData> logArray;
 ofstream out;
+const char* duration_env = std::getenv("LOG_DURATION");
 const char* mango_output = std::getenv("MANGO_OUTPUT");
-int duration, num, prevTick, currentTick;
+const char* log_period_env = std::getenv("LOG_PERIOD");
+int duration, num;
 bool loggingOn;
+uint64_t log_start;
 
 void writeFile(string date){
 	out.open(mango_output + date, ios::out | ios::app);
@@ -39,11 +44,17 @@ void *logging(void *){
   time_t now_log = time(0);
   tm *log_time = localtime(&now_log);
 	string date = to_string(log_time->tm_year + 1900) + "-" + to_string(1 + log_time->tm_mon) + "-" + to_string(log_time->tm_mday) + "_" + to_string(1 + log_time->tm_hour) + "-" + to_string(1 + log_time->tm_min) + "-" + to_string(1 + log_time->tm_sec);
+  log_start = os_time_get();
+  out.open(mango_output + date, ios::out | ios::app);
+
   num = 0;
 	while (loggingOn){
+    uint64_t now = os_time_get();
+    elapsedLog = (double)(now - log_start);
+    out << fps << "," << cpuLoadLog << "," << gpuLoadLog << "," <<  now - log_start << endl;
 		logArray.push_back({fps, cpuLoadLog, gpuLoadLog, 0.0f});
     num++;
-    this_thread::sleep_for(chrono::milliseconds(100));
+    this_thread::sleep_for(chrono::milliseconds(log_period));
   }
   writeFile(date);
   return NULL; 

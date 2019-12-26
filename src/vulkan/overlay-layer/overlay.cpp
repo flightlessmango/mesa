@@ -809,13 +809,22 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
 
    if (elapsedF2 >= 500000 && !mango_output == NULL){
      if (key_is_pressed(XK_F2)){
-       loggingOn = !loggingOn;
        last_f2_press = now;
+       log_start = now;
+       loggingOn = !loggingOn;
 
-       if (loggingOn)
+       if (loggingOn && log_period != 0)
          pthread_create(&f2, NULL, &logging, NULL);
 
      }
+   }
+   
+   if (loggingOn && log_period == 0){
+      elapsedLog = (double)(now - log_start);
+      if ((elapsedLog) >= duration * 1000000)
+			loggingOn = false;
+
+      out << fps << "," <<  cpuLoadLog << "," << gpuLoadLog << "," << (now - log_start) << endl;
    }
 
    if (elapsedF12 >= 500000){
@@ -824,23 +833,33 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
        last_f12_press = now;
      }
    }
+   std::cout << log_period << endl;
 
    if (!sysInfoFetched) {
-     deviceName = device_data->properties.deviceName;
-     ram =  exec("cat /proc/meminfo | grep 'MemTotal' | awk '{print $2}'");
-     cpu =  exec("cat /proc/cpuinfo | grep 'model name' | tail -n1 | sed 's/^.*: //' | sed 's/([^)]*)/()/g' | tr -d '(/)'");
-     kernel = exec("uname -r");
-     os = exec("cat /etc/*-release | grep 'PRETTY_NAME' | cut -d '=' -f 2-");
-     os.erase(remove( os.begin(), os.end(), '\"' ),os.end());
-     gpu = exec("lspci | grep VGA | head -n1 | awk -vRS=']' -vFS='[' '{print $2}' | sed '/^$/d' | tail -n1");
-     driver = exec("glxinfo | grep 'OpenGL version' | sed 's/^.*: //' | cut -d' ' --output-delimiter=$'\n' -f1- | grep -v '(' | grep -v ')' | tr '\n' ' ' | cut -c 1-");
-     ram.pop_back();
-     cpu.pop_back();
-     kernel.pop_back();
-     os.pop_back();
-     gpu.pop_back();
-     driver.pop_back();
-     sysInfoFetched = true;
+      deviceName = device_data->properties.deviceName;
+      ram =  exec("cat /proc/meminfo | grep 'MemTotal' | awk '{print $2}'");
+      cpu =  exec("cat /proc/cpuinfo | grep 'model name' | tail -n1 | sed 's/^.*: //' | sed 's/([^)]*)/()/g' | tr -d '(/)'");
+      kernel = exec("uname -r");
+      os = exec("cat /etc/*-release | grep 'PRETTY_NAME' | cut -d '=' -f 2-");
+      os.erase(remove( os.begin(), os.end(), '\"' ),os.end());
+      gpu = exec("lspci | grep VGA | head -n1 | awk -vRS=']' -vFS='[' '{print $2}' | sed '/^$/d' | tail -n1");
+      driver = exec("glxinfo | grep 'OpenGL version' | sed 's/^.*: //' | cut -d' ' --output-delimiter=$'\n' -f1- | grep -v '(' | grep -v ')' | tr '\n' ' ' | cut -c 1-");
+      ram.pop_back();
+      cpu.pop_back();
+      kernel.pop_back();
+      os.pop_back();
+      gpu.pop_back();
+      driver.pop_back();
+
+      log_period = (log_period_env) ? std::stoi(log_period_env) : 100;
+
+      if (log_period == 0)
+         out.open("/tmp/mango", ios::out | ios::app);
+
+      if(duration_env)
+		   duration = std::stoi(duration_env);
+
+      sysInfoFetched = true;
    }
 
    if (!checkHudSize){
@@ -1121,7 +1140,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
      ImGui::Begin("Logging", &open, ImVec2(200, 100), 0.0f, ImGuiWindowFlags_NoDecoration);
      ImGui::Text("Logging...");
      //ImGui::Text("Time left: %isec", (duration - num) / 10);
-     ImGui::Text("Elapsed: %isec", (num) / 10);
+     ImGui::Text("Elapsed: %isec", int((elapsedLog) / 1000000));
      ImGui::End();
      ImGui::Render();
    }

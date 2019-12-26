@@ -974,7 +974,10 @@ static void position_layer(struct swapchain_data *data)
 {
    struct device_data *device_data = data->device;
    struct instance_data *instance_data = device_data->instance;
-   const float margin = 10.0f;
+   float margin = 10.0f;
+   if (!offset_x_env == NULL)
+      margin = 0.0f;
+
 
    ImGui::SetNextWindowBgAlpha(0.5);
    ImGui::SetNextWindowSize(data->window_size, ImGuiCond_Always);

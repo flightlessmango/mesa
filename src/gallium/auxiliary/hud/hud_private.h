@@ -46,7 +46,9 @@ Display *dpy;
 bool loggingOn;
 FILE *outFile;
 const char* duration_string;
-int duration, elapsedLog;
+const char* period_string;
+int duration, elapsedLog, log_period;
+uint64_t log_start;
 
 enum hud_counter {
    HUD_COUNTER_OFFLOADED,

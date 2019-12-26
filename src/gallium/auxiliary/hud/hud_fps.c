@@ -53,8 +53,24 @@ query_fps(struct hud_graph *gr, struct pipe_context *pipe)
    if (elapsedF2 >= 500000 && !loggingOn){
       if (key_is_pressed(XK_F2)){
          last_f2_press = now;
-         pthread_create(&f2, NULL, &logging, NULL);
+         if(log_period == 0){
+            loggingOn = !loggingOn;
+            log_start = now;
+         } else {
+            pthread_create(&f2, NULL, &logging, NULL);
+         }
       }
+   }
+
+   if (loggingOn){
+         elapsedLog = (now - log_start) / 1000000;
+         
+         if (elapsedLog >= duration)
+			   loggingOn = false;
+
+         fprintf(outFile, "%f,%f,%f,%li\n", currentValues.fps, currentValues.cpu, currentValues.gpu, (now - log_start));
+         fflush(outFile);
+         
    }
 
    if (info->last_time) {
@@ -87,6 +103,14 @@ void
 hud_fps_graph_install(struct hud_pane *pane)
 {
    dpy = XOpenDisplay(":0");
+   period_string = getenv("LOG_PERIOD");
+   duration_string = getenv("LOG_DURATION");
+   
+   remove("/tmp/mango-gallium");
+   outFile = fopen("/tmp/mango-gallium", "a");
+   duration = (duration_string) ? atoi(duration_string) : 100;
+   log_period = (period_string) ? atoi(period_string) : 100;
+
    struct hud_graph *gr = CALLOC_STRUCT(hud_graph);
 
    if (!gr)

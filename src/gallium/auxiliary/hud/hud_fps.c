@@ -62,18 +62,6 @@ query_fps(struct hud_graph *gr, struct pipe_context *pipe)
       }
    }
 
-   if (loggingOn){
-         elapsedLog = (now - log_start) / 1000000;
-         int elapsed = now - log_start;
-         
-         if (elapsedLog >= duration)
-			   loggingOn = false;
-
-         fprintf(outFile, "%f,%f,%f,%i\n", currentValues.fps, currentValues.cpu, currentValues.gpu, elapsed);
-         fflush(outFile);
-         
-   }
-
    if (info->last_time) {
       if (info->frametime) {
          double frametime = ((double)now - (double)info->last_time) / 1000.0;
@@ -86,7 +74,8 @@ query_fps(struct hud_graph *gr, struct pipe_context *pipe)
          info->frames = 0;
          info->last_time = now;
 
-         hud_graph_add_value(gr, fps);
+         // hud_graph_add_value(gr, fps);
+         gr->current_value = fps;
       }
    }
    else {

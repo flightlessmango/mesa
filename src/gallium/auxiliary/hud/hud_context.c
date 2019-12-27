@@ -50,6 +50,7 @@
 #include "util/u_simple_shaders.h"
 #include "util/u_string.h"
 #include "util/u_upload_mgr.h"
+#include "util/os_time.h"
 #include "tgsi/tgsi_text.h"
 #include "tgsi/tgsi_dump.h"
 
@@ -968,6 +969,7 @@ hud_pane_add_graph(struct hud_pane *pane, struct hud_graph *gr)
 void
 hud_graph_add_value(struct hud_graph *gr, double value)
 {
+   uint64_t now = os_time_get();
    gr->current_value = value;
    value = value > gr->pane->ceiling ? gr->pane->ceiling : value;
 
@@ -1013,6 +1015,17 @@ hud_graph_add_value(struct hud_graph *gr, double value)
       }
       if (value > gr->pane->max_value) {
          hud_pane_set_max_value(gr->pane, value);
+      }
+      if (loggingOn){
+         elapsedLog = (now - log_start) / 1000000;
+         int elapsed = now - log_start;
+         
+         if (elapsedLog >= duration)
+            loggingOn = false;
+
+         fprintf(outFile, "%f,%f,%f,%i\n", currentValues.fps, currentValues.cpu, currentValues.gpu, elapsed);
+         fflush(outFile);
+      
       }
    }
 }

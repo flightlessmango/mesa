@@ -1134,9 +1134,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::EndFrame();
    ImGui::Render();
    if(loggingOn){
-     ImGui::SetNextWindowPos(ImVec2(data->width - data->window_size.x + 100,
-                                    data->height - data->window_size.y + 50),
-                                ImGuiCond_Always);
+      ImGui::SetNextWindowPos(ImVec2(data->width - 200,
+                                    0),
+                                    ImGuiCond_Always);
      ImGui::Begin("Logging", &open, ImVec2(200, 100), 0.0f, ImGuiWindowFlags_NoDecoration);
      ImGui::Text("Logging...");
      //ImGui::Text("Time left: %isec", (duration - num) / 10);

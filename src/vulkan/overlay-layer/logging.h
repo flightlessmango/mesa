@@ -47,13 +47,15 @@ void *logging(void *){
   log_start = os_time_get();
   out.open(mango_output + date, ios::out | ios::app);
 
-  num = 0;
 	while (loggingOn){
     uint64_t now = os_time_get();
     elapsedLog = (double)(now - log_start);
     out << fps << "," << cpuLoadLog << "," << gpuLoadLog << "," <<  now - log_start << endl;
 		logArray.push_back({fps, cpuLoadLog, gpuLoadLog, 0.0f});
-    num++;
+
+    if ((elapsedLog) >= duration * 1000000 && duration_env)
+      loggingOn = false;
+    
     this_thread::sleep_for(chrono::milliseconds(log_period));
   }
   writeFile(date);

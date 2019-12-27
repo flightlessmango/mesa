@@ -1016,7 +1016,7 @@ hud_graph_add_value(struct hud_graph *gr, double value)
       if (value > gr->pane->max_value) {
          hud_pane_set_max_value(gr->pane, value);
       }
-      if (loggingOn){
+      if (loggingOn && log_period == 0){
          elapsedLog = (now - log_start) / 1000000;
          int elapsed = now - log_start;
          

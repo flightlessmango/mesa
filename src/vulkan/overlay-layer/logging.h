@@ -51,13 +51,14 @@ void *logging(void *){
     uint64_t now = os_time_get();
     elapsedLog = (double)(now - log_start);
     out << fps << "," << cpuLoadLog << "," << gpuLoadLog << "," <<  now - log_start << endl;
-		logArray.push_back({fps, cpuLoadLog, gpuLoadLog, 0.0f});
+		// logArray.push_back({fps, cpuLoadLog, gpuLoadLog, 0.0f});
 
     if ((elapsedLog) >= duration * 1000000 && duration_env)
       loggingOn = false;
     
     this_thread::sleep_for(chrono::milliseconds(log_period));
   }
-  writeFile(date);
+  // writeFile(date);
+  out.close();
   return NULL; 
 }

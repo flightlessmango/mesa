@@ -819,21 +819,12 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
      }
    }
    
-   if (loggingOn && log_period == 0){
-      elapsedLog = (double)(now - log_start);
-      if ((elapsedLog) >= duration * 1000000)
-			loggingOn = false;
-
-      out << fps << "," <<  cpuLoadLog << "," << gpuLoadLog << "," << (now - log_start) << endl;
-   }
-
    if (elapsedF12 >= 500000){
      if (key_is_pressed(XK_F12)){
        displayHud = !displayHud;
        last_f12_press = now;
      }
    }
-   std::cout << log_period << endl;
 
    if (!sysInfoFetched) {
       deviceName = device_data->properties.deviceName;
@@ -1070,6 +1061,15 @@ static void compute_swapchain_display(struct swapchain_data *data)
    data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
    if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps])
       ImGui::Text("FPS: %.1f" "%s" "%.1fms" , data->fps, "  ", data->frametimeDisplay);
+
+   if (loggingOn && log_period == 0){
+      uint64_t now = os_time_get();
+      elapsedLog = (double)(now - log_start);
+      if ((elapsedLog) >= duration * 1000000)
+			loggingOn = false;
+
+      out << fps << "," <<  cpuLoadLog << "," << gpuLoadLog << "," << (now - log_start) << endl;
+   }
 
    /* Recompute min/max */
    for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {

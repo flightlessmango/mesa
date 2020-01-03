@@ -3,6 +3,9 @@
 A modification of the Mesa vulkan overlay. mostly just stuff to make my life easier.
 ![](gifs/overlay_example.gif)
 
+# Installation
+- Arch linux: [PKGBUILD](https://github.com/flightlessmango/PKGBUILDS/blob/master/vulkan-mesa-layer-mango/PKGBUILD)
+
 # Normal usage
 A Vulkan layer to display information about the running application
 using an overlay.

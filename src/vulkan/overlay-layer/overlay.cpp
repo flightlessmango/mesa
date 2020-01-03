@@ -849,7 +849,8 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
 
       if(duration_env)
 		   duration = std::stoi(duration_env);
-
+      
+      coreCounting();
       sysInfoFetched = true;
    }
 
@@ -880,7 +881,6 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
    if (data->last_fps_update) {
       if (capture_begin ||
           elapsed >= instance_data->params.fps_sampling_period) {
-            coreCounting();
             updateCpuStrings();
             pthread_create(&cpuThread, NULL, &getCpuUsage, NULL);
             data->cpuString = cpuArray[0].output.c_str();

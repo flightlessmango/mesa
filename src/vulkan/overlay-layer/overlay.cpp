@@ -1162,7 +1162,6 @@ static void compute_swapchain_display(struct swapchain_data *data)
                                     ImGuiCond_Always);
      ImGui::Begin("Logging", &open, ImVec2(200, 100), 0.0f, ImGuiWindowFlags_NoDecoration);
      ImGui::Text("Logging...");
-     //ImGui::Text("Time left: %isec", (duration - num) / 10);
      ImGui::Text("Elapsed: %isec", int((elapsedLog) / 1000000));
      ImGui::End();
      ImGui::Render();

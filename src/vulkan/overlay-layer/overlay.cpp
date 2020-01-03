@@ -1036,7 +1036,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
    }
 
    if (hud_height == 0){
-      y = 160;
+      y = 130;
    } else {
       y = hud_height;
    }

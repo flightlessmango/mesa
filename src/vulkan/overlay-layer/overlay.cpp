@@ -1054,13 +1054,32 @@ static void compute_swapchain_display(struct swapchain_data *data)
    // format_name = format_name ? (format_name + strlen("VK_FORMAT_")) : "unknown";
    // ImGui::Text("Swapchain format: %s", format_name);
    // ImGui::Text("Frames: %" PRIu64, data->n_frames);
-   if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos)
-     ImGui::Text("GPU: %s" , gpuLoadDisplay.c_str());
-
-   ImGui::Text("%s", data->cpuString );
+   if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
+      ImGui::TextColored(ImVec4(0.0, 0.502, 0.25, 1.00f), "GPU");
+      ImGui::SameLine();
+      ImGui::Text("%s%s", "  ", gpuLoadDisplay.c_str());
+   }    
+   
+   ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
+   ImGui::SameLine();
+   ImGui::Text("%s%d%%", "  ", cpuLoadLog);
+   
+   // ImGui::Text("%s %d%%", "CPU:", cpuLoadLog );
+   // ImGui::SameLine();
+   // ImGui::Text("%s", data->cpuString );
+   // for (size_t i = 0; i < numCpuCores; i++)
+   // {
+   //    ImGui::Text("%s", cpuArray[i + 1].output.c_str());
+   // }
+   
    data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
-   if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps])
-      ImGui::Text("FPS: %.1f" "%s" "%.1fms" , data->fps, "  ", data->frametimeDisplay);
+   if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){
+      ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "FPS");
+      ImGui::SameLine();
+      ImGui::Text("%s%.0f", "  ", data->fps);
+      ImGui::SameLine(150);
+      ImGui::Text("%.1fms", data->frametimeDisplay);
+   }
 
    if (loggingOn && log_period == 0){
       uint64_t now = os_time_get();

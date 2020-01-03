@@ -1081,6 +1081,10 @@ static void compute_swapchain_display(struct swapchain_data *data)
       ImGui::Text("%.1fms", data->frametimeDisplay);
    }
 
+   ImGui::Dummy(ImVec2(0.0f, 20.0f));
+
+   // ImGui::ProgressBar(float(ramPercent), ImVec2(280, 25), NULL);
+
    if (loggingOn && log_period == 0){
       uint64_t now = os_time_get();
       elapsedLog = (double)(now - log_start);
@@ -1141,7 +1145,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
                               NULL,
                               data->stats_min.stats[s],
                               data->stats_max.stats[s],
-                              ImVec2(ImGui::GetContentRegionAvailWidth(), 30));
+                              ImVec2(ImGui::GetContentRegionAvailWidth(), 50));
          ImGui::Text("%s: %.0f [%" PRIu64 ", %" PRIu64 "]", overlay_param_names[s],
                      get_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
                      data->stats_min.stats[s], data->stats_max.stats[s]);

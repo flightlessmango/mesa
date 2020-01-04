@@ -851,6 +851,7 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
 		   duration = std::stoi(duration_env);
       
       coreCounting();
+      amdGpuFile = fopen("/sys/class/drm/card0/device/gpu_busy_percent", "r");
       sysInfoFetched = true;
    }
 

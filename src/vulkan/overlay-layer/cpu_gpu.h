@@ -15,6 +15,7 @@ using namespace std;
 
 int gpuLoad;
 string gpuLoadDisplay;
+FILE *amdGpuFile;
 
 const int NUM_CPU_STATES = 10;
 
@@ -157,12 +158,12 @@ void PrintStats(const std::vector<CPUData> & entries1, const std::vector<CPUData
 }
 
 void *getAmdGpuUsage(void *){
-	FILE *fp = fopen("/sys/class/drm/card0/device/gpu_busy_percent", "r");
 	char buff[5];
-   	fscanf(fp, "%s", buff);
-   	fclose(fp);
+    fflush(amdGpuFile);
+   	fscanf(amdGpuFile, "%s", buff);
 	gpuLoadDisplay = buff;
 	gpuLoad = stoi(buff);
+	pthread_detach(gpuThread);
 	return NULL;
 }
 

@@ -157,21 +157,22 @@ void PrintStats(const std::vector<CPUData> & entries1, const std::vector<CPUData
 }
 
 void *getAmdGpuUsage(void *){
-  string gpu = exec("cat /sys/class/drm/card0/device/gpu_busy_percent");
-  gpu.pop_back();
-  gpuLoadDisplay = gpu + "%";
-  gpuLoad = stoi(gpu);
-  pthread_detach(gpuThread);
-  return NULL;
+	FILE *fp = fopen("/sys/class/drm/card0/device/gpu_busy_percent", "r");
+	char buff[5];
+   	fscanf(fp, "%s", buff);
+   	fclose(fp);
+	gpuLoadDisplay = buff;
+	gpuLoad = stoi(buff);
+	return NULL;
 }
 
 void *getNvidiaGpuUsage(void *){
-  string gpu = exec("nvidia-smi --query-gpu=utilization.gpu,temperature.gpu --format=csv,noheader | tr -d ' ' | head -n1 | cut -d',' -f1 | tr -d '%'");
-  gpu.pop_back();
-  gpuLoadDisplay = gpu + "%";
-  gpuLoad = stoi(gpu);
-  pthread_detach(gpuThread);
-  return NULL;
+	string gpu = exec("nvidia-smi --query-gpu=utilization.gpu,temperature.gpu --format=csv,noheader | tr -d ' ' | head -n1 | cut -d',' -f1 | tr -d '%'");
+	gpu.pop_back();
+	gpuLoadDisplay = gpu;
+	gpuLoad = stoi(gpu);
+	pthread_detach(gpuThread);
+	return NULL;
 }
 
 void *getCpuUsage(void *)

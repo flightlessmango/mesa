@@ -1057,7 +1057,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
    if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
       ImGui::TextColored(ImVec4(0.0, 0.502, 0.25, 1.00f), "GPU");
       ImGui::SameLine();
-      ImGui::Text("%s%s", "  ", gpuLoadDisplay.c_str());
+      ImGui::Text("%s%s%%", "  ", gpuLoadDisplay.c_str());
    }    
    
    ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");

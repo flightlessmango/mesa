@@ -159,6 +159,7 @@ void PrintStats(const std::vector<CPUData> & entries1, const std::vector<CPUData
 
 void *getAmdGpuUsage(void *){
 	char buff[5];
+	rewind(amdGpuFile);
     fflush(amdGpuFile);
    	fscanf(amdGpuFile, "%s", buff);
 	gpuLoadDisplay = buff;

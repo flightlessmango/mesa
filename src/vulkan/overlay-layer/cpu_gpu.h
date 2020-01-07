@@ -174,7 +174,6 @@ void *cpuInfo(void *){
 }
 
 void *getAmdGpuUsage(void *){
-	pthread_create(&cpuInfoThread, NULL, &cpuInfo, NULL);
 	char buff[5];
 	rewind(amdGpuFile);
     fflush(amdGpuFile);

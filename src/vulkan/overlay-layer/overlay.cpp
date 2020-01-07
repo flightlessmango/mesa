@@ -885,6 +885,7 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
             updateCpuStrings();
             pthread_create(&cpuThread, NULL, &getCpuUsage, NULL);
             data->cpuString = cpuArray[0].output.c_str();
+            pthread_create(&cpuInfoThread, NULL, &cpuInfo, NULL);
             // get gpu usage
             if (deviceName.find("GeForce") != std::string::npos)
               pthread_create(&gpuThread, NULL, &getNvidiaGpuUsage, NULL);

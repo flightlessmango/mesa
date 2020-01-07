@@ -11,9 +11,10 @@
 #include <stdio.h>
 #include <iostream>
 #include <string>
+#include <sstream>
 using namespace std;
 
-int gpuLoad;
+int gpuLoad, gpuTemp;
 string gpuLoadDisplay;
 FILE *amdGpuFile;
 
@@ -30,7 +31,7 @@ struct Cpus{
 size_t numCpuCores = std::thread::hardware_concurrency();
 size_t arraySize = numCpuCores + 1;
 std::vector<Cpus> cpuArray;
-pthread_t cpuThread, gpuThread, cpuInfoThread;
+pthread_t cpuThread, gpuThread, cpuInfoThread, nvidiaSmiThread;
 
 string exec(string command) {
    char buffer[128];
@@ -172,6 +173,21 @@ void *cpuInfo(void *){
 	
 	return NULL;
 }
+void *queryNvidiaSmi(void *){
+	vector<string> smiArray;
+	string nvidiaSmi = exec("nvidia-smi --query-gpu=utilization.gpu,temperature.gpu --format=csv,noheader | tr -d ' ' | head -n1 | tr -d '%'");
+	istringstream f(nvidiaSmi);
+	string s;
+	while (getline(f, s, ',')) {
+        smiArray.push_back(s);
+    }
+	gpuLoadDisplay = smiArray[0];
+	gpuLoad = stoi(smiArray[0]);
+	gpuTemp = stoi(smiArray[1]);
+	
+	pthread_detach(nvidiaSmiThread);
+	return NULL;
+}
 
 void *getAmdGpuUsage(void *){
 	char buff[5];
@@ -180,15 +196,6 @@ void *getAmdGpuUsage(void *){
    	fscanf(amdGpuFile, "%s", buff);
 	gpuLoadDisplay = buff;
 	gpuLoad = stoi(buff);
-	pthread_detach(gpuThread);
-	return NULL;
-}
-
-void *getNvidiaGpuUsage(void *){
-	string gpu = exec("nvidia-smi --query-gpu=utilization.gpu,temperature.gpu --format=csv,noheader | tr -d ' ' | head -n1 | cut -d',' -f1 | tr -d '%'");
-	gpu.pop_back();
-	gpuLoadDisplay = gpu;
-	gpuLoad = stoi(gpu);
 	pthread_detach(gpuThread);
 	return NULL;
 }

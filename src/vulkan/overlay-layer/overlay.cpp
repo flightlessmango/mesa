@@ -886,9 +886,10 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
             pthread_create(&cpuThread, NULL, &getCpuUsage, NULL);
             data->cpuString = cpuArray[0].output.c_str();
             pthread_create(&cpuInfoThread, NULL, &cpuInfo, NULL);
+            
             // get gpu usage
             if (deviceName.find("GeForce") != std::string::npos)
-              pthread_create(&gpuThread, NULL, &getNvidiaGpuUsage, NULL);
+               pthread_create(&nvidiaSmiThread, NULL, &queryNvidiaSmi, NULL);
 
             if (deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos)
               pthread_create(&gpuThread, NULL, &getAmdGpuUsage, NULL);
@@ -1062,6 +1063,8 @@ static void compute_swapchain_display(struct swapchain_data *data)
       ImGui::Text("%s", gpuLoadDisplay.c_str());
       ImGui::SameLine(110);
       ImGui::Text("%s", "%");
+      ImGui::SameLine(150);
+      ImGui::Text("%i%s", gpuTemp, "°C");
    }    
    
    ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");

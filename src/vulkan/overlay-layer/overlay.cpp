@@ -1038,7 +1038,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
    }
 
    if (hud_height == 0){
-      y = 130;
+      y = 130 + (17 * numCpuCores) + 50;
    } else {
       y = hud_height;
    }

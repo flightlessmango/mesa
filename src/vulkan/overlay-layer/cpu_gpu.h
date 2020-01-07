@@ -24,12 +24,13 @@ struct Cpus{
   string name;
   int value;
   string output;
+  int freq;
 };
 
 size_t numCpuCores = std::thread::hardware_concurrency();
 size_t arraySize = numCpuCores + 1;
 std::vector<Cpus> cpuArray;
-pthread_t cpuThread, gpuThread;
+pthread_t cpuThread, gpuThread, cpuInfoThread;
 
 string exec(string command) {
    char buffer[128];
@@ -157,7 +158,23 @@ void PrintStats(const std::vector<CPUData> & entries1, const std::vector<CPUData
 	}
 }
 
+void *cpuInfo(void *){
+	for (size_t i = 0; i < numCpuCores; i++)
+	{
+		char buff[8];
+		std::string cpuFreqPath = "/sys/devices/system/cpu/cpu" + to_string(i) + "/cpufreq/scaling_cur_freq";
+		FILE *cpuFreq = fopen(cpuFreqPath.c_str(), "r");
+		fscanf(cpuFreq, "%s", buff);
+		cpuArray[i + 1].freq = stoi(buff) / 1000;
+		fclose(cpuFreq);
+	}
+	pthread_detach(cpuInfoThread);
+	
+	return NULL;
+}
+
 void *getAmdGpuUsage(void *){
+	pthread_create(&cpuInfoThread, NULL, &cpuInfo, NULL);
 	char buff[5];
 	rewind(amdGpuFile);
     fflush(amdGpuFile);

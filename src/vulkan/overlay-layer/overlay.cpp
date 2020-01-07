@@ -1057,27 +1057,36 @@ static void compute_swapchain_display(struct swapchain_data *data)
    // ImGui::Text("Frames: %" PRIu64, data->n_frames);
    if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
       ImGui::TextColored(ImVec4(0.0, 0.502, 0.25, 1.00f), "GPU");
-      ImGui::SameLine();
-      ImGui::Text("%s%s%%", "  ", gpuLoadDisplay.c_str());
+      ImGui::SameLine(75 + (30 - (gpuLoadDisplay.length() * 10)));
+      ImGui::Text("%s", gpuLoadDisplay.c_str());
+      ImGui::SameLine(110);
+      ImGui::Text("%s", "%");
    }    
    
    ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
-   ImGui::SameLine();
-   ImGui::Text("%s%d%%", "  ", cpuLoadLog);
+   ImGui::SameLine(75 + (30 - (to_string(cpuLoadLog).length() * 10)));
+   ImGui::Text("%d", cpuLoadLog);
+   ImGui::SameLine(110);
+   ImGui::Text("%s", "%");
    
-   // ImGui::Text("%s %d%%", "CPU:", cpuLoadLog );
-   // ImGui::SameLine();
-   // ImGui::Text("%s", data->cpuString );
-   // for (size_t i = 0; i < numCpuCores; i++)
-   // {
-   //    ImGui::Text("%s", cpuArray[i + 1].output.c_str());
-   // }
+   for (int i = 0; i < numCpuCores; i++)
+   {
+      ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
+      ImGui::SameLine(45);
+      ImGui::Text("%i", i);
+      ImGui::SameLine(75 + (30 - (to_string(cpuArray[i + 1].value).length() * 10)));
+      ImGui::Text("%i", cpuArray[i + 1].value);
+      ImGui::SameLine(110);
+      ImGui::Text("%s", "%");
+      ImGui::SameLine(150);
+      ImGui::Text("%i%s", cpuArray[i + 1].freq, "Mhz");
+   }
    
    data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
    if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){
       ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "FPS");
-      ImGui::SameLine();
-      ImGui::Text("%s%.0f", "  ", data->fps);
+      ImGui::SameLine(75 + (30 - (to_string(int(data->fps)).length() * 10)));
+      ImGui::Text("%.0f", data->fps);
       ImGui::SameLine(150);
       ImGui::Text("%.1fms", data->frametimeDisplay);
    }

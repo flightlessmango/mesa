@@ -871,6 +871,7 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          {
             path = "/sys/class/hwmon/hwmon" + to_string(i) + "/name";
             name = exec("cat " + path);
+            name.pop_back();
             if (name == "k10temp"){
                cpuTempLocation = "/sys/class/hwmon/hwmon" + to_string(i) + "/temp1_input";
                break;

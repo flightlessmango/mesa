@@ -16,7 +16,7 @@ using namespace std;
 
 int gpuLoad, gpuTemp;
 string gpuLoadDisplay;
-FILE *amdGpuFile;
+FILE *amdGpuFile, *amdTempFile;
 
 const int NUM_CPU_STATES = 10;
 
@@ -173,6 +173,7 @@ void *cpuInfo(void *){
 	
 	return NULL;
 }
+
 void *queryNvidiaSmi(void *){
 	vector<string> smiArray;
 	string nvidiaSmi = exec("nvidia-smi --query-gpu=utilization.gpu,temperature.gpu --format=csv,noheader | tr -d ' ' | head -n1 | tr -d '%'");
@@ -195,7 +196,13 @@ void *getAmdGpuUsage(void *){
     fflush(amdGpuFile);
    	fscanf(amdGpuFile, "%s", buff);
 	gpuLoadDisplay = buff;
-	gpuLoad = stoi(buff);
+	gpuLoad = stoi(buff);	
+	
+	rewind(amdTempFile);
+    fflush(amdTempFile);
+	fscanf(amdTempFile, "%s", buff);
+	gpuTemp = (stoi(buff) / 1000);
+
 	pthread_detach(gpuThread);
 	return NULL;
 }

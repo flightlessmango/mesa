@@ -852,6 +852,10 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
       
       coreCounting();
       amdGpuFile = fopen("/sys/class/drm/card0/device/gpu_busy_percent", "r");
+      string tempFolder = exec("ls /sys/class/drm/card0/device/hwmon/");
+      tempFolder.pop_back();
+      string tempLocation = "/sys/class/drm/card0/device/hwmon/" + tempFolder + "/temp1_input";
+      amdTempFile = fopen(tempLocation.c_str(), "r");
       sysInfoFetched = true;
    }
 

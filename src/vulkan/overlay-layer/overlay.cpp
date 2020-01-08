@@ -866,7 +866,6 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
       } else {
          string name;
          string path;
-         cpuTempLocation;
          for (size_t i = 0; i < 10; i++)
          {
             path = "/sys/class/hwmon/hwmon" + to_string(i) + "/name";
@@ -877,10 +876,10 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
                break;
             }
          }
-         if (cpuTempFile) {
-            cpuTempFile = fopen(cpuTempLocation.c_str(), "r");
-         } else {
+         if (cpuTempLocation.empty()) {
             cout << "MANGOHUD: Could not find temp location" << endl;
+         } else {
+            cpuTempFile = fopen(cpuTempLocation.c_str(), "r");
          }
       }
 

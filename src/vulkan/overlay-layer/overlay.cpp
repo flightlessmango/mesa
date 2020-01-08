@@ -858,10 +858,30 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          string tempLocation = "/sys/class/drm/card0/device/hwmon/" + tempFolder + "/temp1_input";
          amdTempFile = fopen(tempLocation.c_str(), "r");
       }
-      string cpuTempFolder = exec("ls /sys/devices/platform/coretemp.0/hwmon/");
-      cpuTempFolder.pop_back();
-      string cpuTempLocation = "/sys/devices/platform/coretemp.0/hwmon/" + cpuTempFolder + "/temp1_input";
-      cpuTempFile = fopen(cpuTempLocation.c_str(), "r");
+      if (cpu.find("Intel") != std::string::npos){
+         string cpuTempFolder = exec("ls /sys/devices/platform/coretemp.0/hwmon/");
+         cpuTempFolder.pop_back();
+         cpuTempLocation = "/sys/devices/platform/coretemp.0/hwmon/" + cpuTempFolder + "/temp1_input";
+         cpuTempFile = fopen(cpuTempLocation.c_str(), "r");
+      } else {
+         string name;
+         string path;
+         cpuTempLocation;
+         for (size_t i = 0; i < 10; i++)
+         {
+            path = "/sys/class/hwmon/hwmon" + to_string(i) + "/name";
+            name = exec("cat " + path);
+            if (name == "k10temp"){
+               cpuTempLocation = "/sys/class/hwmon/hwmon" + to_string(i) + "/temp1_input";
+               break;
+            }
+         }
+         if (cpuTempFile) {
+            cpuTempFile = fopen(cpuTempLocation.c_str(), "r");
+         } else {
+            cout << "MANGOHUD: Could not find temp location" << endl;
+         }
+      }
 
       sysInfoFetched = true;
    }

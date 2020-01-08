@@ -15,7 +15,7 @@
 using namespace std;
 
 int gpuLoad, gpuTemp, cpuTemp;
-string gpuLoadDisplay;
+string gpuLoadDisplay, cpuTempLocation;
 FILE *amdGpuFile, *amdTempFile, *cpuTempFile;
 
 const int NUM_CPU_STATES = 10;

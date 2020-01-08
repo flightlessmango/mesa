@@ -14,9 +14,9 @@
 #include <sstream>
 using namespace std;
 
-int gpuLoad, gpuTemp;
+int gpuLoad, gpuTemp, cpuTemp;
 string gpuLoadDisplay;
-FILE *amdGpuFile, *amdTempFile;
+FILE *amdGpuFile, *amdTempFile, *cpuTempFile;
 
 const int NUM_CPU_STATES = 10;
 
@@ -169,6 +169,12 @@ void *cpuInfo(void *){
 		cpuArray[i + 1].freq = stoi(buff) / 1000;
 		fclose(cpuFreq);
 	}
+
+	char buff[6];
+	rewind(cpuTempFile);
+    fflush(cpuTempFile);
+   	fscanf(cpuTempFile, "%s", buff);
+	cpuTemp = stoi(buff) / 1000;
 	pthread_detach(cpuInfoThread);
 	
 	return NULL;

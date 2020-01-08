@@ -858,6 +858,11 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
          string tempLocation = "/sys/class/drm/card0/device/hwmon/" + tempFolder + "/temp1_input";
          amdTempFile = fopen(tempLocation.c_str(), "r");
       }
+      string cpuTempFolder = exec("ls /sys/devices/platform/coretemp.0/hwmon/");
+      cpuTempFolder.pop_back();
+      string cpuTempLocation = "/sys/devices/platform/coretemp.0/hwmon/" + cpuTempFolder + "/temp1_input";
+      cpuTempFile = fopen(cpuTempLocation.c_str(), "r");
+
       sysInfoFetched = true;
    }
 
@@ -1078,7 +1083,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::Text("%d", cpuLoadLog);
    ImGui::SameLine(110);
    ImGui::Text("%s", "%");
-   
+   ImGui::SameLine(150);
+   ImGui::Text("%i%s", cpuTemp, "°C");
+
    for (int i = 0; i < numCpuCores; i++)
    {
       ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");

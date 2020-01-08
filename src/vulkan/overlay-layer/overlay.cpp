@@ -1058,127 +1058,121 @@ static void compute_swapchain_display(struct swapchain_data *data)
    if(displayHud)
 	   ImGui::Begin("Main", &open, ImVec2(x, y), 0.5f, ImGuiWindowFlags_NoDecoration);
 
-	 if(!displayHud)
-	   ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);
+   if(!displayHud)
+   ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);
 
-	 if (displayHud){
-   // ImGui::Text("Device: %s", device_data->properties.deviceName);
-   //
-   // const char *format_name = vk_Format_to_str(data->format);
-   // format_name = format_name ? (format_name + strlen("VK_FORMAT_")) : "unknown";
-   // ImGui::Text("Swapchain format: %s", format_name);
-   // ImGui::Text("Frames: %" PRIu64, data->n_frames);
-   if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
-      ImGui::TextColored(ImVec4(0.0, 0.502, 0.25, 1.00f), "GPU");
-      ImGui::SameLine(75 + (30 - (gpuLoadDisplay.length() * 10)));
-      ImGui::Text("%s", gpuLoadDisplay.c_str());
-      ImGui::SameLine(110);
-      ImGui::Text("%s", "%");
-      ImGui::SameLine(150);
-      ImGui::Text("%i%s", gpuTemp, "°C");
-   }    
-   
-   ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
-   ImGui::SameLine(75 + (30 - (to_string(cpuLoadLog).length() * 10)));
-   ImGui::Text("%d", cpuLoadLog);
-   ImGui::SameLine(110);
-   ImGui::Text("%s", "%");
-   ImGui::SameLine(150);
-   ImGui::Text("%i%s", cpuTemp, "°C");
-
-   for (int i = 0; i < numCpuCores; i++)
-   {
+   if (displayHud){
+      if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
+         ImGui::TextColored(ImVec4(0.0, 0.502, 0.25, 1.00f), "GPU");
+         ImGui::SameLine(75 + (30 - (gpuLoadDisplay.length() * 10)));
+         ImGui::Text("%s", gpuLoadDisplay.c_str());
+         ImGui::SameLine(110);
+         ImGui::Text("%s", "%");
+         ImGui::SameLine(150);
+         ImGui::Text("%i%s", gpuTemp, "°C");
+      }    
+      ImGui::Text("%s", cpu.c_str());
       ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
-      ImGui::SameLine(45);
-      ImGui::Text("%i", i);
-      ImGui::SameLine(75 + (30 - (to_string(cpuArray[i + 1].value).length() * 10)));
-      ImGui::Text("%i", cpuArray[i + 1].value);
+      ImGui::SameLine(75 + (30 - (to_string(cpuLoadLog).length() * 10)));
+      ImGui::Text("%d", cpuLoadLog);
       ImGui::SameLine(110);
       ImGui::Text("%s", "%");
       ImGui::SameLine(150);
-      ImGui::Text("%i%s", cpuArray[i + 1].freq, "Mhz");
-   }
-   
-   data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
-   if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){
-      ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "FPS");
-      ImGui::SameLine(75 + (30 - (to_string(int(data->fps)).length() * 10)));
-      ImGui::Text("%.0f", data->fps);
-      ImGui::SameLine(150);
-      ImGui::Text("%.1fms", data->frametimeDisplay);
-   }
+      ImGui::Text("%i%s", cpuTemp, "°C");
 
-   ImGui::Dummy(ImVec2(0.0f, 20.0f));
+      for (int i = 0; i < numCpuCores; i++)
+      {
+         ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
+         ImGui::SameLine(45);
+         ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f),"%i", i);
+         ImGui::SameLine(75 + (30 - (to_string(cpuArray[i + 1].value).length() * 10)));
+         ImGui::Text("%i", cpuArray[i + 1].value);
+         ImGui::SameLine(110);
+         ImGui::Text("%s", "%");
+         ImGui::SameLine(150);
+         ImGui::Text("%i%s", cpuArray[i + 1].freq, " Mhz");
+      }
+      
+      data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
+      if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){
+         ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "FPS");
+         ImGui::SameLine(75 + (30 - (to_string(int(data->fps)).length() * 10)));
+         ImGui::Text("%.0f", data->fps);
+         ImGui::SameLine(150);
+         ImGui::Text("%.1fms", data->frametimeDisplay);
+      }
 
-   // ImGui::ProgressBar(float(ramPercent), ImVec2(280, 25), NULL);
+      ImGui::Dummy(ImVec2(0.0f, 20.0f));
 
-   if (loggingOn && log_period == 0){
-      uint64_t now = os_time_get();
-      elapsedLog = (double)(now - log_start);
-      if ((elapsedLog) >= duration * 1000000)
-			loggingOn = false;
+      // ImGui::ProgressBar(float(ramPercent), ImVec2(280, 25), NULL);
 
-      out << fps << "," <<  cpuLoadLog << "," << gpuLoadLog << "," << (now - log_start) << endl;
-   }
+      if (loggingOn && log_period == 0){
+         uint64_t now = os_time_get();
+         elapsedLog = (double)(now - log_start);
+         if ((elapsedLog) >= duration * 1000000)
+            loggingOn = false;
 
-   /* Recompute min/max */
-   for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {
-      data->stats_min.stats[s] = UINT64_MAX;
-      data->stats_max.stats[s] = 0;
-   }
-   for (uint32_t f = 0; f < MIN2(data->n_frames, ARRAY_SIZE(data->frames_stats)); f++) {
+         out << fps << "," <<  cpuLoadLog << "," << gpuLoadLog << "," << (now - log_start) << endl;
+      }
+
+      /* Recompute min/max */
       for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {
-         data->stats_min.stats[s] = MIN2(data->frames_stats[f].stats[s],
-                                         data->stats_min.stats[s]);
-         data->stats_max.stats[s] = MAX2(data->frames_stats[f].stats[s],
-                                         data->stats_max.stats[s]);
+         data->stats_min.stats[s] = UINT64_MAX;
+         data->stats_max.stats[s] = 0;
       }
-   }
-   for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {
-      assert(data->stats_min.stats[s] != UINT64_MAX);
-   }
-
-   for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {
-      if (!instance_data->params.enabled[s] ||
-          s == OVERLAY_PARAM_ENABLED_fps ||
-          s == OVERLAY_PARAM_ENABLED_frame)
-         continue;
-
-      char hash[40];
-      snprintf(hash, sizeof(hash), "##%s", overlay_param_names[s]);
-      data->stat_selector = (enum overlay_param_enabled) s;
-      data->time_dividor = 1000.0f;
-      if (s == OVERLAY_PARAM_ENABLED_gpu_timing)
-         data->time_dividor = 1000000.0f;
-
-      if (s == OVERLAY_PARAM_ENABLED_frame_timing ||
-          s == OVERLAY_PARAM_ENABLED_acquire_timing ||
-          s == OVERLAY_PARAM_ENABLED_present_timing ||
-          s == OVERLAY_PARAM_ENABLED_gpu_timing) {
-         // double min_time = data->stats_min.stats[s] / data->time_dividor;
-         // double max_time = data->stats_max.stats[s] / data->time_dividor;
-         double min_time = 0.0f;
-         double max_time = 50.0f;
-         ImGui::PlotLines(hash, get_time_stat, data,
-                              ARRAY_SIZE(data->frames_stats), 0,
-                              NULL, min_time, max_time,
-                              ImVec2(ImGui::GetContentRegionAvailWidth(), 30));
-         // ImGui::Text("%s: %.3fms [%.3f, %.3f]", overlay_param_names[s],
-         //             get_time_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
-         //             min_time, max_time);
-      } else {
-         ImGui::PlotHistogram(hash, get_stat, data,
-                              ARRAY_SIZE(data->frames_stats), 0,
-                              NULL,
-                              data->stats_min.stats[s],
-                              data->stats_max.stats[s],
-                              ImVec2(ImGui::GetContentRegionAvailWidth(), 50));
-         ImGui::Text("%s: %.0f [%" PRIu64 ", %" PRIu64 "]", overlay_param_names[s],
-                     get_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
-                     data->stats_min.stats[s], data->stats_max.stats[s]);
+      for (uint32_t f = 0; f < MIN2(data->n_frames, ARRAY_SIZE(data->frames_stats)); f++) {
+         for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {
+            data->stats_min.stats[s] = MIN2(data->frames_stats[f].stats[s],
+                                          data->stats_min.stats[s]);
+            data->stats_max.stats[s] = MAX2(data->frames_stats[f].stats[s],
+                                          data->stats_max.stats[s]);
+         }
       }
-   }
-   data->window_size = ImVec2(data->window_size.x, ImGui::GetCursorPosY() + 10.0f);
+      for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {
+         assert(data->stats_min.stats[s] != UINT64_MAX);
+      }
+
+      for (uint32_t s = 0; s < OVERLAY_PARAM_ENABLED_MAX; s++) {
+         if (!instance_data->params.enabled[s] ||
+            s == OVERLAY_PARAM_ENABLED_fps ||
+            s == OVERLAY_PARAM_ENABLED_frame)
+            continue;
+
+         char hash[40];
+         snprintf(hash, sizeof(hash), "##%s", overlay_param_names[s]);
+         data->stat_selector = (enum overlay_param_enabled) s;
+         data->time_dividor = 1000.0f;
+         if (s == OVERLAY_PARAM_ENABLED_gpu_timing)
+            data->time_dividor = 1000000.0f;
+
+         if (s == OVERLAY_PARAM_ENABLED_frame_timing ||
+            s == OVERLAY_PARAM_ENABLED_acquire_timing ||
+            s == OVERLAY_PARAM_ENABLED_present_timing ||
+            s == OVERLAY_PARAM_ENABLED_gpu_timing) {
+            // double min_time = data->stats_min.stats[s] / data->time_dividor;
+            // double max_time = data->stats_max.stats[s] / data->time_dividor;
+            double min_time = 0.0f;
+            double max_time = 50.0f;
+            ImGui::PlotLines(hash, get_time_stat, data,
+                                 ARRAY_SIZE(data->frames_stats), 0,
+                                 NULL, min_time, max_time,
+                                 ImVec2(ImGui::GetContentRegionAvailWidth(), 30));
+            // ImGui::Text("%s: %.3fms [%.3f, %.3f]", overlay_param_names[s],
+            //             get_time_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
+            //             min_time, max_time);
+         } else {
+            ImGui::PlotHistogram(hash, get_stat, data,
+                                 ARRAY_SIZE(data->frames_stats), 0,
+                                 NULL,
+                                 data->stats_min.stats[s],
+                                 data->stats_max.stats[s],
+                                 ImVec2(ImGui::GetContentRegionAvailWidth(), 50));
+            ImGui::Text("%s: %.0f [%" PRIu64 ", %" PRIu64 "]", overlay_param_names[s],
+                        get_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
+                        data->stats_min.stats[s], data->stats_max.stats[s]);
+         }
+      }
+      data->window_size = ImVec2(data->window_size.x, ImGui::GetCursorPosY() + 10.0f);
    }
    ImGui::End();
    ImGui::EndFrame();

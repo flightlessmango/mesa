@@ -63,6 +63,7 @@ extern "C" {
    OVERLAY_PARAM_BOOL(tess_eval_invocations)         \
    OVERLAY_PARAM_BOOL(compute_invocations)           \
    OVERLAY_PARAM_BOOL(gpu_timing)                    \
+   OVERLAY_PARAM_BOOL(core_load)                     \
    OVERLAY_PARAM_CUSTOM(fps_sampling_period)         \
    OVERLAY_PARAM_CUSTOM(output_file)                 \
    OVERLAY_PARAM_CUSTOM(position)                    \

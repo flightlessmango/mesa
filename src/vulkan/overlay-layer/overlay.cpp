@@ -1070,7 +1070,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
    }
 
    if (hud_height == 0){
-      y = 130 + (17 * numCpuCores) + 50;
+      y = 130;
+      if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_core_load])
+         y += (21 * numCpuCores);
    } else {
       y = hud_height;
    }
@@ -1098,18 +1100,19 @@ static void compute_swapchain_display(struct swapchain_data *data)
       ImGui::Text("%s", "%");
       ImGui::SameLine(150);
       ImGui::Text("%i%s", cpuTemp, "°C");
-
-      for (int i = 0; i < numCpuCores; i++)
-      {
-         ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
-         ImGui::SameLine(45);
-         ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f),"%i", i);
-         ImGui::SameLine(75 + (30 - (to_string(cpuArray[i + 1].value).length() * 10)));
-         ImGui::Text("%i", cpuArray[i + 1].value);
-         ImGui::SameLine(110);
-         ImGui::Text("%s", "%");
-         ImGui::SameLine(150);
-         ImGui::Text("%i%s", cpuArray[i + 1].freq, " Mhz");
+      if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_core_load]){
+         for (int i = 0; i < numCpuCores; i++)
+         {
+            ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
+            ImGui::SameLine(45);
+            ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f),"%i", i);
+            ImGui::SameLine(75 + (30 - (to_string(cpuArray[i + 1].value).length() * 10)));
+            ImGui::Text("%i", cpuArray[i + 1].value);
+            ImGui::SameLine(110);
+            ImGui::Text("%s", "%");
+            ImGui::SameLine(150);
+            ImGui::Text("%i%s", cpuArray[i + 1].freq, " Mhz");
+         }
       }
       
       data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;

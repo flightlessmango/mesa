@@ -1079,7 +1079,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
 	   ImGui::Begin("Main", &open, ImVec2(x, y), 0.5f, ImGuiWindowFlags_NoDecoration);
 
    if(!displayHud)
-   ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);
+      ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);
 
    if (displayHud){
       if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
@@ -1091,7 +1091,6 @@ static void compute_swapchain_display(struct swapchain_data *data)
          ImGui::SameLine(150);
          ImGui::Text("%i%s", gpuTemp, "°C");
       }    
-      ImGui::Text("%s", cpu.c_str());
       ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
       ImGui::SameLine(75 + (30 - (to_string(cpuLoadLog).length() * 10)));
       ImGui::Text("%d", cpuLoadLog);

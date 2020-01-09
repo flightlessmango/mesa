@@ -49,12 +49,9 @@
 #include "logging.h"
 #include "keybinds.h"
 
-bool open = false, displayHud = true, checkHudSize = false;
+bool open = false, displayHud = true;
 string gpuString;
-int hud_width, hud_height;
 float offset_x, offset_y;
-const char* hud_width_env = std::getenv("HUD_WIDTH");
-const char* hud_height_env = std::getenv("HUD_HEIGHT");
 const char* offset_x_env = std::getenv("X_OFFSET");
 const char* offset_y_env = std::getenv("Y_OFFSET");
 
@@ -884,16 +881,6 @@ static void snapshot_swapchain_frame(struct swapchain_data *data)
       }
 
       sysInfoFetched = true;
-   }
-
-   if (!checkHudSize){
-      if(!hud_width_env == NULL)
-         hud_width = std::stoi(hud_width_env);
-
-      if(!hud_height_env == NULL)
-         hud_height = std::stoi(hud_height_env);
-
-      checkHudSize = true;
    }
 
    /* If capture has been enabled but it hasn't started yet, it means we are on

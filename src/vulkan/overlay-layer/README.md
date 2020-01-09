@@ -12,17 +12,15 @@ using an overlay.
 
 To turn on the layer run :
 
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay_mango /path/to/my_vulkan_app
+MANGOHUD=1 /path/to/my_vulkan_app
 
 Position the layer :
 
-VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay_mango VK_LAYER_MESA_OVERLAY_CONFIG=position=top-right /path/to/my_vulkan_app
+MANGOHUD=1 MANGOHUD_CONFIG=position=top-right /path/to/my_vulkan_app
 
 ## Environment Variables
 - `MANGO_OUTPUT`: Define name and location of the output file (Required for logging)
 - `FONT_SIZE`   : Set hud font size. Default size is 24
-- `HUD_WIDTH`   : Set hud width. Default width is 280
-- `HUD_HEIGHT`  : Set hud height. Default height is 160
 
 ## Keybindings
 - `F2` : Toggle Logging

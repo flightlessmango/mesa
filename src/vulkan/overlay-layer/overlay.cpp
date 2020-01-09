@@ -1106,13 +1106,12 @@ static void compute_swapchain_display(struct swapchain_data *data)
          }
       }
       
-      data->frametime = get_stat(data, ARRAY_SIZE(data->frames_stats) - 1) / 1000;
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){
          ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "FPS");
          ImGui::SameLine(75 + (30 - (to_string(int(data->fps)).length() * 10)));
          ImGui::Text("%.0f", data->fps);
          ImGui::SameLine(150);
-         ImGui::Text("%.1fms", data->frametimeDisplay);
+         ImGui::Text("%.1fms", 1000 / data->fps);
       }
       
       // ImGui::ProgressBar(float(0.5), ImVec2(ImGui::GetContentRegionAvailWidth(), 21), NULL);

@@ -1075,16 +1075,22 @@ static void compute_swapchain_display(struct swapchain_data *data)
          ImGui::Text("%s", gpuLoadDisplay.c_str());
          ImGui::SameLine(110);
          ImGui::Text("%s", "%");
-         ImGui::SameLine(150);
-         ImGui::Text("%i%s", gpuTemp, "°C");
+         if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_gpu_temp]){
+            ImGui::SameLine(150);
+            ImGui::Text("%i%s", gpuTemp, "°C");
+         }
       }    
+      
       ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
       ImGui::SameLine(75 + (30 - (to_string(cpuLoadLog).length() * 10)));
       ImGui::Text("%d", cpuLoadLog);
       ImGui::SameLine(110);
       ImGui::Text("%s", "%");
-      ImGui::SameLine(150);
-      ImGui::Text("%i%s", cpuTemp, "°C");
+      if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_cpu_temp]){
+         ImGui::SameLine(150);
+         ImGui::Text("%i%s", cpuTemp, "°C");
+      }
+
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_core_load]){
          for (int i = 0; i < numCpuCores; i++)
          {
@@ -1108,10 +1114,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
          ImGui::SameLine(150);
          ImGui::Text("%.1fms", data->frametimeDisplay);
       }
-
+      
+      // ImGui::ProgressBar(float(0.5), ImVec2(ImGui::GetContentRegionAvailWidth(), 21), NULL);
       ImGui::Dummy(ImVec2(0.0f, 20.0f));
-
-      // ImGui::ProgressBar(float(ramPercent), ImVec2(280, 25), NULL);
 
       if (loggingOn && log_period == 0){
          uint64_t now = os_time_get();
@@ -1174,9 +1179,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
                                  data->stats_min.stats[s],
                                  data->stats_max.stats[s],
                                  ImVec2(ImGui::GetContentRegionAvailWidth(), 50));
-            ImGui::Text("%s: %.0f [%" PRIu64 ", %" PRIu64 "]", overlay_param_names[s],
-                        get_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
-                        data->stats_min.stats[s], data->stats_max.stats[s]);
+            // ImGui::Text("%s: %.0f [%" PRIu64 ", %" PRIu64 "]", overlay_param_names[s],
+            //             get_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
+            //             data->stats_min.stats[s], data->stats_max.stats[s]);
          }
       }
       data->window_size = ImVec2(data->window_size.x, ImGui::GetCursorPosY() + 10.0f);

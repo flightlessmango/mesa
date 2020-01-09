@@ -167,6 +167,8 @@ parse_overlay_env(struct overlay_params *params,
    params->enabled[OVERLAY_PARAM_ENABLED_fps] = true;
    params->enabled[OVERLAY_PARAM_ENABLED_frame_timing] = true;
    params->enabled[OVERLAY_PARAM_ENABLED_core_load] = false;
+   params->enabled[OVERLAY_PARAM_ENABLED_cpu_temp] = false;
+   params->enabled[OVERLAY_PARAM_ENABLED_gpu_temp] = false;
    params->fps_sampling_period = 500000; /* 500ms */
    params->width = 280;
    params->height = 130;

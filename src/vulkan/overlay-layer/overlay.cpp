@@ -1061,24 +1061,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::SetCurrentContext(data->imgui_context);
    ImGui::NewFrame();
    position_layer(data);
-   int x, y;
-
-   if (hud_width == 0){
-      x = 280;
-   } else {
-      x = hud_width;
-   }
-
-   if (hud_height == 0){
-      y = 130;
-      if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_core_load])
-         y += (21 * numCpuCores);
-   } else {
-      y = hud_height;
-   }
 
    if(displayHud)
-	   ImGui::Begin("Main", &open, ImVec2(x, y), 0.5f, ImGuiWindowFlags_NoDecoration);
+	   ImGui::Begin("Main", &open, ImVec2(instance_data->params.width, instance_data->params.height), 0.5f, ImGuiWindowFlags_NoDecoration);
 
    if(!displayHud)
       ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);

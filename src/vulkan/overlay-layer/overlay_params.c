@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/sysinfo.h>
 
 #include "overlay_params.h"
 
@@ -167,7 +168,8 @@ parse_overlay_env(struct overlay_params *params,
    params->enabled[OVERLAY_PARAM_ENABLED_frame_timing] = true;
    params->enabled[OVERLAY_PARAM_ENABLED_core_load] = false;
    params->fps_sampling_period = 500000; /* 500ms */
-   params->width = params->height = 300;
+   params->width = 280;
+   params->height = 130;
    params->control = -1;
 
    if (!env)
@@ -192,4 +194,7 @@ parse_overlay_env(struct overlay_params *params,
 #undef OVERLAY_PARAM_CUSTOM
       fprintf(stderr, "Unknown option '%s'\n", key);
    }
+   // Apply more hud height if cores are enabled
+   if (params->enabled[OVERLAY_PARAM_ENABLED_core_load])
+      params->height +=  (21 * get_nprocs());
 }

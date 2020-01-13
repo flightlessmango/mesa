@@ -197,6 +197,6 @@ parse_overlay_env(struct overlay_params *params,
       fprintf(stderr, "Unknown option '%s'\n", key);
    }
    // Apply more hud height if cores are enabled
-   if (params->enabled[OVERLAY_PARAM_ENABLED_core_load])
+   if (params->enabled[OVERLAY_PARAM_ENABLED_core_load] && params->height == 130)
       params->height +=  (21 * get_nprocs());
 }

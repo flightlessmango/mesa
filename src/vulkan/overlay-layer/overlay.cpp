@@ -1094,8 +1094,10 @@ static void compute_swapchain_display(struct swapchain_data *data)
       }
       
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){
+         int fpsLength = to_string(int(data->fps)).length();
+         printf("%i\n", fpsLength);
          ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "FPS");
-         ImGui::SameLine(75 + (30 - (to_string(int(data->fps)).length() * 10)));
+         ImGui::SameLine((-12.5 * fpsLength) + 107.5);
          ImGui::Text("%.0f", data->fps);
          ImGui::SameLine(150);
          ImGui::Text("%.1fms", 1000 / data->fps);

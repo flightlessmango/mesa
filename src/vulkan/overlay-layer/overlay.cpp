@@ -51,7 +51,8 @@
 
 bool open = false, displayHud = true;
 string gpuString;
-float offset_x, offset_y;
+float offset_x, offset_y, hudSpacing;
+int hudFirstRow, hudSecondRow;
 const char* offset_x_env = std::getenv("X_OFFSET");
 const char* offset_y_env = std::getenv("Y_OFFSET");
 string engineName, engineVersion;
@@ -1050,7 +1051,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::SetCurrentContext(data->imgui_context);
    ImGui::NewFrame();
    position_layer(data);
-
+   
    if(displayHud)
 	   ImGui::Begin("Main", &open, ImVec2(instance_data->params.width, instance_data->params.height), 0.5f, ImGuiWindowFlags_NoDecoration);
 
@@ -1061,23 +1062,23 @@ static void compute_swapchain_display(struct swapchain_data *data)
       if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
          int gpuloadLength = gpuLoadDisplay.length();
          ImGui::TextColored(ImVec4(0.0, 0.502, 0.25, 1.00f), "GPU");
-         ImGui::SameLine((-12.5 * gpuloadLength) + 147.5);
-         ImGui::Text("%s", gpuLoadDisplay.c_str());
-         ImGui::SameLine(150);
-         ImGui::Text("%s", "%");
+         ImGui::SameLine(hudFirstRow);
+         ImGui::Text("%s%%", gpuLoadDisplay.c_str());
+         // ImGui::SameLine(150);
+         // ImGui::Text("%s", "%");
          if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_gpu_temp]){
-            ImGui::SameLine(175);
+            ImGui::SameLine(hudSecondRow);
             ImGui::Text("%i%s", gpuTemp, "°C");
          }
       }    
       int cpuloadLength = to_string(cpuLoadLog).length();
       ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
-      ImGui::SameLine((-12.5 * cpuloadLength) + 147.5);
-      ImGui::Text("%d", cpuLoadLog);
-      ImGui::SameLine(150);
-      ImGui::Text("%s", "%");
+      ImGui::SameLine(hudFirstRow);
+      ImGui::Text("%d%%", cpuLoadLog);
+      // ImGui::SameLine(150);
+      // ImGui::Text("%s", "%");
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_cpu_temp]){
-         ImGui::SameLine(175);
+         ImGui::SameLine(hudSecondRow);
          ImGui::Text("%i%s", cpuTemp, "°C");
       }
       
@@ -1086,15 +1087,15 @@ static void compute_swapchain_display(struct swapchain_data *data)
          {
             int cpuCoreLoadLength = to_string(cpuArray[i + 1].value).length();
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
-            ImGui::SameLine(45);
+            ImGui::SameLine();
             ImGui::PushFont(font1);
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f),"%i", i);
             ImGui::PopFont();
-            ImGui::SameLine((-12.5 * cpuCoreLoadLength) + 147.5);
-            ImGui::Text("%i", cpuArray[i + 1].value);
-            ImGui::SameLine(150);
-            ImGui::Text("%s", "%");
-            ImGui::SameLine(175);
+            ImGui::SameLine(hudFirstRow);
+            ImGui::Text("%i%%", cpuArray[i + 1].value);
+            // ImGui::SameLine(150);
+            // ImGui::Text("%s", "%");
+            ImGui::SameLine(hudSecondRow);
             ImGui::Text("%i%s", cpuArray[i + 1].freq, "Mhz");
          }
       }
@@ -1102,13 +1103,13 @@ static void compute_swapchain_display(struct swapchain_data *data)
          int fpsLength = to_string(int(data->fps)).length();
          int msLength = to_string(1000 / data->fps).length();
          ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "%s", engineName.c_str());
-         ImGui::SameLine((-12.5 * fpsLength) + 147.5);
+         ImGui::SameLine(hudFirstRow);
          ImGui::Text("%.0f", data->fps);
          ImGui::SameLine();
          ImGui::PushFont(font1);
          ImGui::Text("FPS");
          ImGui::PopFont();
-         ImGui::SameLine((-12.5 * msLength) + 300);
+         ImGui::SameLine(hudSecondRow);
          ImGui::Text("%.1f", 1000 / data->fps);
          ImGui::SameLine();
          ImGui::PushFont(font1);
@@ -2703,7 +2704,15 @@ static VkResult overlay_CreateInstance(
    instance_data_map_physical_devices(instance_data, true);
 
    parse_overlay_env(&instance_data->params, getenv("MANGOHUD_CONFIG"));
+   
+   int font_size = 24;
+   if (instance_data->params.font_size > 0)
+      font_size = instance_data->params.font_size;
 
+   hudSpacing = font_size / 2;
+   hudFirstRow = font_size * 5;
+   hudSecondRow = font_size * 8;
+ 
    /* If there's no control file, and an output_file was specified, start
     * capturing fps data right away.
     */

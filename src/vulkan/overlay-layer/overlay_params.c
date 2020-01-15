@@ -202,7 +202,18 @@ parse_overlay_env(struct overlay_params *params,
 #undef OVERLAY_PARAM_CUSTOM
       fprintf(stderr, "Unknown option '%s'\n", key);
    }
+   // if font_size is used and height has not been changed from default
+   // increase height as needed based on font_size
+   bool heightChanged;
+   if (params->height == 130) {
+      heightChanged = false;
+   } else {
+      heightChanged = true;
+   }
+   if (params->font_size > 0 && !heightChanged)
+      params->height = (3 * params->font_size) + 50;
    // Apply more hud height if cores are enabled
-   if (params->enabled[OVERLAY_PARAM_ENABLED_core_load] && params->height == 130)
-      params->height +=  (21 * get_nprocs());
+   if (params->enabled[OVERLAY_PARAM_ENABLED_core_load] && !heightChanged)
+     params->height += (params->font_size * get_nprocs());
+
 }

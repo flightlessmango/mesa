@@ -1596,20 +1596,9 @@ ImFont* ImFontAtlas::AddFontDefault(const ImFontConfig* font_cfg_template)
         font_cfg.OversampleH = font_cfg.OversampleV = 1;
         font_cfg.PixelSnapH = true;
     }
-
-    const char* font_size_env = std::getenv("FONT_SIZE");
-    float font_size;
-
-    if(!font_size_env == NULL)
-		font_size = std::stof(font_size_env);
-
-    if (font_cfg.SizePixels <= 0.0f){
-        if(int(font_size) == 0){
-            font_cfg.SizePixels = 24.0f * 1.0f;
-        } else {
-            font_cfg.SizePixels = font_size * 1.0f;
-        }
-    }
+    struct overlay_params params;
+    parse_overlay_env(&params, getenv("MANGOHUD_CONFIG"));
+    params.font_size > 0 ? font_cfg.SizePixels = params.font_size : font_cfg.SizePixels = 24.0f;
     
     if (font_cfg.Name[0] == '\0')
         ImFormatString(font_cfg.Name, IM_ARRAYSIZE(font_cfg.Name), "ProggyClean.ttf, %dpx", (int)font_cfg.SizePixels);

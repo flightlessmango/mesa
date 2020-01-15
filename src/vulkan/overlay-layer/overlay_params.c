@@ -67,6 +67,12 @@ parse_control(const char *str)
    return ret;
 }
 
+static float
+parse_font_size(const char *str)
+{
+   return strtof(str, NULL);
+}
+
 static uint32_t
 parse_fps_sampling_period(const char *str)
 {

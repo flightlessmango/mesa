@@ -54,6 +54,7 @@ string gpuString;
 float offset_x, offset_y;
 const char* offset_x_env = std::getenv("X_OFFSET");
 const char* offset_y_env = std::getenv("Y_OFFSET");
+string engineName;
 
 /* Mapped from VkInstace/VkPhysicalDevice */
 struct instance_data {
@@ -1097,8 +1098,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
       
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){
          int fpsLength = to_string(int(data->fps)).length();
-         ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "FPS");
-         ImGui::SameLine((-12.5 * fpsLength) + 107.5);
+         ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "%s", engineName.c_str());
          ImGui::Text("%.0f", data->fps);
          ImGui::SameLine(150);
          ImGui::Text("%.1fms", 1000 / data->fps);
@@ -2652,6 +2652,14 @@ static VkResult overlay_CreateInstance(
    VkLayerInstanceCreateInfo *chain_info =
       get_instance_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
 
+   engineName = pCreateInfo->pApplicationInfo->pEngineName;
+
+   if (engineName != "DXVK" && engineName != "vkd3d" && engineName != "Feral3D")
+      engineName = "VULKAN";
+
+   if (engineName == "vkd3d")
+      engineName = "VKD3D";
+   
    assert(chain_info->u.pLayerInfo);
    PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr =
       chain_info->u.pLayerInfo->pfnNextGetInstanceProcAddr;

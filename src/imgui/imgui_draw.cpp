@@ -20,7 +20,8 @@ Index of this file:
 // [SECTION] Default font data (ProggyClean.ttf)
 
 */
-
+#include "../vulkan//overlay-layer/overlay_params.h"
+#include <iostream>
 #if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -1615,7 +1616,16 @@ ImFont* ImFontAtlas::AddFontDefault(const ImFontConfig* font_cfg_template)
 
     const char* ttf_compressed_base85 = GetDefaultCompressedFontDataTTFBase85();
     const ImWchar* glyph_ranges = font_cfg.GlyphRanges != NULL ? font_cfg.GlyphRanges : GetGlyphRangesDefault();
-    ImFont* font = AddFontFromMemoryCompressedBase85TTF(ttf_compressed_base85, font_cfg.SizePixels, &font_cfg, glyph_ranges);
+    const char* mango_font = getenv("MANGO_FONT");
+    ImFont* font;
+    ImGuiIO& io = ImGui::GetIO();
+    if(mango_font) {
+        font = io.Fonts->AddFontFromFileTTF(mango_font, font_cfg.SizePixels);
+    } else {
+        font = AddFontFromMemoryCompressedBase85TTF(ttf_compressed_base85, font_cfg.SizePixels, &font_cfg, glyph_ranges);
+    }
+
+    // 
     font->DisplayOffset.y = 1.0f;
     return font;
 }

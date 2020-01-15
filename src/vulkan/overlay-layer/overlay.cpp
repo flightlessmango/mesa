@@ -1114,6 +1114,11 @@ static void compute_swapchain_display(struct swapchain_data *data)
          ImGui::PushFont(font1);
          ImGui::Text("ms");
          ImGui::PopFont();
+         if (engineName == "DXVK"){
+            ImGui::PushFont(font1);
+            ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "%s", engineVersion.c_str());
+            ImGui::PopFont();
+         }
       }
 
       // ImGui::ProgressBar(float(0.5), ImVec2(ImGui::GetContentRegionAvailWidth(), 21), NULL);

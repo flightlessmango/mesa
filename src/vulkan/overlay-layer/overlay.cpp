@@ -1051,6 +1051,8 @@ static void compute_swapchain_display(struct swapchain_data *data)
    ImGui::SetCurrentContext(data->imgui_context);
    ImGui::NewFrame();
    position_layer(data);
+   if (instance_data->params.font_size > 0 && instance_data->params.width == 280)
+      instance_data->params.width = hudFirstRow + hudSecondRow;
    
    if(displayHud)
 	   ImGui::Begin("Main", &open, ImVec2(instance_data->params.width, instance_data->params.height), 0.5f, ImGuiWindowFlags_NoDecoration);
@@ -2705,14 +2707,13 @@ static VkResult overlay_CreateInstance(
 
    parse_overlay_env(&instance_data->params, getenv("MANGOHUD_CONFIG"));
    
-   int font_size = 24;
-   if (instance_data->params.font_size > 0)
-      font_size = instance_data->params.font_size;
-
+   int font_size;
+   instance_data->params.font_size > 0 ? font_size = instance_data->params.font_size : font_size = 24;
+   
    hudSpacing = font_size / 2;
    hudFirstRow = font_size * 5;
    hudSecondRow = font_size * 8;
- 
+
    /* If there's no control file, and an output_file was specified, start
     * capturing fps data right away.
     */

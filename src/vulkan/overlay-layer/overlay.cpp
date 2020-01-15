@@ -1057,8 +1057,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
 
    if (displayHud){
       if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
+         int gpuloadLength = gpuLoadDisplay.length();
          ImGui::TextColored(ImVec4(0.0, 0.502, 0.25, 1.00f), "GPU");
-         ImGui::SameLine(75 + (30 - (gpuLoadDisplay.length() * 10)));
+         ImGui::SameLine((-12.5 * gpuloadLength) + 107.5);
          ImGui::Text("%s", gpuLoadDisplay.c_str());
          ImGui::SameLine(110);
          ImGui::Text("%s", "%");
@@ -1067,9 +1068,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
             ImGui::Text("%i%s", gpuTemp, "°C");
          }
       }    
-      
+      int cpuloadLength = to_string(cpuLoadLog).length();
       ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
-      ImGui::SameLine(75 + (30 - (to_string(cpuLoadLog).length() * 10)));
+      ImGui::SameLine((-12.5 * cpuloadLength) + 107.5);
       ImGui::Text("%d", cpuLoadLog);
       ImGui::SameLine(110);
       ImGui::Text("%s", "%");
@@ -1081,10 +1082,11 @@ static void compute_swapchain_display(struct swapchain_data *data)
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_core_load]){
          for (int i = 0; i < numCpuCores; i++)
          {
+            int cpuCoreLoadLength = to_string(cpuArray[i + 1].value).length();
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
             ImGui::SameLine(45);
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f),"%i", i);
-            ImGui::SameLine(75 + (30 - (to_string(cpuArray[i + 1].value).length() * 10)));
+            ImGui::SameLine((-12.5 * cpuCoreLoadLength) + 107.5);
             ImGui::Text("%i", cpuArray[i + 1].value);
             ImGui::SameLine(110);
             ImGui::Text("%s", "%");
@@ -1095,14 +1097,13 @@ static void compute_swapchain_display(struct swapchain_data *data)
       
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){
          int fpsLength = to_string(int(data->fps)).length();
-         printf("%i\n", fpsLength);
          ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "FPS");
          ImGui::SameLine((-12.5 * fpsLength) + 107.5);
          ImGui::Text("%.0f", data->fps);
          ImGui::SameLine(150);
          ImGui::Text("%.1fms", 1000 / data->fps);
       }
-      
+
       // ImGui::ProgressBar(float(0.5), ImVec2(ImGui::GetContentRegionAvailWidth(), 21), NULL);
       ImGui::Dummy(ImVec2(0.0f, 20.0f));
 

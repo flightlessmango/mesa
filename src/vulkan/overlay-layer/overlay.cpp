@@ -1117,7 +1117,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
          ImGui::PushFont(font1);
          ImGui::Text("ms");
          ImGui::PopFont();
-         if (engineName == "DXVK"){
+         if (engineName == "DXVK" || engineName == "VKD3D"){
             ImGui::PushFont(font1);
             ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "%s", engineVersion.c_str());
             ImGui::PopFont();
@@ -2673,7 +2673,7 @@ static VkResult overlay_CreateInstance(
       get_instance_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
 
    engineName = pCreateInfo->pApplicationInfo->pEngineName;
-   if (engineName == "DXVK") {
+   if (engineName == "DXVK" || engineName == "vkd3d") {
       int engineVer = pCreateInfo->pApplicationInfo->engineVersion;
       engineVersion = to_string(VK_VERSION_MAJOR(engineVer)) + "." + to_string(VK_VERSION_MINOR(engineVer)) + "." + to_string(VK_VERSION_PATCH(engineVer));
    }

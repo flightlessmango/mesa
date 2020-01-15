@@ -211,7 +211,7 @@ parse_overlay_env(struct overlay_params *params,
       heightChanged = true;
    }
    if (params->font_size > 0 && !heightChanged)
-      params->height = (3 * params->font_size) + 50;
+      params->height = (3 * params->font_size) + 80;
    // Apply more hud height if cores are enabled
    if (params->enabled[OVERLAY_PARAM_ENABLED_core_load] && !heightChanged)
      params->height += (params->font_size * get_nprocs());

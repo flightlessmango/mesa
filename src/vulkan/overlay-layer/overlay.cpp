@@ -54,7 +54,7 @@ string gpuString;
 float offset_x, offset_y;
 const char* offset_x_env = std::getenv("X_OFFSET");
 const char* offset_y_env = std::getenv("Y_OFFSET");
-string engineName;
+string engineName, engineVersion;
 ImFont* font1;
 
 /* Mapped from VkInstace/VkPhysicalDevice */
@@ -2665,6 +2665,10 @@ static VkResult overlay_CreateInstance(
       get_instance_chain_info(pCreateInfo, VK_LAYER_LINK_INFO);
 
    engineName = pCreateInfo->pApplicationInfo->pEngineName;
+   if (engineName == "DXVK") {
+      int engineVer = pCreateInfo->pApplicationInfo->engineVersion;
+      engineVersion = to_string(VK_VERSION_MAJOR(engineVer)) + "." + to_string(VK_VERSION_MINOR(engineVer)) + "." + to_string(VK_VERSION_PATCH(engineVer));
+   }
 
    if (engineName != "DXVK" && engineName != "vkd3d" && engineName != "Feral3D")
       engineName = "VULKAN";

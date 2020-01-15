@@ -1087,7 +1087,9 @@ static void compute_swapchain_display(struct swapchain_data *data)
             int cpuCoreLoadLength = to_string(cpuArray[i + 1].value).length();
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
             ImGui::SameLine(45);
+            ImGui::PushFont(font1);
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f),"%i", i);
+            ImGui::PopFont();
             ImGui::SameLine((-12.5 * cpuCoreLoadLength) + 147.5);
             ImGui::Text("%i", cpuArray[i + 1].value);
             ImGui::SameLine(150);

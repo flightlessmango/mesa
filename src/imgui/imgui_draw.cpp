@@ -32,7 +32,7 @@ Index of this file:
 #define IMGUI_DEFINE_MATH_OPERATORS
 #endif
 #include "imgui_internal.h"
-
+extern ImFont* font1;
 #include <stdio.h>      // vsnprintf, sscanf, printf
 #if !defined(alloca)
 #if defined(__GLIBC__) || defined(__sun) || defined(__CYGWIN__) || defined(__APPLE__)
@@ -1621,11 +1621,12 @@ ImFont* ImFontAtlas::AddFontDefault(const ImFontConfig* font_cfg_template)
     ImGuiIO& io = ImGui::GetIO();
     if(mangohud_font) {
         font = io.Fonts->AddFontFromFileTTF(mangohud_font, font_cfg.SizePixels);
+        font1 = io.Fonts->AddFontFromFileTTF(mangohud_font, font_cfg.SizePixels * 0.55);
     } else {
         font = AddFontFromMemoryCompressedBase85TTF(ttf_compressed_base85, font_cfg.SizePixels, &font_cfg, glyph_ranges);
+        font1 = AddFontFromMemoryCompressedBase85TTF(ttf_compressed_base85, font_cfg.SizePixels * 0.55, &font_cfg, glyph_ranges);
     }
 
-    // 
     font->DisplayOffset.y = 1.0f;
     return font;
 }

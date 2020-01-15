@@ -55,6 +55,7 @@ float offset_x, offset_y;
 const char* offset_x_env = std::getenv("X_OFFSET");
 const char* offset_y_env = std::getenv("Y_OFFSET");
 string engineName;
+ImFont* font1;
 
 /* Mapped from VkInstace/VkPhysicalDevice */
 struct instance_data {
@@ -1060,26 +1061,26 @@ static void compute_swapchain_display(struct swapchain_data *data)
       if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
          int gpuloadLength = gpuLoadDisplay.length();
          ImGui::TextColored(ImVec4(0.0, 0.502, 0.25, 1.00f), "GPU");
-         ImGui::SameLine((-12.5 * gpuloadLength) + 107.5);
+         ImGui::SameLine((-12.5 * gpuloadLength) + 147.5);
          ImGui::Text("%s", gpuLoadDisplay.c_str());
-         ImGui::SameLine(110);
+         ImGui::SameLine(150);
          ImGui::Text("%s", "%");
          if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_gpu_temp]){
-            ImGui::SameLine(150);
+            ImGui::SameLine(175);
             ImGui::Text("%i%s", gpuTemp, "°C");
          }
       }    
       int cpuloadLength = to_string(cpuLoadLog).length();
       ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
-      ImGui::SameLine((-12.5 * cpuloadLength) + 107.5);
+      ImGui::SameLine((-12.5 * cpuloadLength) + 147.5);
       ImGui::Text("%d", cpuLoadLog);
-      ImGui::SameLine(110);
+      ImGui::SameLine(150);
       ImGui::Text("%s", "%");
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_cpu_temp]){
-         ImGui::SameLine(150);
+         ImGui::SameLine(175);
          ImGui::Text("%i%s", cpuTemp, "°C");
       }
-
+      
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_core_load]){
          for (int i = 0; i < numCpuCores; i++)
          {
@@ -1087,21 +1088,30 @@ static void compute_swapchain_display(struct swapchain_data *data)
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
             ImGui::SameLine(45);
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f),"%i", i);
-            ImGui::SameLine((-12.5 * cpuCoreLoadLength) + 107.5);
+            ImGui::SameLine((-12.5 * cpuCoreLoadLength) + 147.5);
             ImGui::Text("%i", cpuArray[i + 1].value);
-            ImGui::SameLine(110);
-            ImGui::Text("%s", "%");
             ImGui::SameLine(150);
-            ImGui::Text("%i%s", cpuArray[i + 1].freq, " Mhz");
+            ImGui::Text("%s", "%");
+            ImGui::SameLine(175);
+            ImGui::Text("%i%s", cpuArray[i + 1].freq, "Mhz");
          }
       }
-      
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){
          int fpsLength = to_string(int(data->fps)).length();
+         int msLength = to_string(1000 / data->fps).length();
          ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "%s", engineName.c_str());
+         ImGui::SameLine((-12.5 * fpsLength) + 147.5);
          ImGui::Text("%.0f", data->fps);
-         ImGui::SameLine(150);
-         ImGui::Text("%.1fms", 1000 / data->fps);
+         ImGui::SameLine();
+         ImGui::PushFont(font1);
+         ImGui::Text("FPS");
+         ImGui::PopFont();
+         ImGui::SameLine((-12.5 * msLength) + 300);
+         ImGui::Text("%.1f", 1000 / data->fps);
+         ImGui::SameLine();
+         ImGui::PushFont(font1);
+         ImGui::Text("ms");
+         ImGui::PopFont();
       }
 
       // ImGui::ProgressBar(float(0.5), ImVec2(ImGui::GetContentRegionAvailWidth(), 21), NULL);

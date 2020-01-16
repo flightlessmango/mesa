@@ -18,9 +18,19 @@ Position the layer :
 
 MANGOHUD=1 MANGOHUD_CONFIG=position=top-right /path/to/my_vulkan_app
 
+## MANGOHUD_CONFIG params
+- `cpu_temp` :  Displays current CPU temperature
+- `gpu_temp` :  Displays current GPU temperature
+- `core_load`:  Displays current CPU load per core
+- `font_size`:  Changes the default font size (default is 24)
+- `width`    :  Set hud width
+- `height`   :  Set hud height
+
+example: `MANGOHUD_CONFIG=cpu_temp,gpu_temp,height=500,font_size=32`
+
 ## Environment Variables
-- `MANGO_OUTPUT`: Define name and location of the output file (Required for logging)
-- `FONT_SIZE`   : Set hud font size. Default size is 24
+- `MANGO_OUTPUT` : Define name and location of the output file (Required for logging)
+- `MANGOHUD_FONT`: Change default font (set location to .TTF/.OTF file )
 
 ## Keybindings
 - `F2` : Toggle Logging

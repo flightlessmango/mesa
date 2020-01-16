@@ -23,8 +23,10 @@ MANGOHUD=1 MANGOHUD_CONFIG=position=top-right /path/to/my_vulkan_app
 - `gpu_temp` :  Displays current GPU temperature
 - `core_load`:  Displays current CPU load per core
 - `font_size`:  Changes the default font size (default is 24)
-- `width`    :  Set hud width
-- `height`   :  Set hud height
+- `width`    :  Set custom hud width
+- `height`   :  Set custom hud height
+
+Width and Height is set automatically based on the font_size
 
 example: `MANGOHUD_CONFIG=cpu_temp,gpu_temp,height=500,font_size=32`
 

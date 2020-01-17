@@ -204,12 +204,9 @@ parse_overlay_env(struct overlay_params *params,
    }
    // if font_size is used and height has not been changed from default
    // increase height as needed based on font_size
-   bool heightChanged;
-   if (params->height == 130) {
-      heightChanged = false;
-   } else {
+   bool heightChanged = false;
+   if (params->height != 130)
       heightChanged = true;
-   }
 
    if (!params->font_size)
       params->font_size = 24.0f;

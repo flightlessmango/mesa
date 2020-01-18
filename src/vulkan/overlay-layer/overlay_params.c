@@ -177,7 +177,7 @@ parse_overlay_env(struct overlay_params *params,
    params->enabled[OVERLAY_PARAM_ENABLED_gpu_temp] = false;
    params->fps_sampling_period = 500000; /* 500ms */
    params->width = 280;
-   params->height = 130;
+   params->height = 140;
    params->control = -1;
 
    if (!env)
@@ -206,7 +206,7 @@ parse_overlay_env(struct overlay_params *params,
    // increase height as needed based on font_size
    bool heightChanged = false;
    
-   if (params->height != 130)
+   if (params->height != 140)
       heightChanged = true;
 
    if (!params->font_size)

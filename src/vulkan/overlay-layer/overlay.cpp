@@ -1095,10 +1095,12 @@ static void compute_swapchain_display(struct swapchain_data *data)
             ImGui::PopFont();
             ImGui::SameLine(hudFirstRow);
             ImGui::Text("%i%%", cpuArray[i + 1].value);
-            // ImGui::SameLine(150);
-            // ImGui::Text("%s", "%");
             ImGui::SameLine(hudSecondRow);
-            ImGui::Text("%i%s", cpuArray[i + 1].freq, "Mhz");
+            ImGui::Text("%i", cpuArray[i + 1].freq);
+            ImGui::SameLine();
+            ImGui::PushFont(font1);
+            ImGui::Text("MHz");
+            ImGui::PopFont();
          }
       }
       if (instance_data->params.enabled[OVERLAY_PARAM_ENABLED_fps]){

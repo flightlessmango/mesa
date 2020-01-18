@@ -1022,7 +1022,9 @@ static void position_layer(struct swapchain_data *data)
    if (!offset_y_env == NULL)
      offset_y = std::stof(offset_y_env);
 
-
+   if (engineName == "DXVK" || engineName == "VKD3D")
+      instance_data->params.height += instance_data->params.font_size / 2;
+  
    switch (instance_data->params.position) {
    case LAYER_POSITION_TOP_LEFT:
       ImGui::SetNextWindowPos(ImVec2(margin + offset_x, margin + offset_y), ImGuiCond_Always);
@@ -1053,13 +1055,13 @@ static void compute_swapchain_display(struct swapchain_data *data)
    position_layer(data);
    if (instance_data->params.font_size > 0 && instance_data->params.width == 280)
       instance_data->params.width = hudFirstRow + hudSecondRow;
-   
+
    if(displayHud)
 	   ImGui::Begin("Main", &open, ImVec2(instance_data->params.width, instance_data->params.height), 0.5f, ImGuiWindowFlags_NoDecoration);
 
    if(!displayHud)
       ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);
-
+   
    if (displayHud){
       if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
          int gpuloadLength = gpuLoadDisplay.length();

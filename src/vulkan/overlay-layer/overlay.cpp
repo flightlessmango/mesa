@@ -1022,9 +1022,14 @@ static void position_layer(struct swapchain_data *data)
    if (!offset_y_env == NULL)
      offset_y = std::stof(offset_y_env);
 
-   if (engineName == "DXVK" || engineName == "VKD3D")
-      instance_data->params.height += instance_data->params.font_size / 2;
-  
+   if (engineName == "DXVK" || engineName == "VKD3D"){
+      if (instance_data->params.font_size){
+         instance_data->params.height += instance_data->params.font_size / 2;
+      } else {
+         instance_data->params.height += 24 / 2;
+      }
+   }
+
    switch (instance_data->params.position) {
    case LAYER_POSITION_TOP_LEFT:
       ImGui::SetNextWindowPos(ImVec2(margin + offset_x, margin + offset_y), ImGuiCond_Always);

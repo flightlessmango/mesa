@@ -1177,7 +1177,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
             ImGui::PlotLines(hash, get_time_stat, data,
                                  ARRAY_SIZE(data->frames_stats), 0,
                                  NULL, min_time, max_time,
-                                 ImVec2(ImGui::GetContentRegionAvailWidth(), 30));
+                                 ImVec2(ImGui::GetContentRegionAvailWidth(), 50));
             // ImGui::Text("%s: %.3fms [%.3f, %.3f]", overlay_param_names[s],
             //             get_time_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
             //             min_time, max_time);

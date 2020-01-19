@@ -149,6 +149,22 @@ bool radv_pipeline_has_ngg(const struct radv_pipeline *pipeline)
 	return variant->info.is_ngg;
 }
 
+bool radv_pipeline_has_ngg_passthrough(const struct radv_pipeline *pipeline)
+{
+	assert(radv_pipeline_has_ngg(pipeline));
+
+	struct radv_shader_variant *variant = NULL;
+	if (pipeline->shaders[MESA_SHADER_GEOMETRY])
+		variant = pipeline->shaders[MESA_SHADER_GEOMETRY];
+	else if (pipeline->shaders[MESA_SHADER_TESS_EVAL])
+		variant = pipeline->shaders[MESA_SHADER_TESS_EVAL];
+	else if (pipeline->shaders[MESA_SHADER_VERTEX])
+		variant = pipeline->shaders[MESA_SHADER_VERTEX];
+	else
+		return false;
+	return variant->info.is_ngg_passthrough;
+}
+
 bool radv_pipeline_has_gs_copy_shader(const struct radv_pipeline *pipeline)
 {
 	if (!radv_pipeline_has_gs(pipeline))
@@ -955,10 +971,27 @@ static uint32_t si_translate_fill(VkPolygonMode func)
 	}
 }
 
-static uint8_t radv_pipeline_get_ps_iter_samples(const VkPipelineMultisampleStateCreateInfo *vkms)
+static uint8_t radv_pipeline_get_ps_iter_samples(const VkGraphicsPipelineCreateInfo *pCreateInfo)
 {
-	uint32_t num_samples = vkms->rasterizationSamples;
+	const VkPipelineMultisampleStateCreateInfo *vkms = pCreateInfo->pMultisampleState;
+	RADV_FROM_HANDLE(radv_render_pass, pass, pCreateInfo->renderPass);
+	struct radv_subpass *subpass = &pass->subpasses[pCreateInfo->subpass];
 	uint32_t ps_iter_samples = 1;
+	uint32_t num_samples;
+
+	/* From the Vulkan 1.1.129 spec, 26.7. Sample Shading:
+	 *
+	 * "If the VK_AMD_mixed_attachment_samples extension is enabled and the
+	 *  subpass uses color attachments, totalSamples is the number of
+	 *  samples of the color attachments. Otherwise, totalSamples is the
+	 *  value of VkPipelineMultisampleStateCreateInfo::rasterizationSamples
+	 *  specified at pipeline creation time."
+	 */
+	if (subpass->has_color_att) {
+		num_samples = subpass->color_sample_count;
+	} else {
+		num_samples = vkms->rasterizationSamples;
+	}
 
 	if (vkms->sampleShadingEnable) {
 		ps_iter_samples = ceil(vkms->minSampleShading * num_samples);
@@ -1167,7 +1200,7 @@ radv_pipeline_init_multisample_state(struct radv_pipeline *pipeline,
 		if (pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.force_persample) {
 			ps_iter_samples = ms->num_samples;
 		} else {
-			ps_iter_samples = radv_pipeline_get_ps_iter_samples(vkms);
+			ps_iter_samples = radv_pipeline_get_ps_iter_samples(pCreateInfo);
 		}
 	} else {
 		ms->num_samples = 1;
@@ -1210,11 +1243,15 @@ radv_pipeline_init_multisample_state(struct radv_pipeline *pipeline,
 	                        S_028A48_VPORT_SCISSOR_ENABLE(1);
 
 	if (ms->num_samples > 1) {
+		RADV_FROM_HANDLE(radv_render_pass, pass, pCreateInfo->renderPass);
+		struct radv_subpass *subpass = &pass->subpasses[pCreateInfo->subpass];
+		uint32_t z_samples = subpass->depth_stencil_attachment ? subpass->depth_sample_count : ms->num_samples;
 		unsigned log_samples = util_logbase2(ms->num_samples);
+		unsigned log_z_samples = util_logbase2(z_samples);
 		unsigned log_ps_iter_samples = util_logbase2(ps_iter_samples);
 		ms->pa_sc_mode_cntl_0 |= S_028A48_MSAA_ENABLE(1);
 		ms->pa_sc_line_cntl |= S_028BDC_EXPAND_LINE_WIDTH(1); /* CM_R_028BDC_PA_SC_LINE_CNTL */
-		ms->db_eqaa |= S_028804_MAX_ANCHOR_SAMPLES(log_samples) |
+		ms->db_eqaa |= S_028804_MAX_ANCHOR_SAMPLES(log_z_samples) |
 			S_028804_PS_ITER_SAMPLES(log_ps_iter_samples) |
 			S_028804_MASK_EXPORT_NUM_SAMPLES(log_samples) |
 			S_028804_ALPHA_TO_MASK_NUM_SAMPLES(log_samples);
@@ -2320,7 +2357,7 @@ radv_generate_graphics_pipeline_key(struct radv_pipeline *pipeline,
 		radv_pipeline_get_multisample_state(pCreateInfo);
 	if (vkms && vkms->rasterizationSamples > 1) {
 		uint32_t num_samples = vkms->rasterizationSamples;
-		uint32_t ps_iter_samples = radv_pipeline_get_ps_iter_samples(vkms);
+		uint32_t ps_iter_samples = radv_pipeline_get_ps_iter_samples(pCreateInfo);
 		key.num_samples = num_samples;
 		key.log2_ps_iter_samples = util_logbase2(ps_iter_samples);
 	}
@@ -2413,20 +2450,35 @@ radv_fill_shader_keys(struct radv_device *device,
 				keys[MESA_SHADER_VERTEX].vs_common_out.as_ngg = false;
 		}
 
-		if (!device->physical_device->use_ngg_streamout) {
-			gl_shader_stage last_xfb_stage = MESA_SHADER_VERTEX;
+		gl_shader_stage last_xfb_stage = MESA_SHADER_VERTEX;
 
-			for (int i = MESA_SHADER_VERTEX; i <= MESA_SHADER_GEOMETRY; i++) {
-				if (nir[i])
-					last_xfb_stage = i;
-			}
+		for (int i = MESA_SHADER_VERTEX; i <= MESA_SHADER_GEOMETRY; i++) {
+			if (nir[i])
+				last_xfb_stage = i;
+		}
 
-			if (nir[last_xfb_stage] &&
-			    radv_nir_stage_uses_xfb(nir[last_xfb_stage])) {
-				if (nir[MESA_SHADER_TESS_CTRL])
-					keys[MESA_SHADER_TESS_EVAL].vs_common_out.as_ngg = false;
-				else
-					keys[MESA_SHADER_VERTEX].vs_common_out.as_ngg = false;
+		bool uses_xfb = nir[last_xfb_stage] &&
+				radv_nir_stage_uses_xfb(nir[last_xfb_stage]);
+
+		if (!device->physical_device->use_ngg_streamout && uses_xfb) {
+			if (nir[MESA_SHADER_TESS_CTRL])
+				keys[MESA_SHADER_TESS_EVAL].vs_common_out.as_ngg = false;
+			else
+				keys[MESA_SHADER_VERTEX].vs_common_out.as_ngg = false;
+		}
+
+		/* Determine if the pipeline is eligible for the NGG passthrough
+		 * mode. It can't be enabled for geometry shaders, for NGG
+		 * streamout or for vertex shaders that export the primitive ID
+		 * (this is checked later because we don't have the info here.)
+		 */
+		if (!nir[MESA_SHADER_GEOMETRY] && !uses_xfb) {
+			if (nir[MESA_SHADER_TESS_CTRL] &&
+			    keys[MESA_SHADER_TESS_EVAL].vs_common_out.as_ngg) {
+				keys[MESA_SHADER_TESS_EVAL].vs_common_out.as_ngg_passthrough = true;
+			} else if (nir[MESA_SHADER_VERTEX] &&
+				   keys[MESA_SHADER_VERTEX].vs_common_out.as_ngg) {
+				keys[MESA_SHADER_VERTEX].vs_common_out.as_ngg_passthrough = true;
 			}
 		}
 	}
@@ -2501,6 +2553,16 @@ radv_fill_shader_info(struct radv_pipeline *pipeline,
 		        infos[MESA_SHADER_FRAGMENT].ps.layer_input;
 		keys[MESA_SHADER_TESS_EVAL].vs_common_out.export_clip_dists =
 		        !!infos[MESA_SHADER_FRAGMENT].ps.num_input_clips_culls;
+
+		/* NGG passthrough mode can't be enabled for vertex shaders
+		 * that export the primitive ID.
+		 *
+		 * TODO: I should really refactor the keys logic.
+		 */
+		if (nir[MESA_SHADER_VERTEX] &&
+		    keys[MESA_SHADER_VERTEX].vs_common_out.export_prim_id) {
+			keys[MESA_SHADER_VERTEX].vs_common_out.as_ngg_passthrough = false;
+		}
 
 		filled_stages |= (1 << MESA_SHADER_FRAGMENT);
 	}
@@ -2815,20 +2877,6 @@ void radv_create_shaders(struct radv_pipeline *pipeline,
 
 			radv_stop_feedback(stage_feedbacks[MESA_SHADER_FRAGMENT], false);
 		}
-
-		/* TODO: These are no longer used as keys we should refactor this */
-		keys[MESA_SHADER_VERTEX].vs_common_out.export_prim_id =
-		        pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.prim_id_input;
-		keys[MESA_SHADER_VERTEX].vs_common_out.export_layer_id =
-		        pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.layer_input;
-		keys[MESA_SHADER_VERTEX].vs_common_out.export_clip_dists =
-		        !!pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.num_input_clips_culls;
-		keys[MESA_SHADER_TESS_EVAL].vs_common_out.export_prim_id =
-		        pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.prim_id_input;
-		keys[MESA_SHADER_TESS_EVAL].vs_common_out.export_layer_id =
-		        pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.layer_input;
-		keys[MESA_SHADER_TESS_EVAL].vs_common_out.export_clip_dists =
-		        !!pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.num_input_clips_culls;
 	}
 
 	if (device->physical_device->rad_info.chip_class >= GFX9 && modules[MESA_SHADER_TESS_CTRL]) {
@@ -3420,6 +3468,28 @@ radv_pipeline_generate_disabled_binning_state(struct radeon_cmdbuf *ctx_cs,
 	pipeline->graphics.binning.db_dfsm_control = db_dfsm_control;
 }
 
+struct radv_binning_settings
+radv_get_binning_settings(const struct radv_physical_device *pdev)
+{
+	struct radv_binning_settings settings;
+	if (pdev->rad_info.has_dedicated_vram) {
+		settings.context_states_per_bin = 1;
+		settings.persistent_states_per_bin = 1;
+		settings.fpovs_per_batch = 63;
+	} else {
+		/* The context states are affected by the scissor bug. */
+		settings.context_states_per_bin = 6;
+		/* 32 causes hangs for RAVEN. */
+		settings.persistent_states_per_bin = 16;
+		settings.fpovs_per_batch = 63;
+	}
+
+	if (pdev->rad_info.has_gfx9_scissor_bug)
+		settings.context_states_per_bin = 1;
+
+	return settings;
+}
+
 static void
 radv_pipeline_generate_binning_state(struct radeon_cmdbuf *ctx_cs,
 				     struct radv_pipeline *pipeline,
@@ -3438,21 +3508,8 @@ radv_pipeline_generate_binning_state(struct radeon_cmdbuf *ctx_cs,
 		unreachable("Unhandled generation for binning bin size calculation");
 
 	if (pipeline->device->pbb_allowed && bin_size.width && bin_size.height) {
-		unsigned context_states_per_bin; /* allowed range: [1, 6] */
-		unsigned persistent_states_per_bin; /* allowed range: [1, 32] */
-		unsigned fpovs_per_batch; /* allowed range: [0, 255], 0 = unlimited */
-
-		if (pipeline->device->physical_device->rad_info.has_dedicated_vram) {
-			context_states_per_bin = 1;
-			persistent_states_per_bin = 1;
-			fpovs_per_batch = 63;
-		} else {
-			/* The context states are affected by the scissor bug. */
-			context_states_per_bin = pipeline->device->physical_device->rad_info.has_gfx9_scissor_bug ? 1 : 6;
-			/* 32 causes hangs for RAVEN. */
-			persistent_states_per_bin = 16;
-			fpovs_per_batch = 63;
-		}
+		struct radv_binning_settings settings =
+			radv_get_binning_settings(pipeline->device->physical_device);
 
 		bool disable_start_of_prim = true;
 		uint32_t db_dfsm_control = S_028060_PUNCHOUT_MODE(V_028060_FORCE_OFF);
@@ -3473,10 +3530,10 @@ radv_pipeline_generate_binning_state(struct radeon_cmdbuf *ctx_cs,
 	                S_028C44_BIN_SIZE_Y(bin_size.height == 16) |
 	                S_028C44_BIN_SIZE_X_EXTEND(util_logbase2(MAX2(bin_size.width, 32)) - 5) |
 	                S_028C44_BIN_SIZE_Y_EXTEND(util_logbase2(MAX2(bin_size.height, 32)) - 5) |
-	                S_028C44_CONTEXT_STATES_PER_BIN(context_states_per_bin - 1) |
-	                S_028C44_PERSISTENT_STATES_PER_BIN(persistent_states_per_bin - 1) |
+	                S_028C44_CONTEXT_STATES_PER_BIN(settings.context_states_per_bin - 1) |
+	                S_028C44_PERSISTENT_STATES_PER_BIN(settings.persistent_states_per_bin - 1) |
 	                S_028C44_DISABLE_START_OF_PRIM(disable_start_of_prim) |
-	                S_028C44_FPOVS_PER_BATCH(fpovs_per_batch) |
+	                S_028C44_FPOVS_PER_BATCH(settings.fpovs_per_batch) |
 	                S_028C44_OPTIMAL_BIN_SELECTION(1);
 
 		pipeline->graphics.binning.pa_sc_binner_cntl_0 = pa_sc_binner_cntl_0;
@@ -3934,7 +3991,7 @@ radv_pipeline_generate_hw_ngg(struct radeon_cmdbuf *ctx_cs,
 
 	radeon_set_context_reg(ctx_cs, R_028A84_VGT_PRIMITIVEID_EN,
 			       S_028A84_PRIMITIVEID_EN(es_enable_prim_id) |
-			       S_028A84_NGG_DISABLE_PROVOK_REUSE(es_enable_prim_id));
+			       S_028A84_NGG_DISABLE_PROVOK_REUSE(outinfo->export_prim_id));
 
 	radeon_set_context_reg(ctx_cs, R_028AAC_VGT_ESGS_RING_ITEMSIZE,
 			       ngg_state->vgt_esgs_ring_itemsize);
@@ -3970,7 +4027,7 @@ radv_pipeline_generate_hw_ngg(struct radeon_cmdbuf *ctx_cs,
 			                                        !radv_pipeline_has_gs(pipeline)));
 
 	ge_cntl = S_03096C_PRIM_GRP_SIZE(ngg_state->max_gsprims) |
-		  S_03096C_VERT_GRP_SIZE(ngg_state->hw_max_esverts) |
+		  S_03096C_VERT_GRP_SIZE(256) | /* 256 = disable vertex grouping */
 		  S_03096C_BREAK_WAVE_AT_EOI(break_wave_at_eoi);
 
 	/* Bug workaround for a possible hang with non-tessellation cases.
@@ -4418,6 +4475,8 @@ radv_compute_vgt_shader_stages_en(const struct radv_pipeline *pipeline)
 		stages |= S_028B54_PRIMGEN_EN(1);
 		if (pipeline->streamout_shader)
 			stages |= S_028B54_NGG_WAVE_ID_EN(1);
+		if (radv_pipeline_has_ngg_passthrough(pipeline))
+			stages |= S_028B54_PRIMGEN_PASSTHRU_EN(1);
 	} else if (radv_pipeline_has_gs(pipeline)) {
 		stages |= S_028B54_VS_EN(V_028B54_VS_STAGE_COPY_SHADER);
 	}
@@ -4490,20 +4549,17 @@ gfx10_pipeline_generate_ge_cntl(struct radeon_cmdbuf *ctx_cs,
 {
 	bool break_wave_at_eoi = false;
 	unsigned primgroup_size;
-	unsigned vertgroup_size;
+	unsigned vertgroup_size = 256; /* 256 = disable vertex grouping */
 
 	if (radv_pipeline_has_tess(pipeline)) {
 		primgroup_size = tess->num_patches; /* must be a multiple of NUM_PATCHES */
-		vertgroup_size = 0;
 	} else if (radv_pipeline_has_gs(pipeline)) {
 		const struct gfx9_gs_info *gs_state =
 			&pipeline->shaders[MESA_SHADER_GEOMETRY]->info.gs_ring_info;
 		unsigned vgt_gs_onchip_cntl = gs_state->vgt_gs_onchip_cntl;
 		primgroup_size = G_028A44_GS_PRIMS_PER_SUBGRP(vgt_gs_onchip_cntl);
-		vertgroup_size = G_028A44_ES_VERTS_PER_SUBGRP(vgt_gs_onchip_cntl);
 	} else {
 		primgroup_size = 128; /* recommended without a GS and tess */
-		vertgroup_size = 0;
 	}
 
 	if (radv_pipeline_has_tess(pipeline)) {

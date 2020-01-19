@@ -501,6 +501,16 @@ static void si_init_ia_multi_vgt_param_table(struct si_context *sctx)
 	}
 }
 
+static bool si_is_line_stipple_enabled(struct si_context *sctx)
+{
+	struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;
+
+	return rs->line_stipple_enable &&
+	       sctx->current_rast_prim != PIPE_PRIM_POINTS &&
+	       (rs->polygon_mode_is_lines ||
+		util_prim_is_lines(sctx->current_rast_prim));
+}
+
 static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
 					  const struct pipe_draw_info *info,
 					  enum pipe_prim_type prim,
@@ -529,6 +539,7 @@ static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
 		  si_num_prims_for_vertices(info, prim) < primgroup_size));
 	key.u.primitive_restart = primitive_restart;
 	key.u.count_from_stream_output = info->count_from_stream_output != NULL;
+	key.u.line_stipple_enabled = si_is_line_stipple_enabled(sctx);
 
 	ia_multi_vgt_param = sctx->ia_multi_vgt_param[key.index] |
 			     S_028AA8_PRIMGROUP_SIZE(primgroup_size - 1);
@@ -586,46 +597,37 @@ static void si_emit_rasterizer_prim_state(struct si_context *sctx)
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 	enum pipe_prim_type rast_prim = sctx->current_rast_prim;
 	struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;
-	bool use_ngg = sctx->screen->use_ngg;
+	unsigned initial_cdw = cs->current.cdw;
 
-	if (likely(rast_prim == sctx->last_rast_prim &&
-		   rs->pa_sc_line_stipple == sctx->last_sc_line_stipple &&
-		   (!use_ngg ||
-		    rs->flatshade_first == sctx->last_flatshade_first)))
-		return;
-
-	if (util_prim_is_lines(rast_prim)) {
+	if (unlikely(si_is_line_stipple_enabled(sctx))) {
 		/* For lines, reset the stipple pattern at each primitive. Otherwise,
 		 * reset the stipple pattern at each packet (line strips, line loops).
 		 */
-		radeon_set_context_reg(cs, R_028A0C_PA_SC_LINE_STIPPLE,
-			rs->pa_sc_line_stipple |
-			S_028A0C_AUTO_RESET_CNTL(rast_prim == PIPE_PRIM_LINES ? 1 : 2));
+		unsigned value = rs->pa_sc_line_stipple |
+				 S_028A0C_AUTO_RESET_CNTL(rast_prim == PIPE_PRIM_LINES ? 1 : 2);
+
+		radeon_opt_set_context_reg(sctx, R_028A0C_PA_SC_LINE_STIPPLE,
+					   SI_TRACKED_PA_SC_LINE_STIPPLE, value);
+	}
+
+	unsigned gs_out_prim = si_conv_prim_to_gs_out(rast_prim);
+	if (unlikely(gs_out_prim != sctx->last_gs_out_prim &&
+		     (sctx->ngg || sctx->gs_shader.cso))) {
+		radeon_set_context_reg(cs, R_028A6C_VGT_GS_OUT_PRIM_TYPE, gs_out_prim);
+		sctx->last_gs_out_prim = gs_out_prim;
+	}
+
+	if (initial_cdw != cs->current.cdw)
 		sctx->context_roll = true;
+
+	if (sctx->ngg) {
+		unsigned vtx_index = rs->flatshade_first ? 0 : gs_out_prim;
+
+		sctx->current_vs_state &= C_VS_STATE_OUTPRIM &
+					  C_VS_STATE_PROVOKING_VTX_INDEX;
+		sctx->current_vs_state |= S_VS_STATE_OUTPRIM(gs_out_prim) |
+					  S_VS_STATE_PROVOKING_VTX_INDEX(vtx_index);
 	}
-
-	unsigned gs_out = si_conv_prim_to_gs_out(sctx->current_rast_prim);
-
-	if (rast_prim != sctx->last_rast_prim &&
-	    (sctx->ngg || sctx->gs_shader.cso)) {
-		radeon_set_context_reg(cs, R_028A6C_VGT_GS_OUT_PRIM_TYPE, gs_out);
-		sctx->context_roll = true;
-
-		if (use_ngg) {
-			sctx->current_vs_state &= C_VS_STATE_OUTPRIM;
-			sctx->current_vs_state |= S_VS_STATE_OUTPRIM(gs_out);
-		}
-	}
-
-	if (use_ngg) {
-		unsigned vtx_index = rs->flatshade_first ? 0 : gs_out;
-		sctx->current_vs_state &= C_VS_STATE_PROVOKING_VTX_INDEX;
-		sctx->current_vs_state |= S_VS_STATE_PROVOKING_VTX_INDEX(vtx_index);
-	}
-
-	sctx->last_rast_prim = rast_prim;
-	sctx->last_sc_line_stipple = rs->pa_sc_line_stipple;
-	sctx->last_flatshade_first = rs->flatshade_first;
 }
 
 static void si_emit_vs_state(struct si_context *sctx,
@@ -747,7 +749,7 @@ static void gfx10_emit_ge_cntl(struct si_context *sctx, unsigned num_patches)
 			  S_03096C_BREAK_WAVE_AT_EOI(key.u.uses_tess && key.u.tess_uses_prim_id);
 	}
 
-	ge_cntl |= S_03096C_PACKET_TO_ONE_PA(key.u.line_stipple_enabled);
+	ge_cntl |= S_03096C_PACKET_TO_ONE_PA(si_is_line_stipple_enabled(sctx));
 
 	if (ge_cntl != sctx->last_multi_vgt_param) {
 		radeon_set_uconfig_reg(sctx->gfx_cs, R_03096C_GE_CNTL, ge_cntl);
@@ -1787,7 +1789,9 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 			return;
 	}
 
-	if (unlikely(!sctx->vs_shader.cso ||
+	struct si_shader_selector *vs = sctx->vs_shader.cso;
+	if (unlikely(!vs ||
+		     sctx->num_vertex_elements < vs->num_vs_inputs ||
 		     (!sctx->ps_shader.cso && !rs->rasterizer_discard) ||
 		     (!!sctx->tes_shader.cso != (prim == PIPE_PRIM_PATCHES)))) {
 		assert(0);
@@ -2230,6 +2234,7 @@ si_draw_rectangle(struct blitter_context *blitter,
 	/* Don't set per-stage shader pointers for VS. */
 	sctx->shader_pointers_dirty &= ~SI_DESCS_SHADER_MASK(VERTEX);
 	sctx->vertex_buffer_pointer_dirty = false;
+	sctx->vertex_buffer_user_sgprs_dirty = false;
 
 	si_draw_vbo(pipe, &info);
 }

@@ -2751,7 +2751,7 @@ fs_visitor::nir_emit_tcs_intrinsic(const fs_builder &bld,
               brw_imm_d(tcs_key->input_vertices));
       break;
 
-   case nir_intrinsic_barrier: {
+   case nir_intrinsic_control_barrier: {
       if (tcs_prog_data->instances == 1)
          break;
 
@@ -3313,44 +3313,6 @@ alloc_frag_output(fs_visitor *v, unsigned location)
       unreachable("Invalid location");
 }
 
-/* Annoyingly, we get the barycentrics into the shader in a layout that's
- * optimized for PLN but it doesn't work nearly as well as one would like for
- * manual interpolation.
- */
-static void
-shuffle_from_pln_layout(const fs_builder &bld, fs_reg dest, fs_reg pln_data)
-{
-   dest.type = BRW_REGISTER_TYPE_F;
-   pln_data.type = BRW_REGISTER_TYPE_F;
-   const fs_reg dest_u = offset(dest, bld, 0);
-   const fs_reg dest_v = offset(dest, bld, 1);
-
-   for (unsigned g = 0; g < bld.dispatch_width() / 8; g++) {
-      const fs_builder gbld = bld.group(8, g);
-      gbld.MOV(horiz_offset(dest_u, g * 8),
-               byte_offset(pln_data, (g * 2 + 0) * REG_SIZE));
-      gbld.MOV(horiz_offset(dest_v, g * 8),
-               byte_offset(pln_data, (g * 2 + 1) * REG_SIZE));
-   }
-}
-
-static void
-shuffle_to_pln_layout(const fs_builder &bld, fs_reg pln_data, fs_reg src)
-{
-   pln_data.type = BRW_REGISTER_TYPE_F;
-   src.type = BRW_REGISTER_TYPE_F;
-   const fs_reg src_u = offset(src, bld, 0);
-   const fs_reg src_v = offset(src, bld, 1);
-
-   for (unsigned g = 0; g < bld.dispatch_width() / 8; g++) {
-      const fs_builder gbld = bld.group(8, g);
-      gbld.MOV(byte_offset(pln_data, (g * 2 + 0) * REG_SIZE),
-               horiz_offset(src_u, g * 8));
-      gbld.MOV(byte_offset(pln_data, (g * 2 + 1) * REG_SIZE),
-               horiz_offset(src_v, g * 8));
-   }
-}
-
 void
 fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
                                   nir_intrinsic_instr *instr)
@@ -3565,8 +3527,9 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
          (enum glsl_interp_mode) nir_intrinsic_interp_mode(instr);
       enum brw_barycentric_mode bary =
          brw_barycentric_mode(interp_mode, instr->intrinsic);
-
-      shuffle_from_pln_layout(bld, dest, this->delta_xy[bary]);
+      const fs_reg srcs[] = { offset(this->delta_xy[bary], bld, 0),
+                              offset(this->delta_xy[bary], bld, 1) };
+      bld.LOAD_PAYLOAD(dest, srcs, ARRAY_SIZE(srcs), 0);
       break;
    }
 
@@ -3574,13 +3537,12 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
       const glsl_interp_mode interpolation =
          (enum glsl_interp_mode) nir_intrinsic_interp_mode(instr);
 
-      fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_F, 2);
       if (nir_src_is_const(instr->src[0])) {
          unsigned msg_data = nir_src_as_uint(instr->src[0]) << 4;
 
          emit_pixel_interpolater_send(bld,
                                       FS_OPCODE_INTERPOLATE_AT_SAMPLE,
-                                      tmp,
+                                      dest,
                                       fs_reg(), /* src */
                                       brw_imm_ud(msg_data),
                                       interpolation);
@@ -3595,9 +3557,9 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
                .SHL(msg_data, sample_id, brw_imm_ud(4u));
             emit_pixel_interpolater_send(bld,
                                          FS_OPCODE_INTERPOLATE_AT_SAMPLE,
-                                         tmp,
+                                         dest,
                                          fs_reg(), /* src */
-                                         msg_data,
+                                         component(msg_data, 0),
                                          interpolation);
          } else {
             /* Make a loop that sends a message to the pixel interpolater
@@ -3623,7 +3585,7 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
             fs_inst *inst =
                emit_pixel_interpolater_send(bld,
                                             FS_OPCODE_INTERPOLATE_AT_SAMPLE,
-                                            tmp,
+                                            dest,
                                             fs_reg(), /* src */
                                             component(msg_data, 0),
                                             interpolation);
@@ -3635,7 +3597,6 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
                               bld.emit(BRW_OPCODE_WHILE));
          }
       }
-      shuffle_from_pln_layout(bld, dest, tmp);
       break;
    }
 
@@ -3645,7 +3606,6 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
 
       nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
 
-      fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_F, 2);
       if (const_offset) {
          assert(nir_src_bit_size(instr->src[0]) == 32);
          unsigned off_x = MIN2((int)(const_offset[0].f32 * 16), 7) & 0xf;
@@ -3653,7 +3613,7 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
 
          emit_pixel_interpolater_send(bld,
                                       FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET,
-                                      tmp,
+                                      dest,
                                       fs_reg(), /* src */
                                       brw_imm_ud(off_x | (off_y << 4)),
                                       interpolation);
@@ -3690,12 +3650,11 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
          const enum opcode opcode = FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET;
          emit_pixel_interpolater_send(bld,
                                       opcode,
-                                      tmp,
+                                      dest,
                                       src,
                                       brw_imm_ud(0u),
                                       interpolation);
       }
-      shuffle_from_pln_layout(bld, dest, tmp);
       break;
    }
 
@@ -3715,18 +3674,12 @@ fs_visitor::nir_emit_fs_intrinsic(const fs_builder &bld,
 
       if (bary_intrin == nir_intrinsic_load_barycentric_at_offset ||
           bary_intrin == nir_intrinsic_load_barycentric_at_sample) {
-         /* Use the result of the PI message.  Because the load_barycentric
-          * intrinsics return a regular vec2 and we need it in PLN layout, we
-          * have to do a translation.  Fortunately, copy-prop cleans this up
-          * reliably.
-          */
-         dst_xy = bld.vgrf(BRW_REGISTER_TYPE_F, 2);
-         shuffle_to_pln_layout(bld, dst_xy, get_nir_src(instr->src[0]));
+         /* Use the result of the PI message. */
+         dst_xy = retype(get_nir_src(instr->src[0]), BRW_REGISTER_TYPE_F);
       } else {
          /* Use the delta_xy values computed from the payload */
          enum brw_barycentric_mode bary =
             brw_barycentric_mode(interp_mode, bary_intrin);
-
          dst_xy = this->delta_xy[bary];
       }
 
@@ -3766,7 +3719,7 @@ fs_visitor::nir_emit_cs_intrinsic(const fs_builder &bld,
       dest = get_nir_dest(instr->dest);
 
    switch (instr->intrinsic) {
-   case nir_intrinsic_barrier:
+   case nir_intrinsic_control_barrier:
       emit_barrier();
       cs_prog_data->uses_barrier = true;
       break;
@@ -3976,17 +3929,20 @@ fs_visitor::get_nir_image_intrinsic_image(const brw::fs_builder &bld,
                                           nir_intrinsic_instr *instr)
 {
    fs_reg image = retype(get_nir_src_imm(instr->src[0]), BRW_REGISTER_TYPE_UD);
+   fs_reg surf_index = image;
 
    if (stage_prog_data->binding_table.image_start > 0) {
       if (image.file == BRW_IMMEDIATE_VALUE) {
-         image.d += stage_prog_data->binding_table.image_start;
+         surf_index =
+            brw_imm_ud(image.d + stage_prog_data->binding_table.image_start);
       } else {
-         bld.ADD(image, image,
+         surf_index = vgrf(glsl_type::uint_type);
+         bld.ADD(surf_index, image,
                  brw_imm_d(stage_prog_data->binding_table.image_start));
       }
    }
 
-   return bld.emit_uniformize(image);
+   return bld.emit_uniformize(surf_index);
 }
 
 fs_reg
@@ -4274,7 +4230,6 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
    case nir_intrinsic_scoped_memory_barrier:
    case nir_intrinsic_group_memory_barrier:
    case nir_intrinsic_memory_barrier_shared:
-   case nir_intrinsic_memory_barrier_atomic_counter:
    case nir_intrinsic_memory_barrier_buffer:
    case nir_intrinsic_memory_barrier_image:
    case nir_intrinsic_memory_barrier: {
@@ -4299,6 +4254,9 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
             slm_fence = false;
          }
       }
+
+      if (stage != MESA_SHADER_COMPUTE)
+         slm_fence = false;
 
       /* Be conservative in Gen11+ and always stall in a fence.  Since there
        * are two different fences, and shader might want to synchronize
@@ -4331,6 +4289,9 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
 
       break;
    }
+
+   case nir_intrinsic_memory_barrier_tcs_patch:
+      break;
 
    case nir_intrinsic_shader_clock: {
       /* We cannot do anything if there is an event, so ignore it for now */

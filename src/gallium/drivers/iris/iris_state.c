@@ -387,6 +387,8 @@ emit_state(struct iris_batch *batch,
 static void
 flush_before_state_base_change(struct iris_batch *batch)
 {
+   const struct gen_device_info *devinfo = &batch->screen->devinfo;
+
    /* Flush before emitting STATE_BASE_ADDRESS.
     *
     * This isn't documented anywhere in the PRM.  However, it seems to be
@@ -412,7 +414,18 @@ flush_before_state_base_change(struct iris_batch *batch)
                               "change STATE_BASE_ADDRESS (flushes)",
                               PIPE_CONTROL_RENDER_TARGET_FLUSH |
                               PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                              PIPE_CONTROL_DATA_CACHE_FLUSH);
+                              PIPE_CONTROL_DATA_CACHE_FLUSH |
+                              /* GEN:BUG:1606662791:
+                               *
+                               *   Software must program PIPE_CONTROL command
+                               *   with "HDC Pipeline Flush" prior to
+                               *   programming of the below two non-pipeline
+                               *   state :
+                               *      * STATE_BASE_ADDRESS
+                               *      * 3DSTATE_BINDING_TABLE_POOL_ALLOC
+                               */
+                              ((GEN_GEN == 12 && devinfo->revision == 0 /* A0 */ ?
+                                PIPE_CONTROL_FLUSH_HDC : 0)));
 }
 
 static void
@@ -932,39 +945,39 @@ iris_init_render_context(struct iris_batch *batch)
 #endif
 
 #if GEN_GEN == 11
-      iris_pack_state(GENX(TCCNTLREG), &reg_val, reg) {
-         reg.L3DataPartialWriteMergingEnable = true;
-         reg.ColorZPartialWriteMergingEnable = true;
-         reg.URBPartialWriteMergingEnable = true;
-         reg.TCDisable = true;
-      }
-      iris_emit_lri(batch, TCCNTLREG, reg_val);
+   iris_pack_state(GENX(TCCNTLREG), &reg_val, reg) {
+      reg.L3DataPartialWriteMergingEnable = true;
+      reg.ColorZPartialWriteMergingEnable = true;
+      reg.URBPartialWriteMergingEnable = true;
+      reg.TCDisable = true;
+   }
+   iris_emit_lri(batch, TCCNTLREG, reg_val);
 
-      iris_pack_state(GENX(SAMPLER_MODE), &reg_val, reg) {
-         reg.HeaderlessMessageforPreemptableContexts = 1;
-         reg.HeaderlessMessageforPreemptableContextsMask = 1;
-      }
-      iris_emit_lri(batch, SAMPLER_MODE, reg_val);
+   iris_pack_state(GENX(SAMPLER_MODE), &reg_val, reg) {
+      reg.HeaderlessMessageforPreemptableContexts = 1;
+      reg.HeaderlessMessageforPreemptableContextsMask = 1;
+   }
+   iris_emit_lri(batch, SAMPLER_MODE, reg_val);
 
-      /* Bit 1 must be set in HALF_SLICE_CHICKEN7. */
-      iris_pack_state(GENX(HALF_SLICE_CHICKEN7), &reg_val, reg) {
-         reg.EnabledTexelOffsetPrecisionFix = 1;
-         reg.EnabledTexelOffsetPrecisionFixMask = 1;
-      }
-      iris_emit_lri(batch, HALF_SLICE_CHICKEN7, reg_val);
+   /* Bit 1 must be set in HALF_SLICE_CHICKEN7. */
+   iris_pack_state(GENX(HALF_SLICE_CHICKEN7), &reg_val, reg) {
+      reg.EnabledTexelOffsetPrecisionFix = 1;
+      reg.EnabledTexelOffsetPrecisionFixMask = 1;
+   }
+   iris_emit_lri(batch, HALF_SLICE_CHICKEN7, reg_val);
 
-      /* Hardware specification recommends disabling repacking for the
-       * compatibility with decompression mechanism in display controller.
-       */
-      if (devinfo->disable_ccs_repack) {
-         iris_pack_state(GENX(CACHE_MODE_0), &reg_val, reg) {
-            reg.DisableRepackingforCompression = true;
-            reg.DisableRepackingforCompressionMask = true;
-         }
-         iris_emit_lri(batch, CACHE_MODE_0, reg_val);
+   /* Hardware specification recommends disabling repacking for the
+    * compatibility with decompression mechanism in display controller.
+    */
+   if (devinfo->disable_ccs_repack) {
+      iris_pack_state(GENX(CACHE_MODE_0), &reg_val, reg) {
+         reg.DisableRepackingforCompression = true;
+         reg.DisableRepackingforCompressionMask = true;
       }
+      iris_emit_lri(batch, CACHE_MODE_0, reg_val);
+   }
 
-      iris_upload_slice_hashing_state(batch);
+   iris_upload_slice_hashing_state(batch);
 #endif
 
    /* 3DSTATE_DRAWING_RECTANGLE is non-pipelined, so we want to avoid
@@ -1014,11 +1027,23 @@ iris_init_compute_context(struct iris_batch *batch)
 {
    UNUSED const struct gen_device_info *devinfo = &batch->screen->devinfo;
 
+   /* GEN:BUG:1607854226:
+    *
+    *  Start with pipeline in 3D mode to set the STATE_BASE_ADDRESS.
+    */
+#if GEN_GEN == 12
+   emit_pipeline_select(batch, _3D);
+#else
    emit_pipeline_select(batch, GPGPU);
+#endif
 
    iris_emit_default_l3_config(batch, devinfo, true);
 
    init_state_base_address(batch);
+
+#if GEN_GEN == 12
+   emit_pipeline_select(batch, GPGPU);
+#endif
 
 #if GEN_GEN == 9
    if (devinfo->is_geminilake)
@@ -4111,17 +4136,9 @@ KSP(const struct iris_compiled_shader *shader)
    return iris_bo_offset_from_base_address(res->bo) + shader->assembly.offset;
 }
 
-/* Gen11 workaround table #2056 WABTPPrefetchDisable suggests to disable
- * prefetching of binding tables in A0 and B0 steppings.  XXX: Revisit
- * this WA on C0 stepping.
- *
- * TODO: Fill out SamplerCount for prefetching?
- */
-
 #define INIT_THREAD_DISPATCH_FIELDS(pkt, prefix, stage)                   \
    pkt.KernelStartPointer = KSP(shader);                                  \
-   pkt.BindingTableEntryCount = GEN_GEN == 11 ? 0 :                       \
-      shader->bt.size_bytes / 4;                                          \
+   pkt.BindingTableEntryCount = shader->bt.size_bytes / 4;                \
    pkt.FloatingPointMode = prog_data->use_alt_mode;                       \
                                                                           \
    pkt.DispatchGRFStartRegisterForURBData =                               \
@@ -4288,9 +4305,7 @@ iris_store_fs_state(struct iris_context *ice,
 
    iris_pack_command(GENX(3DSTATE_PS), ps_state, ps) {
       ps.VectorMaskEnable = true;
-      // XXX: WABTPPrefetchDisable, see above, drop at C0
-      ps.BindingTableEntryCount = GEN_GEN == 11 ? 0 :
-         shader->bt.size_bytes / 4;
+      ps.BindingTableEntryCount = shader->bt.size_bytes / 4;
       ps.FloatingPointMode = prog_data->use_alt_mode;
       ps.MaximumNumberofThreadsPerPSD = 64 - (GEN_GEN == 8 ? 2 : 1);
 
@@ -4606,9 +4621,8 @@ use_sampler_view(struct iris_context *ice,
                  struct iris_batch *batch,
                  struct iris_sampler_view *isv)
 {
-   // XXX: ASTC hacks
    enum isl_aux_usage aux_usage =
-      iris_resource_texture_aux_usage(ice, isv->res, isv->view.format, 0);
+      iris_resource_texture_aux_usage(ice, isv->res, isv->view.format);
 
    iris_use_pinned_bo(batch, isv->res->bo, false);
    iris_use_pinned_bo(batch, iris_resource_bo(isv->surface_state.ref.res), false);
@@ -5041,6 +5055,20 @@ iris_update_surface_base_address(struct iris_batch *batch,
 
    flush_before_state_base_change(batch);
 
+#if GEN_GEN == 12
+   /* GEN:BUG:1607854226:
+    *
+    *  Workaround the non pipelined state not applying in MEDIA/GPGPU pipeline
+    *  mode by putting the pipeline temporarily in 3D mode..
+    */
+   if (batch->name == IRIS_BATCH_COMPUTE) {
+      iris_emit_cmd(batch, GENX(PIPELINE_SELECT), sel) {
+         sel.MaskBits = 3;
+         sel.PipelineSelection = _3D;
+      }
+   }
+#endif
+
    iris_emit_cmd(batch, GENX(STATE_BASE_ADDRESS), sba) {
       sba.SurfaceStateBaseAddressModifyEnable = true;
       sba.SurfaceStateBaseAddress = ro_bo(binder->bo, 0);
@@ -5058,6 +5086,19 @@ iris_update_surface_base_address(struct iris_batch *batch,
       sba.BindlessSurfaceStateMOCS    = mocs;
 #endif
    }
+
+#if GEN_GEN == 12
+   /* GEN:BUG:1607854226:
+    *
+    *  Put the pipeline back into compute mode.
+    */
+   if (batch->name == IRIS_BATCH_COMPUTE) {
+      iris_emit_cmd(batch, GENX(PIPELINE_SELECT), sel) {
+         sel.MaskBits = 3;
+         sel.PipelineSelection = GPGPU;
+      }
+   }
+#endif
 
    flush_after_state_base_change(batch);
 
@@ -7120,11 +7161,20 @@ iris_emit_raw_pipe_control(struct iris_batch *batch,
          flags |= PIPE_CONTROL_STALL_AT_SCOREBOARD;
    }
 
+   if (GEN_GEN >= 12 && (flags & PIPE_CONTROL_DEPTH_CACHE_FLUSH)) {
+      /* GEN:BUG:1409600907:
+       *
+       * "PIPE_CONTROL with Depth Stall Enable bit must be set
+       * with any PIPE_CONTROL with Depth Flush Enable bit set.
+       */
+      flags |= PIPE_CONTROL_DEPTH_STALL;
+   }
+
    /* Emit --------------------------------------------------------------- */
 
    if (INTEL_DEBUG & DEBUG_PIPE_CONTROL) {
       fprintf(stderr,
-              "  PC [%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%"PRIx64"]: %s\n",
+              "  PC [%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%"PRIx64"]: %s\n",
               (flags & PIPE_CONTROL_FLUSH_ENABLE) ? "PipeCon " : "",
               (flags & PIPE_CONTROL_CS_STALL) ? "CS " : "",
               (flags & PIPE_CONTROL_STALL_AT_SCOREBOARD) ? "Scoreboard " : "",
@@ -7147,12 +7197,16 @@ iris_emit_raw_pipe_control(struct iris_batch *batch,
               (flags & PIPE_CONTROL_WRITE_IMMEDIATE) ? "WriteImm " : "",
               (flags & PIPE_CONTROL_WRITE_DEPTH_COUNT) ? "WriteZCount " : "",
               (flags & PIPE_CONTROL_WRITE_TIMESTAMP) ? "WriteTimestamp " : "",
+              (flags & PIPE_CONTROL_FLUSH_HDC) ? "HDC " : "",
               imm, reason);
    }
 
    iris_emit_cmd(batch, GENX(PIPE_CONTROL), pc) {
 #if GEN_GEN >= 12
       pc.TileCacheFlushEnable = flags & PIPE_CONTROL_TILE_CACHE_FLUSH;
+#endif
+#if GEN_GEN >= 11
+      pc.HDCPipelineFlushEnable = flags & PIPE_CONTROL_FLUSH_HDC;
 #endif
       pc.LRIPostSyncOperation = NoLRIOperation;
       pc.PipeControlFlushEnable = flags & PIPE_CONTROL_FLUSH_ENABLE;

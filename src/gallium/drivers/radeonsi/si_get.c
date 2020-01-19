@@ -26,14 +26,12 @@
 #include "radeon/radeon_video.h"
 #include "radeon/radeon_vce.h"
 #include "radeon/radeon_uvd_enc.h"
-#include "ac_llvm_util.h"
 #include "vl/vl_decoder.h"
 #include "vl/vl_video_buffer.h"
 #include "util/u_screen.h"
 #include "util/u_video.h"
 #include "compiler/nir/nir.h"
 
-#include <llvm/Config/llvm-config.h>
 #include <sys/utsname.h>
 
 static const char *si_get_vendor(struct pipe_screen *pscreen)
@@ -159,6 +157,9 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_IMAGE_LOAD_FORMATTED:
 	case PIPE_CAP_PREFER_COMPUTE_FOR_MULTIMEDIA:
 	case PIPE_CAP_TGSI_DIV:
+	case PIPE_CAP_PACKED_UNIFORMS:
+	case PIPE_CAP_SHADER_SAMPLES_IDENTICAL:
+	case PIPE_CAP_GL_SPIRV:
 		return 1;
 
 	case PIPE_CAP_QUERY_SO_OVERFLOW:
@@ -195,7 +196,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
 		if (!sscreen->info.has_indirect_compute_dispatch)
 			return 420;
-		return sscreen->options.enable_nir ? 460 : 450;
+		return 460;
 
 	case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
 		/* Optimal number for good TexSubImage performance on Polaris10. */
@@ -214,15 +215,6 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		return sscreen->info.has_sparse_vm_mappings ?
 				RADEON_SPARSE_PAGE_SIZE : 0;
 
-	case PIPE_CAP_PACKED_UNIFORMS:
-	case PIPE_CAP_SHADER_SAMPLES_IDENTICAL:
-	case PIPE_CAP_GL_SPIRV:
-		return sscreen->options.enable_nir;
-
-	case PIPE_CAP_PREFER_IMM_ARRAYS_AS_CONSTBUF:
-		if (sscreen->options.enable_nir)
-			return 0;
-		return 1;
 
 	/* Unsupported features. */
 	case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
@@ -246,6 +238,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
 	case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
 	case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
+	case PIPE_CAP_PREFER_IMM_ARRAYS_AS_CONSTBUF:
 		return 0;
 
 	case PIPE_CAP_FENCE_SIGNAL:
@@ -395,14 +388,14 @@ static int si_get_shader_param(struct pipe_screen* pscreen,
 			int ir = 1 << PIPE_SHADER_IR_NATIVE;
 
 			if (sscreen->info.has_indirect_compute_dispatch)
-				ir |= 1 << PIPE_SHADER_IR_TGSI;
+				ir |= 1 << PIPE_SHADER_IR_NIR;
 
 			return ir;
 		}
 
 		case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE: {
 			uint64_t max_const_buffer_size;
-			pscreen->get_compute_param(pscreen, PIPE_SHADER_IR_TGSI,
+			pscreen->get_compute_param(pscreen, PIPE_SHADER_IR_NIR,
 				PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE,
 				&max_const_buffer_size);
 			return MIN2(max_const_buffer_size, INT_MAX);
@@ -444,13 +437,9 @@ static int si_get_shader_param(struct pipe_screen* pscreen,
 	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
 		return SI_NUM_IMAGES;
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
-		if (sscreen->options.enable_nir)
-			return 0;
-		return 32;
+		return 0;
 	case PIPE_SHADER_CAP_PREFERRED_IR:
-		if (sscreen->options.enable_nir)
-			return PIPE_SHADER_IR_NIR;
-		return PIPE_SHADER_IR_TGSI;
+		return PIPE_SHADER_IR_NIR;
 	case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
 		return 4;
 
@@ -686,8 +675,9 @@ static int si_get_video_param(struct pipe_screen *screen,
 			return (sscreen->info.family < CHIP_TONGA) ? 1152 : 4096;
 		}
 	case PIPE_VIDEO_CAP_PREFERED_FORMAT:
-		if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10 ||
-		    profile == PIPE_VIDEO_PROFILE_VP9_PROFILE2)
+		if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10)
+			return PIPE_FORMAT_P010;
+		else if (profile == PIPE_VIDEO_PROFILE_VP9_PROFILE2)
 			return PIPE_FORMAT_P016;
 		else
 			return PIPE_FORMAT_NV12;

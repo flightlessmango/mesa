@@ -71,67 +71,56 @@ static LLVMValueRef ngg_get_query_buf(struct si_shader_context *ctx)
 				     LLVMConstInt(ctx->i32, GFX10_GS_QUERY_BUF, false));
 }
 
-/* Send GS Alloc Req message from the first wave of the group to SPI.
- * Message payload is:
- * - bits 0..10: vertices in group
- * - bits 12..22: primitives in group
- */
-static void build_sendmsg_gs_alloc_req(struct si_shader_context *ctx,
-				       LLVMValueRef vtx_cnt,
-				       LLVMValueRef prim_cnt)
+static LLVMValueRef ngg_get_initial_edgeflag(struct si_shader_context *ctx, unsigned index)
 {
-	LLVMBuilderRef builder = ctx->ac.builder;
-	LLVMValueRef tmp;
-
-	tmp = LLVMBuildICmp(builder, LLVMIntEQ, get_wave_id_in_tg(ctx), ctx->ac.i32_0, "");
-	ac_build_ifcc(&ctx->ac, tmp, 5020);
-
-	tmp = LLVMBuildShl(builder, prim_cnt, LLVMConstInt(ctx->ac.i32, 12, false),"");
-	tmp = LLVMBuildOr(builder, tmp, vtx_cnt, "");
-	ac_build_sendmsg(&ctx->ac, AC_SENDMSG_GS_ALLOC_REQ, tmp);
-
-	ac_build_endif(&ctx->ac, 5020);
+	if (ctx->type == PIPE_SHADER_VERTEX) {
+		LLVMValueRef tmp;
+		tmp = LLVMBuildLShr(ctx->ac.builder,
+				    ac_get_arg(&ctx->ac, ctx->args.gs_invocation_id),
+				    LLVMConstInt(ctx->ac.i32, 8 + index, false), "");
+		return LLVMBuildTrunc(ctx->ac.builder, tmp, ctx->ac.i1, "");
+	}
+	return ctx->i1false;
 }
 
-struct ngg_prim {
-	unsigned num_vertices;
-	LLVMValueRef isnull;
-	LLVMValueRef index[3];
-	LLVMValueRef edgeflag[3];
-};
-
-static void build_export_prim(struct si_shader_context *ctx,
-			      const struct ngg_prim *prim)
+/**
+ * Return the number of vertices as a constant in \p num_vertices,
+ * and return a more precise value as LLVMValueRef from the function.
+ */
+static LLVMValueRef ngg_get_vertices_per_prim(struct si_shader_context *ctx,
+					      unsigned *num_vertices)
 {
-	LLVMBuilderRef builder = ctx->ac.builder;
-	struct ac_export_args args;
-	LLVMValueRef tmp;
+	const struct si_shader_info *info = &ctx->shader->selector->info;
 
-	tmp = LLVMBuildZExt(builder, prim->isnull, ctx->ac.i32, "");
-	args.out[0] = LLVMBuildShl(builder, tmp, LLVMConstInt(ctx->ac.i32, 31, false), "");
+	if (ctx->type == PIPE_SHADER_VERTEX) {
+		if (info->properties[TGSI_PROPERTY_VS_BLIT_SGPRS_AMD]) {
+			/* Blits always use axis-aligned rectangles with 3 vertices. */
+			*num_vertices = 3;
+			return LLVMConstInt(ctx->i32, 3, 0);
+		} else {
+			/* We always build up all three indices for the prim export
+			 * independent of the primitive type. The additional garbage
+			 * data shouldn't hurt. This number doesn't matter with
+			 * NGG passthrough.
+			 */
+			*num_vertices = 3;
 
-	for (unsigned i = 0; i < prim->num_vertices; ++i) {
-		tmp = LLVMBuildShl(builder, prim->index[i],
-				   LLVMConstInt(ctx->ac.i32, 10 * i, false), "");
-		args.out[0] = LLVMBuildOr(builder, args.out[0], tmp, "");
-		tmp = LLVMBuildZExt(builder, prim->edgeflag[i], ctx->ac.i32, "");
-		tmp = LLVMBuildShl(builder, tmp,
-				   LLVMConstInt(ctx->ac.i32, 10 * i + 9, false), "");
-		args.out[0] = LLVMBuildOr(builder, args.out[0], tmp, "");
+			/* Extract OUTPRIM field. */
+			LLVMValueRef num = si_unpack_param(ctx, ctx->vs_state_bits, 2, 2);
+			return LLVMBuildAdd(ctx->ac.builder, num, ctx->i32_1, "");
+		}
+	} else {
+		assert(ctx->type == PIPE_SHADER_TESS_EVAL);
+
+		if (info->properties[TGSI_PROPERTY_TES_POINT_MODE])
+			*num_vertices = 1;
+		else if (info->properties[TGSI_PROPERTY_TES_PRIM_MODE] == PIPE_PRIM_LINES)
+			*num_vertices = 2;
+		else
+			*num_vertices = 3;
+
+		return LLVMConstInt(ctx->i32, *num_vertices, false);
 	}
-
-	args.out[0] = LLVMBuildBitCast(builder, args.out[0], ctx->ac.f32, "");
-	args.out[1] = LLVMGetUndef(ctx->ac.f32);
-	args.out[2] = LLVMGetUndef(ctx->ac.f32);
-	args.out[3] = LLVMGetUndef(ctx->ac.f32);
-
-	args.target = V_008DFC_SQ_EXP_PRIM;
-	args.enabled_channels = 1;
-	args.done = true;
-	args.valid_mask = false;
-	args.compr = false;
-
-	ac_build_export(&ctx->ac, &args);
 }
 
 static void build_streamout_vertex(struct si_shader_context *ctx,
@@ -139,7 +128,7 @@ static void build_streamout_vertex(struct si_shader_context *ctx,
 				   unsigned stream, LLVMValueRef offset_vtx,
 				   LLVMValueRef vertexptr)
 {
-	struct tgsi_shader_info *info = &ctx->shader->selector->info;
+	struct si_shader_info *info = &ctx->shader->selector->info;
 	struct pipe_stream_output_info *so = &ctx->shader->selector->so;
 	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef offset[4] = {};
@@ -199,7 +188,7 @@ struct ngg_streamout {
 static void build_streamout(struct si_shader_context *ctx,
 			    struct ngg_streamout *nggso)
 {
-	struct tgsi_shader_info *info = &ctx->shader->selector->info;
+	struct si_shader_info *info = &ctx->shader->selector->info;
 	struct pipe_stream_output_info *so = &ctx->shader->selector->so;
 	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef buf_ptr = ac_get_arg(&ctx->ac, ctx->rw_buffers);
@@ -524,7 +513,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 {
 	struct si_shader_context *ctx = si_shader_context_from_abi(abi);
 	struct si_shader_selector *sel = ctx->shader->selector;
-	struct tgsi_shader_info *info = &sel->info;
+	struct si_shader_info *info = &sel->info;
 	struct si_shader_output_values outputs[PIPE_MAX_SHADER_OUTPUTS];
 	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef tmp, tmp2;
@@ -583,31 +572,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 
 	/* Determine the number of vertices per primitive. */
 	unsigned num_vertices;
-	LLVMValueRef num_vertices_val;
-
-	if (ctx->type == PIPE_SHADER_VERTEX) {
-		if (info->properties[TGSI_PROPERTY_VS_BLIT_SGPRS_AMD]) {
-			/* Blits always use axis-aligned rectangles with 3 vertices. */
-			num_vertices = 3;
-			num_vertices_val = LLVMConstInt(ctx->i32, 3, 0);
-		} else {
-			/* Extract OUTPRIM field. */
-			tmp = si_unpack_param(ctx, ctx->vs_state_bits, 2, 2);
-			num_vertices_val = LLVMBuildAdd(builder, tmp, ctx->i32_1, "");
-			num_vertices = 3; /* TODO: optimize for points & lines */
-		}
-	} else {
-		assert(ctx->type == PIPE_SHADER_TESS_EVAL);
-
-		if (info->properties[TGSI_PROPERTY_TES_POINT_MODE])
-			num_vertices = 1;
-		else if (info->properties[TGSI_PROPERTY_TES_PRIM_MODE] == PIPE_PRIM_LINES)
-			num_vertices = 2;
-		else
-			num_vertices = 3;
-
-		num_vertices_val = LLVMConstInt(ctx->i32, num_vertices, false);
-	}
+	LLVMValueRef num_vertices_val = ngg_get_vertices_per_prim(ctx, &num_vertices);
 
 	/* Streamout */
 	LLVMValueRef emitted_prims = NULL;
@@ -671,7 +636,8 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 		ac_build_endif(&ctx->ac, 5400);
 	}
 
-	build_sendmsg_gs_alloc_req(ctx, ngg_get_vtx_cnt(ctx), ngg_get_prim_cnt(ctx));
+	ac_build_sendmsg_gs_alloc_req(&ctx->ac, get_wave_id_in_tg(ctx),
+				      ngg_get_vtx_cnt(ctx), ngg_get_prim_cnt(ctx));
 
 	/* Update query buffer */
 	/* TODO: this won't catch 96-bit clear_buffer via transform feedback. */
@@ -709,14 +675,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 		ac_build_endif(&ctx->ac, 5029);
 	}
 
-	/* Export primitive data to the index buffer. Format is:
-	 *  - bits 0..8: index 0
-	 *  - bit 9: edge flag 0
-	 *  - bits 10..18: index 1
-	 *  - bit 19: edge flag 1
-	 *  - bits 20..28: index 2
-	 *  - bit 29: edge flag 2
-	 *  - bit 31: null primitive (skip)
+	/* Build the primitive export.
 	 *
 	 * For the first version, we will always build up all three indices
 	 * independent of the primitive type. The additional garbage data
@@ -727,31 +686,27 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 	 */
 	ac_build_ifcc(&ctx->ac, is_gs_thread, 6001);
 	{
-		struct ngg_prim prim = {};
+		struct ac_ngg_prim prim = {};
 
-		prim.num_vertices = num_vertices;
-		prim.isnull = ctx->ac.i1false;
-		memcpy(prim.index, vtxindex, sizeof(vtxindex[0]) * 3);
+		if (gfx10_is_ngg_passthrough(ctx->shader)) {
+			prim.passthrough = ac_get_arg(&ctx->ac, ctx->gs_vtx01_offset);
+		} else {
+			prim.num_vertices = num_vertices;
+			prim.isnull = ctx->ac.i1false;
+			memcpy(prim.index, vtxindex, sizeof(vtxindex[0]) * 3);
 
-		for (unsigned i = 0; i < num_vertices; ++i) {
-			if (ctx->type != PIPE_SHADER_VERTEX) {
-				prim.edgeflag[i] = ctx->i1false;
-				continue;
-			}
+			for (unsigned i = 0; i < num_vertices; ++i) {
+				prim.edgeflag[i] = ngg_get_initial_edgeflag(ctx, i);
 
-			tmp = LLVMBuildLShr(builder,
-					    ac_get_arg(&ctx->ac, ctx->args.gs_invocation_id),
-					    LLVMConstInt(ctx->ac.i32, 8 + i, false), "");
-			prim.edgeflag[i] = LLVMBuildTrunc(builder, tmp, ctx->ac.i1, "");
-
-			if (sel->info.writes_edgeflag) {
-				tmp2 = LLVMBuildLoad(builder, user_edgeflags[i], "");
-				prim.edgeflag[i] = LLVMBuildAnd(builder, prim.edgeflag[i],
-								tmp2, "");
+				if (sel->info.writes_edgeflag) {
+					tmp2 = LLVMBuildLoad(builder, user_edgeflags[i], "");
+					prim.edgeflag[i] = LLVMBuildAnd(builder, prim.edgeflag[i],
+									tmp2, "");
+				}
 			}
 		}
 
-		build_export_prim(ctx, &prim);
+		ac_build_export_prim(&ctx->ac, &prim);
 	}
 	ac_build_endif(&ctx->ac, 6001);
 
@@ -804,7 +759,7 @@ static LLVMValueRef
 ngg_gs_get_vertex_storage(struct si_shader_context *ctx)
 {
 	const struct si_shader_selector *sel = ctx->shader->selector;
-	const struct tgsi_shader_info *info = &sel->info;
+	const struct si_shader_info *info = &sel->info;
 
 	LLVMTypeRef elements[2] = {
 		LLVMArrayType(ctx->ac.i32, 4 * info->num_outputs),
@@ -911,7 +866,7 @@ void gfx10_ngg_gs_emit_vertex(struct si_shader_context *ctx,
 			      LLVMValueRef *addrs)
 {
 	const struct si_shader_selector *sel = ctx->shader->selector;
-	const struct tgsi_shader_info *info = &sel->info;
+	const struct si_shader_info *info = &sel->info;
 	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef tmp;
 	const LLVMValueRef vertexidx =
@@ -1010,7 +965,7 @@ void gfx10_ngg_gs_emit_prologue(struct si_shader_context *ctx)
 void gfx10_ngg_gs_emit_epilogue(struct si_shader_context *ctx)
 {
 	const struct si_shader_selector *sel = ctx->shader->selector;
-	const struct tgsi_shader_info *info = &sel->info;
+	const struct si_shader_info *info = &sel->info;
 	const unsigned verts_per_prim = u_vertices_per_prim(sel->gs_output_prim);
 	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef i8_0 = LLVMConstInt(ctx->ac.i8, 0, false);
@@ -1204,7 +1159,8 @@ void gfx10_ngg_gs_emit_epilogue(struct si_shader_context *ctx)
 	 *       there are 4 or more contiguous null primitives in the export
 	 *       (in the common case of single-dword prim exports).
 	 */
-	build_sendmsg_gs_alloc_req(ctx, vertlive_scan.result_reduce, num_emit_threads);
+	ac_build_sendmsg_gs_alloc_req(&ctx->ac, get_wave_id_in_tg(ctx),
+				      vertlive_scan.result_reduce, num_emit_threads);
 
 	/* Setup the reverse vertex compaction permutation. We re-use stream 1
 	 * of the primitive liveness flags, relying on the fact that each
@@ -1224,7 +1180,7 @@ void gfx10_ngg_gs_emit_epilogue(struct si_shader_context *ctx)
 	ac_build_ifcc(&ctx->ac, tmp, 5140);
 	{
 		LLVMValueRef flags;
-		struct ngg_prim prim = {};
+		struct ac_ngg_prim prim = {};
 		prim.num_vertices = verts_per_prim;
 
 		tmp = ngg_gs_vertex_ptr(ctx, tid);
@@ -1253,7 +1209,7 @@ void gfx10_ngg_gs_emit_epilogue(struct si_shader_context *ctx)
 					      si_unpack_param(ctx, ctx->vs_state_bits, 4, 2),
 					      ctx->i32_0, "");
 
-			struct ngg_prim in = prim;
+			struct ac_ngg_prim in = prim;
 			prim.index[0] = LLVMBuildSelect(builder, flatshade_first,
 							in.index[0],
 							LLVMBuildSelect(builder, is_odd,
@@ -1269,7 +1225,7 @@ void gfx10_ngg_gs_emit_epilogue(struct si_shader_context *ctx)
 							in.index[2], "");
 		}
 
-		build_export_prim(ctx, &prim);
+		ac_build_export_prim(&ctx->ac, &prim);
 	}
 	ac_build_endif(&ctx->ac, 5140);
 

@@ -1516,11 +1516,7 @@ emit_3dstate_vs(struct anv_pipeline *pipeline)
        * programming 0xB000[30] to '1'.
        */
       vs.SamplerCount               = GEN_GEN == 11 ? 0 : get_sampler_count(vs_bin);
-     /* Gen 11 workarounds table #2056 WABTPPrefetchDisable suggests to
-      * disable prefetching of binding tables on A0 and B0 steppings.
-      * TODO: Revisit this WA on newer steppings.
-      */
-      vs.BindingTableEntryCount     = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(vs_bin);
+      vs.BindingTableEntryCount     = get_binding_table_entry_count(vs_bin);
       vs.FloatingPointMode          = IEEE754;
       vs.IllegalOpcodeExceptionEnable = false;
       vs.SoftwareExceptionEnable    = false;
@@ -1592,8 +1588,7 @@ emit_3dstate_hs_te_ds(struct anv_pipeline *pipeline,
       hs.KernelStartPointer = tcs_bin->kernel.offset;
       /* WA_1606682166 */
       hs.SamplerCount = GEN_GEN == 11 ? 0 : get_sampler_count(tcs_bin);
-      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable */
-      hs.BindingTableEntryCount = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(tcs_bin);
+      hs.BindingTableEntryCount = get_binding_table_entry_count(tcs_bin);
       hs.MaximumNumberofThreads = devinfo->max_tcs_threads - 1;
       hs.IncludeVertexHandles = true;
       hs.InstanceCount = tcs_prog_data->instances - 1;
@@ -1648,8 +1643,7 @@ emit_3dstate_hs_te_ds(struct anv_pipeline *pipeline,
       ds.KernelStartPointer = tes_bin->kernel.offset;
       /* WA_1606682166 */
       ds.SamplerCount = GEN_GEN == 11 ? 0 : get_sampler_count(tes_bin);
-      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable */
-      ds.BindingTableEntryCount = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(tes_bin);
+      ds.BindingTableEntryCount = get_binding_table_entry_count(tes_bin);
       ds.MaximumNumberofThreads = devinfo->max_tes_threads - 1;
 
       ds.ComputeWCoordinateEnable =
@@ -1707,8 +1701,7 @@ emit_3dstate_gs(struct anv_pipeline *pipeline)
       gs.VectorMaskEnable        = false;
       /* WA_1606682166 */
       gs.SamplerCount            = GEN_GEN == 11 ? 0 : get_sampler_count(gs_bin);
-      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable */
-      gs.BindingTableEntryCount  = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(gs_bin);
+      gs.BindingTableEntryCount  = get_binding_table_entry_count(gs_bin);
       gs.IncludeVertexHandles    = gs_prog_data->base.include_vue_handles;
       gs.IncludePrimitiveID      = gs_prog_data->include_primitive_id;
 
@@ -1943,8 +1936,7 @@ emit_3dstate_ps(struct anv_pipeline *pipeline,
       ps.VectorMaskEnable           = GEN_GEN >= 8;
       /* WA_1606682166 */
       ps.SamplerCount               = GEN_GEN == 11 ? 0 : get_sampler_count(fs_bin);
-      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable */
-      ps.BindingTableEntryCount     = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(fs_bin);
+      ps.BindingTableEntryCount     = get_binding_table_entry_count(fs_bin);
       ps.PushConstantEnable         = wm_prog_data->base.nr_params > 0 ||
                                       wm_prog_data->base.ubo_ranges[0].length;
       ps.PositionXYOffsetSelect     = wm_prog_data->uses_pos_offset ?
@@ -1986,8 +1978,7 @@ emit_3dstate_ps(struct anv_pipeline *pipeline,
 #if GEN_GEN >= 8
 static void
 emit_3dstate_ps_extra(struct anv_pipeline *pipeline,
-                      struct anv_subpass *subpass,
-                      const VkPipelineColorBlendStateCreateInfo *blend)
+                      struct anv_subpass *subpass)
 {
    const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
 
@@ -2112,6 +2103,24 @@ genX(graphics_pipeline_create)(
       return result;
    }
 
+   /* If rasterization is not enabled, various CreateInfo structs must be
+    * ignored.
+    */
+   const bool raster_enabled =
+      !pCreateInfo->pRasterizationState->rasterizerDiscardEnable;
+
+   const VkPipelineViewportStateCreateInfo *vp_info =
+      raster_enabled ? pCreateInfo->pViewportState : NULL;
+
+   const VkPipelineMultisampleStateCreateInfo *ms_info =
+      raster_enabled ? pCreateInfo->pMultisampleState : NULL;
+
+   const VkPipelineDepthStencilStateCreateInfo *ds_info =
+      raster_enabled ? pCreateInfo->pDepthStencilState : NULL;
+
+   const VkPipelineColorBlendStateCreateInfo *cb_info =
+      raster_enabled ? pCreateInfo->pColorBlendState : NULL;
+
    const VkPipelineRasterizationLineStateCreateInfoEXT *line_info =
       vk_find_struct_const(pCreateInfo->pRasterizationState->pNext,
                            PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT);
@@ -2121,19 +2130,17 @@ genX(graphics_pipeline_create)(
    assert(pCreateInfo->pRasterizationState);
    emit_rs_state(pipeline, pCreateInfo->pInputAssemblyState,
                            pCreateInfo->pRasterizationState,
-                           pCreateInfo->pMultisampleState,
-                           line_info, pass, subpass);
-   emit_ms_state(pipeline, pCreateInfo->pMultisampleState);
-   emit_ds_state(pipeline, pCreateInfo->pDepthStencilState, pass, subpass);
-   emit_cb_state(pipeline, pCreateInfo->pColorBlendState,
-                           pCreateInfo->pMultisampleState);
-   compute_kill_pixel(pipeline, pCreateInfo->pMultisampleState, subpass);
+                           ms_info, line_info, pass, subpass);
+   emit_ms_state(pipeline, ms_info);
+   emit_ds_state(pipeline, ds_info, pass, subpass);
+   emit_cb_state(pipeline, cb_info, ms_info);
+   compute_kill_pixel(pipeline, ms_info, subpass);
 
    emit_urb_setup(pipeline);
 
    emit_3dstate_clip(pipeline,
                      pCreateInfo->pInputAssemblyState,
-                     pCreateInfo->pViewportState,
+                     vp_info,
                      pCreateInfo->pRasterizationState);
    emit_3dstate_streamout(pipeline, pCreateInfo->pRasterizationState);
 
@@ -2163,12 +2170,10 @@ genX(graphics_pipeline_create)(
    emit_3dstate_wm(pipeline, subpass,
                    pCreateInfo->pInputAssemblyState,
                    pCreateInfo->pRasterizationState,
-                   pCreateInfo->pColorBlendState,
-                   pCreateInfo->pMultisampleState, line_info);
-   emit_3dstate_ps(pipeline, pCreateInfo->pColorBlendState,
-                   pCreateInfo->pMultisampleState);
+                   cb_info, ms_info, line_info);
+   emit_3dstate_ps(pipeline, cb_info, ms_info);
 #if GEN_GEN >= 8
-   emit_3dstate_ps_extra(pipeline, subpass, pCreateInfo->pColorBlendState);
+   emit_3dstate_ps_extra(pipeline, subpass);
    emit_3dstate_vf_topology(pipeline);
 #endif
    emit_3dstate_vf_statistics(pipeline);
@@ -2314,12 +2319,10 @@ compute_pipeline_create(
       .KernelStartPointer     = cs_bin->kernel.offset,
       /* WA_1606682166 */
       .SamplerCount           = GEN_GEN == 11 ? 0 : get_sampler_count(cs_bin),
-      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable
-       *
-       * We add 1 because the CS indirect parameters buffer isn't accounted
+      /* We add 1 because the CS indirect parameters buffer isn't accounted
        * for in bind_map.surface_count.
        */
-      .BindingTableEntryCount = GEN_GEN == 11 ? 0 : 1 + MIN2(cs_bin->bind_map.surface_count, 30),
+      .BindingTableEntryCount = 1 + MIN2(cs_bin->bind_map.surface_count, 30),
       .BarrierEnable          = cs_prog_data->uses_barrier,
       .SharedLocalMemorySize  =
          encode_slm_size(GEN_GEN, cs_prog_data->base.total_shared),

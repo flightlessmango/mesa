@@ -47,6 +47,7 @@
 #include "pan_resource.h"
 #include "pan_util.h"
 #include "pan_tiling.h"
+#include "panfrost-quirks.h"
 
 void
 panfrost_resource_reset_damage(struct panfrost_resource *pres)
@@ -83,6 +84,7 @@ panfrost_resource_from_handle(struct pipe_screen *pscreen,
         prsc->screen = pscreen;
 
         rsc->bo = panfrost_bo_import(screen, whandle->handle);
+        rsc->internal_format = templat->format;
         rsc->slices[0].stride = whandle->stride;
         rsc->slices[0].offset = whandle->offset;
         rsc->slices[0].initialized = true;
@@ -322,6 +324,8 @@ panfrost_setup_slices(struct panfrost_resource *pres, size_t *bo_size)
                 unsigned slice_one_size = slice->stride * effective_height;
                 unsigned slice_full_size = slice_one_size * effective_depth;
 
+                slice->size0 = slice_one_size;
+
                 /* Report 2D size for 3D texturing */
 
                 if (l == 0)
@@ -386,28 +390,32 @@ panfrost_resource_create_bo(struct panfrost_screen *screen, struct panfrost_reso
          * AFBC: Compressed and renderable (so always desirable for non-scanout
          * rendertargets). Cheap to sample from. The format is black box, so we
          * can't read/write from software.
-         */
+         *
+         * Tiling textures is almost always faster, unless we only use it once.
+         * Only a few types of resources can be tiled, ensure the bind is only
+         * (a combination of) one of the following */
 
-        /* Tiling textures is almost always faster, unless we only use it once */
+        const unsigned valid_binding =
+                PIPE_BIND_DEPTH_STENCIL |
+                PIPE_BIND_RENDER_TARGET |
+                PIPE_BIND_BLENDABLE |
+                PIPE_BIND_SAMPLER_VIEW |
+                PIPE_BIND_DISPLAY_TARGET;
 
-        bool is_texture = (res->bind & PIPE_BIND_SAMPLER_VIEW);
-        bool is_2d = res->depth0 == 1 && res->array_size == 1;
-        bool is_streaming = (res->usage != PIPE_USAGE_STREAM);
-        bool is_global = res->bind & PIPE_BIND_GLOBAL;
-
-        bool should_tile = is_streaming && is_texture && is_2d && !is_global;
-
-        /* Depth/stencil can't be tiled, only linear or AFBC */
-        should_tile &= !(res->bind & PIPE_BIND_DEPTH_STENCIL);
+        bool is_2d = (res->target == PIPE_TEXTURE_2D);
+        bool should_tile = (res->usage != PIPE_USAGE_STREAM);
+        bool must_tile = (res->bind & PIPE_BIND_DEPTH_STENCIL) && (screen->quirks & MIDGARD_SFBD);
+        bool can_tile = is_2d && ((res->bind & ~valid_binding) == 0);
 
         /* FBOs we would like to checksum, if at all possible */
-        bool can_checksum = !(res->bind & (PIPE_BIND_SCANOUT | PIPE_BIND_SHARED));
+        bool can_checksum = !(res->bind & ~valid_binding);
         bool should_checksum = res->bind & PIPE_BIND_RENDER_TARGET;
 
         pres->checksummed = can_checksum && should_checksum;
 
         /* Set the layout appropriately */
-        pres->layout = should_tile ? PAN_TILED : PAN_LINEAR;
+        assert(!(must_tile && !can_tile)); /* must_tile => can_tile */
+        pres->layout = ((can_tile && should_tile) || must_tile) ? PAN_TILED : PAN_LINEAR;
 
         size_t bo_size;
 
@@ -513,6 +521,7 @@ panfrost_resource_create(struct pipe_screen *screen,
 
         so->base = *template;
         so->base.screen = screen;
+        so->internal_format = template->format;
 
         pipe_reference_init(&so->base.reference, 1);
 
@@ -665,7 +674,10 @@ panfrost_transfer_map(struct pipe_context *pctx,
                 return transfer->map;
         } else {
                 transfer->base.stride = rsrc->slices[level].stride;
-                transfer->base.layer_stride = rsrc->cubemap_stride;
+                if (resource->target == PIPE_TEXTURE_3D)
+                        transfer->base.layer_stride = rsrc->slices[level].size0;
+                else
+                        transfer->base.layer_stride = rsrc->cubemap_stride;
 
                 /* By mapping direct-write, we're implicitly already
                  * initialized (maybe), so be conservative */
@@ -675,7 +687,7 @@ panfrost_transfer_map(struct pipe_context *pctx,
 
                 return bo->cpu
                        + rsrc->slices[level].offset
-                       + transfer->base.box.z * rsrc->cubemap_stride
+                       + transfer->base.box.z * transfer->base.layer_stride
                        + transfer->base.box.y * rsrc->slices[level].stride
                        + transfer->base.box.x * bytes_per_pixel;
         }
@@ -750,8 +762,9 @@ panfrost_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *pr
 }
 
 static enum pipe_format
-panfrost_resource_get_internal_format(struct pipe_resource *prsrc) {
-        return prsrc->format;
+panfrost_resource_get_internal_format(struct pipe_resource *rsrc) {
+        struct panfrost_resource *prsrc = (struct panfrost_resource *) rsrc;
+        return prsrc->internal_format;
 }
 
 static bool

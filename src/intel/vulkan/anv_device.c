@@ -57,6 +57,7 @@ DRI_CONF_BEGIN
 
    DRI_CONF_SECTION_DEBUG
       DRI_CONF_ALWAYS_FLUSH_CACHE("false")
+      DRI_CONF_VK_WSI_FORCE_BGRA8_UNORM_FIRST("false")
    DRI_CONF_SECTION_END
 DRI_CONF_END;
 
@@ -962,6 +963,86 @@ void anv_GetPhysicalDeviceFeatures(
       pFeatures->depthBounds = true;
 }
 
+static void
+anv_get_physical_device_features_1_1(struct anv_physical_device *pdevice,
+                                     VkPhysicalDeviceVulkan11Features *f)
+{
+   assert(f->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES);
+
+   f->storageBuffer16BitAccess            = pdevice->info.gen >= 8;
+   f->uniformAndStorageBuffer16BitAccess  = pdevice->info.gen >= 8;
+   f->storagePushConstant16               = pdevice->info.gen >= 8;
+   f->storageInputOutput16                = false;
+   f->multiview                           = true;
+   f->multiviewGeometryShader             = true;
+   f->multiviewTessellationShader         = true;
+   f->variablePointersStorageBuffer       = true;
+   f->variablePointers                    = true;
+   f->protectedMemory                     = false;
+   f->samplerYcbcrConversion              = true;
+   f->shaderDrawParameters                = true;
+}
+
+static void
+anv_get_physical_device_features_1_2(struct anv_physical_device *pdevice,
+                                     VkPhysicalDeviceVulkan12Features *f)
+{
+   assert(f->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES);
+
+   f->samplerMirrorClampToEdge            = true;
+   f->drawIndirectCount                   = true;
+   f->storageBuffer8BitAccess             = pdevice->info.gen >= 8;
+   f->uniformAndStorageBuffer8BitAccess   = pdevice->info.gen >= 8;
+   f->storagePushConstant8                = pdevice->info.gen >= 8;
+   f->shaderBufferInt64Atomics            = pdevice->info.gen >= 9 &&
+                                            pdevice->use_softpin;
+   f->shaderSharedInt64Atomics            = false;
+   f->shaderFloat16                       = pdevice->info.gen >= 8;
+   f->shaderInt8                          = pdevice->info.gen >= 8;
+
+   bool descIndexing = pdevice->has_a64_buffer_access &&
+                       pdevice->has_bindless_images;
+   f->descriptorIndexing                                 = descIndexing;
+   f->shaderInputAttachmentArrayDynamicIndexing          = false;
+   f->shaderUniformTexelBufferArrayDynamicIndexing       = descIndexing;
+   f->shaderStorageTexelBufferArrayDynamicIndexing       = descIndexing;
+   f->shaderUniformBufferArrayNonUniformIndexing         = false;
+   f->shaderSampledImageArrayNonUniformIndexing          = descIndexing;
+   f->shaderStorageBufferArrayNonUniformIndexing         = descIndexing;
+   f->shaderStorageImageArrayNonUniformIndexing          = descIndexing;
+   f->shaderInputAttachmentArrayNonUniformIndexing       = false;
+   f->shaderUniformTexelBufferArrayNonUniformIndexing    = descIndexing;
+   f->shaderStorageTexelBufferArrayNonUniformIndexing    = descIndexing;
+   f->descriptorBindingUniformBufferUpdateAfterBind      = false;
+   f->descriptorBindingSampledImageUpdateAfterBind       = descIndexing;
+   f->descriptorBindingStorageImageUpdateAfterBind       = descIndexing;
+   f->descriptorBindingStorageBufferUpdateAfterBind      = descIndexing;
+   f->descriptorBindingUniformTexelBufferUpdateAfterBind = descIndexing;
+   f->descriptorBindingStorageTexelBufferUpdateAfterBind = descIndexing;
+   f->descriptorBindingUpdateUnusedWhilePending          = descIndexing;
+   f->descriptorBindingPartiallyBound                    = descIndexing;
+   f->descriptorBindingVariableDescriptorCount           = false;
+   f->runtimeDescriptorArray                             = descIndexing;
+
+   f->samplerFilterMinmax                 = pdevice->info.gen >= 9;
+   f->scalarBlockLayout                   = true;
+   f->imagelessFramebuffer                = true;
+   f->uniformBufferStandardLayout         = true;
+   f->shaderSubgroupExtendedTypes         = true;
+   f->separateDepthStencilLayouts         = true;
+   f->hostQueryReset                      = true;
+   f->timelineSemaphore                   = true;
+   f->bufferDeviceAddress                 = pdevice->has_a64_buffer_access;
+   f->bufferDeviceAddressCaptureReplay    = pdevice->has_a64_buffer_access;
+   f->bufferDeviceAddressMultiDevice      = false;
+   f->vulkanMemoryModel                   = true;
+   f->vulkanMemoryModelDeviceScope        = true;
+   f->vulkanMemoryModelAvailabilityVisibilityChains = true;
+   f->shaderOutputViewportIndex           = true;
+   f->shaderOutputLayer                   = true;
+   f->subgroupBroadcastDynamicId          = true;
+}
+
 void anv_GetPhysicalDeviceFeatures2(
     VkPhysicalDevice                            physicalDevice,
     VkPhysicalDeviceFeatures2*                  pFeatures)
@@ -969,24 +1050,38 @@ void anv_GetPhysicalDeviceFeatures2(
    ANV_FROM_HANDLE(anv_physical_device, pdevice, physicalDevice);
    anv_GetPhysicalDeviceFeatures(physicalDevice, &pFeatures->features);
 
+   VkPhysicalDeviceVulkan11Features core_1_1 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+   };
+   anv_get_physical_device_features_1_1(pdevice, &core_1_1);
+
+   VkPhysicalDeviceVulkan12Features core_1_2 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+   };
+   anv_get_physical_device_features_1_2(pdevice, &core_1_2);
+
+#define CORE_FEATURE(major, minor, feature) \
+   features->feature = core_##major##_##minor.feature
+
+
    vk_foreach_struct(ext, pFeatures->pNext) {
       switch (ext->sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR: {
          VkPhysicalDevice8BitStorageFeaturesKHR *features =
             (VkPhysicalDevice8BitStorageFeaturesKHR *)ext;
-         features->storageBuffer8BitAccess = pdevice->info.gen >= 8;
-         features->uniformAndStorageBuffer8BitAccess = pdevice->info.gen >= 8;
-         features->storagePushConstant8 = pdevice->info.gen >= 8;
+         CORE_FEATURE(1, 2, storageBuffer8BitAccess);
+         CORE_FEATURE(1, 2, uniformAndStorageBuffer8BitAccess);
+         CORE_FEATURE(1, 2, storagePushConstant8);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES: {
          VkPhysicalDevice16BitStorageFeatures *features =
             (VkPhysicalDevice16BitStorageFeatures *)ext;
-         features->storageBuffer16BitAccess = pdevice->info.gen >= 8;
-         features->uniformAndStorageBuffer16BitAccess = pdevice->info.gen >= 8;
-         features->storagePushConstant16 = pdevice->info.gen >= 8;
-         features->storageInputOutput16 = false;
+         CORE_FEATURE(1, 1, storageBuffer16BitAccess);
+         CORE_FEATURE(1, 1, uniformAndStorageBuffer16BitAccess);
+         CORE_FEATURE(1, 1, storagePushConstant16);
+         CORE_FEATURE(1, 1, storageInputOutput16);
          break;
       }
 
@@ -1000,10 +1095,9 @@ void anv_GetPhysicalDeviceFeatures2(
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR: {
          VkPhysicalDeviceBufferDeviceAddressFeaturesKHR *features = (void *)ext;
-         features->bufferDeviceAddress = pdevice->has_a64_buffer_access;
-         features->bufferDeviceAddressCaptureReplay =
-            pdevice->has_a64_buffer_access;
-         features->bufferDeviceAddressMultiDevice = false;
+         CORE_FEATURE(1, 2, bufferDeviceAddress);
+         CORE_FEATURE(1, 2, bufferDeviceAddressCaptureReplay);
+         CORE_FEATURE(1, 2, bufferDeviceAddressMultiDevice);
          break;
       }
 
@@ -1034,8 +1128,8 @@ void anv_GetPhysicalDeviceFeatures2(
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR: {
          VkPhysicalDeviceFloat16Int8FeaturesKHR *features = (void *)ext;
-         features->shaderFloat16 = pdevice->info.gen >= 8;
-         features->shaderInt8 = pdevice->info.gen >= 8;
+         CORE_FEATURE(1, 2, shaderFloat16);
+         CORE_FEATURE(1, 2, shaderInt8);
          break;
       }
 
@@ -1051,33 +1145,33 @@ void anv_GetPhysicalDeviceFeatures2(
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT: {
          VkPhysicalDeviceHostQueryResetFeaturesEXT *features =
             (VkPhysicalDeviceHostQueryResetFeaturesEXT *)ext;
-         features->hostQueryReset = true;
+         CORE_FEATURE(1, 2, hostQueryReset);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT: {
          VkPhysicalDeviceDescriptorIndexingFeaturesEXT *features =
             (VkPhysicalDeviceDescriptorIndexingFeaturesEXT *)ext;
-         features->shaderInputAttachmentArrayDynamicIndexing = false;
-         features->shaderUniformTexelBufferArrayDynamicIndexing = true;
-         features->shaderStorageTexelBufferArrayDynamicIndexing = true;
-         features->shaderUniformBufferArrayNonUniformIndexing = false;
-         features->shaderSampledImageArrayNonUniformIndexing = true;
-         features->shaderStorageBufferArrayNonUniformIndexing = true;
-         features->shaderStorageImageArrayNonUniformIndexing = true;
-         features->shaderInputAttachmentArrayNonUniformIndexing = false;
-         features->shaderUniformTexelBufferArrayNonUniformIndexing = true;
-         features->shaderStorageTexelBufferArrayNonUniformIndexing = true;
-         features->descriptorBindingUniformBufferUpdateAfterBind = false;
-         features->descriptorBindingSampledImageUpdateAfterBind = true;
-         features->descriptorBindingStorageImageUpdateAfterBind = true;
-         features->descriptorBindingStorageBufferUpdateAfterBind = true;
-         features->descriptorBindingUniformTexelBufferUpdateAfterBind = true;
-         features->descriptorBindingStorageTexelBufferUpdateAfterBind = true;
-         features->descriptorBindingUpdateUnusedWhilePending = true;
-         features->descriptorBindingPartiallyBound = true;
-         features->descriptorBindingVariableDescriptorCount = false;
-         features->runtimeDescriptorArray = true;
+         CORE_FEATURE(1, 2, shaderInputAttachmentArrayDynamicIndexing);
+         CORE_FEATURE(1, 2, shaderUniformTexelBufferArrayDynamicIndexing);
+         CORE_FEATURE(1, 2, shaderStorageTexelBufferArrayDynamicIndexing);
+         CORE_FEATURE(1, 2, shaderUniformBufferArrayNonUniformIndexing);
+         CORE_FEATURE(1, 2, shaderSampledImageArrayNonUniformIndexing);
+         CORE_FEATURE(1, 2, shaderStorageBufferArrayNonUniformIndexing);
+         CORE_FEATURE(1, 2, shaderStorageImageArrayNonUniformIndexing);
+         CORE_FEATURE(1, 2, shaderInputAttachmentArrayNonUniformIndexing);
+         CORE_FEATURE(1, 2, shaderUniformTexelBufferArrayNonUniformIndexing);
+         CORE_FEATURE(1, 2, shaderStorageTexelBufferArrayNonUniformIndexing);
+         CORE_FEATURE(1, 2, descriptorBindingUniformBufferUpdateAfterBind);
+         CORE_FEATURE(1, 2, descriptorBindingSampledImageUpdateAfterBind);
+         CORE_FEATURE(1, 2, descriptorBindingStorageImageUpdateAfterBind);
+         CORE_FEATURE(1, 2, descriptorBindingStorageBufferUpdateAfterBind);
+         CORE_FEATURE(1, 2, descriptorBindingUniformTexelBufferUpdateAfterBind);
+         CORE_FEATURE(1, 2, descriptorBindingStorageTexelBufferUpdateAfterBind);
+         CORE_FEATURE(1, 2, descriptorBindingUpdateUnusedWhilePending);
+         CORE_FEATURE(1, 2, descriptorBindingPartiallyBound);
+         CORE_FEATURE(1, 2, descriptorBindingVariableDescriptorCount);
+         CORE_FEATURE(1, 2, runtimeDescriptorArray);
          break;
       }
 
@@ -1119,16 +1213,16 @@ void anv_GetPhysicalDeviceFeatures2(
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES: {
          VkPhysicalDeviceMultiviewFeatures *features =
             (VkPhysicalDeviceMultiviewFeatures *)ext;
-         features->multiview = true;
-         features->multiviewGeometryShader = true;
-         features->multiviewTessellationShader = true;
+         CORE_FEATURE(1, 1, multiview);
+         CORE_FEATURE(1, 1, multiviewGeometryShader);
+         CORE_FEATURE(1, 1, multiviewTessellationShader);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES_KHR: {
          VkPhysicalDeviceImagelessFramebufferFeaturesKHR *features =
             (VkPhysicalDeviceImagelessFramebufferFeaturesKHR *)ext;
-         features->imagelessFramebuffer = true;
+         CORE_FEATURE(1, 2, imagelessFramebuffer);
          break;
       }
 
@@ -1141,36 +1235,35 @@ void anv_GetPhysicalDeviceFeatures2(
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES: {
          VkPhysicalDeviceProtectedMemoryFeatures *features = (void *)ext;
-         features->protectedMemory = false;
+         CORE_FEATURE(1, 1, protectedMemory);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES: {
          VkPhysicalDeviceSamplerYcbcrConversionFeatures *features =
             (VkPhysicalDeviceSamplerYcbcrConversionFeatures *) ext;
-         features->samplerYcbcrConversion = true;
+         CORE_FEATURE(1, 1, samplerYcbcrConversion);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT: {
          VkPhysicalDeviceScalarBlockLayoutFeaturesEXT *features =
             (VkPhysicalDeviceScalarBlockLayoutFeaturesEXT *)ext;
-         features->scalarBlockLayout = true;
+         CORE_FEATURE(1, 2, scalarBlockLayout);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES_KHR: {
          VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR *features =
             (VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR *)ext;
-         features->separateDepthStencilLayouts = true;
+         CORE_FEATURE(1, 2, separateDepthStencilLayouts);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR: {
          VkPhysicalDeviceShaderAtomicInt64FeaturesKHR *features = (void *)ext;
-         features->shaderBufferInt64Atomics =
-            pdevice->info.gen >= 9 && pdevice->use_softpin;
-         features->shaderSharedInt64Atomics = VK_FALSE;
+         CORE_FEATURE(1, 2, shaderBufferInt64Atomics);
+         CORE_FEATURE(1, 2, shaderSharedInt64Atomics);
          break;
       }
 
@@ -1190,14 +1283,14 @@ void anv_GetPhysicalDeviceFeatures2(
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES: {
          VkPhysicalDeviceShaderDrawParametersFeatures *features = (void *)ext;
-         features->shaderDrawParameters = true;
+         CORE_FEATURE(1, 1, shaderDrawParameters);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES_KHR: {
          VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR *features =
             (VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR *)ext;
-         features->shaderSubgroupExtendedTypes = true;
+         CORE_FEATURE(1, 2, shaderSubgroupExtendedTypes);
          break;
       }
 
@@ -1219,14 +1312,14 @@ void anv_GetPhysicalDeviceFeatures2(
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR: {
          VkPhysicalDeviceTimelineSemaphoreFeaturesKHR *features =
             (VkPhysicalDeviceTimelineSemaphoreFeaturesKHR *) ext;
-         features->timelineSemaphore = true;
+         CORE_FEATURE(1, 2, timelineSemaphore);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES: {
          VkPhysicalDeviceVariablePointersFeatures *features = (void *)ext;
-         features->variablePointersStorageBuffer = true;
-         features->variablePointers = true;
+         CORE_FEATURE(1, 1, variablePointersStorageBuffer);
+         CORE_FEATURE(1, 1, variablePointers);
          break;
       }
 
@@ -1241,7 +1334,7 @@ void anv_GetPhysicalDeviceFeatures2(
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES_KHR: {
          VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR *features =
             (VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR *)ext;
-         features->uniformBufferStandardLayout = true;
+         CORE_FEATURE(1, 2, uniformBufferStandardLayout);
          break;
       }
 
@@ -1253,11 +1346,19 @@ void anv_GetPhysicalDeviceFeatures2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
+         anv_get_physical_device_features_1_1(pdevice, (void *)ext);
+         break;
+
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
+         anv_get_physical_device_features_1_2(pdevice, (void *)ext);
+         break;
+
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR: {
          VkPhysicalDeviceVulkanMemoryModelFeaturesKHR *features = (void *)ext;
-         features->vulkanMemoryModel = true;
-         features->vulkanMemoryModelDeviceScope = true;
-         features->vulkanMemoryModelAvailabilityVisibilityChains = true;
+         CORE_FEATURE(1, 2, vulkanMemoryModel);
+         CORE_FEATURE(1, 2, vulkanMemoryModelDeviceScope);
+         CORE_FEATURE(1, 2, vulkanMemoryModelAvailabilityVisibilityChains);
          break;
       }
 
@@ -1273,6 +1374,8 @@ void anv_GetPhysicalDeviceFeatures2(
          break;
       }
    }
+
+#undef CORE_FEATURE
 }
 
 #define MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS   64
@@ -1408,7 +1511,7 @@ void anv_GetPhysicalDeviceProperties(
       .framebufferNoAttachmentsSampleCounts     = sample_counts,
       .maxColorAttachments                      = MAX_RTS,
       .sampledImageColorSampleCounts            = sample_counts,
-      .sampledImageIntegerSampleCounts          = VK_SAMPLE_COUNT_1_BIT,
+      .sampledImageIntegerSampleCounts          = sample_counts,
       .sampledImageDepthSampleCounts            = sample_counts,
       .sampledImageStencilSampleCounts          = sample_counts,
       .storageImageSampleCounts                 = VK_SAMPLE_COUNT_1_BIT,
@@ -1450,6 +1553,164 @@ void anv_GetPhysicalDeviceProperties(
           pdevice->pipeline_cache_uuid, VK_UUID_SIZE);
 }
 
+static void
+anv_get_physical_device_properties_1_1(struct anv_physical_device *pdevice,
+                                       VkPhysicalDeviceVulkan11Properties *p)
+{
+   assert(p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES);
+
+   memcpy(p->deviceUUID, pdevice->device_uuid, VK_UUID_SIZE);
+   memcpy(p->driverUUID, pdevice->driver_uuid, VK_UUID_SIZE);
+   memset(p->deviceLUID, 0, VK_LUID_SIZE);
+   p->deviceNodeMask = 0;
+   p->deviceLUIDValid = false;
+
+   p->subgroupSize = BRW_SUBGROUP_SIZE;
+   VkShaderStageFlags scalar_stages = 0;
+   for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+      if (pdevice->compiler->scalar_stage[stage])
+         scalar_stages |= mesa_to_vk_shader_stage(stage);
+   }
+   p->subgroupSupportedStages = scalar_stages;
+   p->subgroupSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
+                                    VK_SUBGROUP_FEATURE_VOTE_BIT |
+                                    VK_SUBGROUP_FEATURE_BALLOT_BIT |
+                                    VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
+                                    VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
+                                    VK_SUBGROUP_FEATURE_QUAD_BIT;
+   if (pdevice->info.gen >= 8) {
+      /* TODO: There's no technical reason why these can't be made to
+       * work on gen7 but they don't at the moment so it's best to leave
+       * the feature disabled than enabled and broken.
+       */
+      p->subgroupSupportedOperations |= VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
+                                        VK_SUBGROUP_FEATURE_CLUSTERED_BIT;
+   }
+   p->subgroupQuadOperationsInAllStages = pdevice->info.gen >= 8;
+
+   p->pointClippingBehavior      = VK_POINT_CLIPPING_BEHAVIOR_USER_CLIP_PLANES_ONLY;
+   p->maxMultiviewViewCount      = 16;
+   p->maxMultiviewInstanceIndex  = UINT32_MAX / 16;
+   p->protectedNoFault           = false;
+   /* This value doesn't matter for us today as our per-stage descriptors are
+    * the real limit.
+    */
+   p->maxPerSetDescriptors       = 1024;
+   p->maxMemoryAllocationSize    = MAX_MEMORY_ALLOCATION_SIZE;
+}
+
+static void
+anv_get_physical_device_properties_1_2(struct anv_physical_device *pdevice,
+                                       VkPhysicalDeviceVulkan12Properties *p)
+{
+   assert(p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES);
+
+   p->driverID = VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA_KHR;
+   memset(p->driverName, 0, sizeof(p->driverName));
+   snprintf(p->driverName, VK_MAX_DRIVER_NAME_SIZE_KHR,
+            "Intel open-source Mesa driver");
+   memset(p->driverInfo, 0, sizeof(p->driverInfo));
+   snprintf(p->driverInfo, VK_MAX_DRIVER_INFO_SIZE_KHR,
+            "Mesa " PACKAGE_VERSION MESA_GIT_SHA1);
+   p->conformanceVersion = (VkConformanceVersionKHR) {
+      .major = 1,
+      .minor = 2,
+      .subminor = 0,
+      .patch = 0,
+   };
+
+   p->denormBehaviorIndependence =
+      VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL_KHR;
+   p->roundingModeIndependence =
+      VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE_KHR;
+
+   /* Broadwell does not support HF denorms and there are restrictions
+    * other gens. According to Kabylake's PRM:
+    *
+    * "math - Extended Math Function
+    * [...]
+    * Restriction : Half-float denorms are always retained."
+    */
+   p->shaderDenormFlushToZeroFloat16         = false;
+   p->shaderDenormPreserveFloat16            = pdevice->info.gen > 8;
+   p->shaderRoundingModeRTEFloat16           = true;
+   p->shaderRoundingModeRTZFloat16           = true;
+   p->shaderSignedZeroInfNanPreserveFloat16  = true;
+
+   p->shaderDenormFlushToZeroFloat32         = true;
+   p->shaderDenormPreserveFloat32            = true;
+   p->shaderRoundingModeRTEFloat32           = true;
+   p->shaderRoundingModeRTZFloat32           = true;
+   p->shaderSignedZeroInfNanPreserveFloat32  = true;
+
+   p->shaderDenormFlushToZeroFloat64         = true;
+   p->shaderDenormPreserveFloat64            = true;
+   p->shaderRoundingModeRTEFloat64           = true;
+   p->shaderRoundingModeRTZFloat64           = true;
+   p->shaderSignedZeroInfNanPreserveFloat64  = true;
+
+   /* It's a bit hard to exactly map our implementation to the limits
+    * described here.  The bindless surface handle in the extended
+    * message descriptors is 20 bits and it's an index into the table of
+    * RENDER_SURFACE_STATE structs that starts at bindless surface base
+    * address.  Given that most things consume two surface states per
+    * view (general/sampled for textures and write-only/read-write for
+    * images), we claim 2^19 things.
+    *
+    * For SSBOs, we just use A64 messages so there is no real limit
+    * there beyond the limit on the total size of a descriptor set.
+    */
+   const unsigned max_bindless_views = 1 << 19;
+   p->maxUpdateAfterBindDescriptorsInAllPools            = max_bindless_views;
+   p->shaderUniformBufferArrayNonUniformIndexingNative   = false;
+   p->shaderSampledImageArrayNonUniformIndexingNative    = false;
+   p->shaderStorageBufferArrayNonUniformIndexingNative   = true;
+   p->shaderStorageImageArrayNonUniformIndexingNative    = false;
+   p->shaderInputAttachmentArrayNonUniformIndexingNative = false;
+   p->robustBufferAccessUpdateAfterBind                  = true;
+   p->quadDivergentImplicitLod                           = false;
+   p->maxPerStageDescriptorUpdateAfterBindSamplers       = max_bindless_views;
+   p->maxPerStageDescriptorUpdateAfterBindUniformBuffers = MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS;
+   p->maxPerStageDescriptorUpdateAfterBindStorageBuffers = UINT32_MAX;
+   p->maxPerStageDescriptorUpdateAfterBindSampledImages  = max_bindless_views;
+   p->maxPerStageDescriptorUpdateAfterBindStorageImages  = max_bindless_views;
+   p->maxPerStageDescriptorUpdateAfterBindInputAttachments = MAX_PER_STAGE_DESCRIPTOR_INPUT_ATTACHMENTS;
+   p->maxPerStageUpdateAfterBindResources                = UINT32_MAX;
+   p->maxDescriptorSetUpdateAfterBindSamplers            = max_bindless_views;
+   p->maxDescriptorSetUpdateAfterBindUniformBuffers      = 6 * MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS;
+   p->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = MAX_DYNAMIC_BUFFERS / 2;
+   p->maxDescriptorSetUpdateAfterBindStorageBuffers      = UINT32_MAX;
+   p->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = MAX_DYNAMIC_BUFFERS / 2;
+   p->maxDescriptorSetUpdateAfterBindSampledImages       = max_bindless_views;
+   p->maxDescriptorSetUpdateAfterBindStorageImages       = max_bindless_views;
+   p->maxDescriptorSetUpdateAfterBindInputAttachments    = MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS;
+
+   /* We support all of the depth resolve modes */
+   p->supportedDepthResolveModes    = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
+                                      VK_RESOLVE_MODE_AVERAGE_BIT_KHR |
+                                      VK_RESOLVE_MODE_MIN_BIT_KHR |
+                                      VK_RESOLVE_MODE_MAX_BIT_KHR;
+   /* Average doesn't make sense for stencil so we don't support that */
+   p->supportedStencilResolveModes  = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR;
+   if (pdevice->info.gen >= 8) {
+      /* The advanced stencil resolve modes currently require stencil
+       * sampling be supported by the hardware.
+       */
+      p->supportedStencilResolveModes |= VK_RESOLVE_MODE_MIN_BIT_KHR |
+                                         VK_RESOLVE_MODE_MAX_BIT_KHR;
+   }
+   p->independentResolveNone  = true;
+   p->independentResolve      = true;
+
+   p->filterMinmaxSingleComponentFormats  = pdevice->info.gen >= 9;
+   p->filterMinmaxImageComponentMapping   = pdevice->info.gen >= 9;
+
+   p->maxTimelineSemaphoreValueDifference = UINT64_MAX;
+
+   p->framebufferIntegerColorSampleCounts =
+      isl_device_get_sample_counts(&pdevice->isl_dev);
+}
+
 void anv_GetPhysicalDeviceProperties2(
     VkPhysicalDevice                            physicalDevice,
     VkPhysicalDeviceProperties2*                pProperties)
@@ -1458,96 +1719,71 @@ void anv_GetPhysicalDeviceProperties2(
 
    anv_GetPhysicalDeviceProperties(physicalDevice, &pProperties->properties);
 
+   VkPhysicalDeviceVulkan11Properties core_1_1 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
+   };
+   anv_get_physical_device_properties_1_1(pdevice, &core_1_1);
+
+   VkPhysicalDeviceVulkan12Properties core_1_2 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
+   };
+   anv_get_physical_device_properties_1_2(pdevice, &core_1_2);
+
+#define CORE_RENAMED_PROPERTY(major, minor, ext_property, core_property) \
+   memcpy(&properties->ext_property, &core_##major##_##minor.core_property, \
+          sizeof(core_##major##_##minor.core_property))
+
+#define CORE_PROPERTY(major, minor, property) \
+   CORE_RENAMED_PROPERTY(major, minor, property, property)
+
    vk_foreach_struct(ext, pProperties->pNext) {
       switch (ext->sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES_KHR: {
-         VkPhysicalDeviceDepthStencilResolvePropertiesKHR *props =
+         VkPhysicalDeviceDepthStencilResolvePropertiesKHR *properties =
             (VkPhysicalDeviceDepthStencilResolvePropertiesKHR *)ext;
-
-         /* We support all of the depth resolve modes */
-         props->supportedDepthResolveModes =
-            VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
-            VK_RESOLVE_MODE_AVERAGE_BIT_KHR |
-            VK_RESOLVE_MODE_MIN_BIT_KHR |
-            VK_RESOLVE_MODE_MAX_BIT_KHR;
-
-         /* Average doesn't make sense for stencil so we don't support that */
-         props->supportedStencilResolveModes =
-            VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR;
-         if (pdevice->info.gen >= 8) {
-            /* The advanced stencil resolve modes currently require stencil
-             * sampling be supported by the hardware.
-             */
-            props->supportedStencilResolveModes |=
-               VK_RESOLVE_MODE_MIN_BIT_KHR |
-               VK_RESOLVE_MODE_MAX_BIT_KHR;
-         }
-
-         props->independentResolveNone = true;
-         props->independentResolve = true;
+         CORE_PROPERTY(1, 2, supportedDepthResolveModes);
+         CORE_PROPERTY(1, 2, supportedStencilResolveModes);
+         CORE_PROPERTY(1, 2, independentResolveNone);
+         CORE_PROPERTY(1, 2, independentResolve);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT: {
-         VkPhysicalDeviceDescriptorIndexingPropertiesEXT *props =
+         VkPhysicalDeviceDescriptorIndexingPropertiesEXT *properties =
             (VkPhysicalDeviceDescriptorIndexingPropertiesEXT *)ext;
-
-         /* It's a bit hard to exactly map our implementation to the limits
-          * described here.  The bindless surface handle in the extended
-          * message descriptors is 20 bits and it's an index into the table of
-          * RENDER_SURFACE_STATE structs that starts at bindless surface base
-          * address.  Given that most things consume two surface states per
-          * view (general/sampled for textures and write-only/read-write for
-          * images), we claim 2^19 things.
-          *
-          * For SSBOs, we just use A64 messages so there is no real limit
-          * there beyond the limit on the total size of a descriptor set.
-          */
-         const unsigned max_bindless_views = 1 << 19;
-
-         props->maxUpdateAfterBindDescriptorsInAllPools = max_bindless_views;
-         props->shaderUniformBufferArrayNonUniformIndexingNative = false;
-         props->shaderSampledImageArrayNonUniformIndexingNative = false;
-         props->shaderStorageBufferArrayNonUniformIndexingNative = true;
-         props->shaderStorageImageArrayNonUniformIndexingNative = false;
-         props->shaderInputAttachmentArrayNonUniformIndexingNative = false;
-         props->robustBufferAccessUpdateAfterBind = true;
-         props->quadDivergentImplicitLod = false;
-         props->maxPerStageDescriptorUpdateAfterBindSamplers = max_bindless_views;
-         props->maxPerStageDescriptorUpdateAfterBindUniformBuffers = MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS;
-         props->maxPerStageDescriptorUpdateAfterBindStorageBuffers = UINT32_MAX;
-         props->maxPerStageDescriptorUpdateAfterBindSampledImages = max_bindless_views;
-         props->maxPerStageDescriptorUpdateAfterBindStorageImages = max_bindless_views;
-         props->maxPerStageDescriptorUpdateAfterBindInputAttachments = MAX_PER_STAGE_DESCRIPTOR_INPUT_ATTACHMENTS;
-         props->maxPerStageUpdateAfterBindResources = UINT32_MAX;
-         props->maxDescriptorSetUpdateAfterBindSamplers = max_bindless_views;
-         props->maxDescriptorSetUpdateAfterBindUniformBuffers = 6 * MAX_PER_STAGE_DESCRIPTOR_UNIFORM_BUFFERS;
-         props->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = MAX_DYNAMIC_BUFFERS / 2;
-         props->maxDescriptorSetUpdateAfterBindStorageBuffers = UINT32_MAX;
-         props->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = MAX_DYNAMIC_BUFFERS / 2;
-         props->maxDescriptorSetUpdateAfterBindSampledImages = max_bindless_views;
-         props->maxDescriptorSetUpdateAfterBindStorageImages = max_bindless_views;
-         props->maxDescriptorSetUpdateAfterBindInputAttachments = MAX_DESCRIPTOR_SET_INPUT_ATTACHMENTS;
+         CORE_PROPERTY(1, 2, maxUpdateAfterBindDescriptorsInAllPools);
+         CORE_PROPERTY(1, 2, shaderUniformBufferArrayNonUniformIndexingNative);
+         CORE_PROPERTY(1, 2, shaderSampledImageArrayNonUniformIndexingNative);
+         CORE_PROPERTY(1, 2, shaderStorageBufferArrayNonUniformIndexingNative);
+         CORE_PROPERTY(1, 2, shaderStorageImageArrayNonUniformIndexingNative);
+         CORE_PROPERTY(1, 2, shaderInputAttachmentArrayNonUniformIndexingNative);
+         CORE_PROPERTY(1, 2, robustBufferAccessUpdateAfterBind);
+         CORE_PROPERTY(1, 2, quadDivergentImplicitLod);
+         CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindSamplers);
+         CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindUniformBuffers);
+         CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindStorageBuffers);
+         CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindSampledImages);
+         CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindStorageImages);
+         CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindInputAttachments);
+         CORE_PROPERTY(1, 2, maxPerStageUpdateAfterBindResources);
+         CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindSamplers);
+         CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindUniformBuffers);
+         CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic);
+         CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindStorageBuffers);
+         CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic);
+         CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindSampledImages);
+         CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindStorageImages);
+         CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindInputAttachments);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR: {
-         VkPhysicalDeviceDriverPropertiesKHR *driver_props =
+         VkPhysicalDeviceDriverPropertiesKHR *properties =
             (VkPhysicalDeviceDriverPropertiesKHR *) ext;
-
-         driver_props->driverID = VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA_KHR;
-         snprintf(driver_props->driverName, VK_MAX_DRIVER_NAME_SIZE_KHR,
-                  "Intel open-source Mesa driver");
-
-         snprintf(driver_props->driverInfo, VK_MAX_DRIVER_INFO_SIZE_KHR,
-                  "Mesa " PACKAGE_VERSION MESA_GIT_SHA1);
-
-         driver_props->conformanceVersion = (VkConformanceVersionKHR) {
-            .major = 1,
-            .minor = 1,
-            .subminor = 2,
-            .patch = 0,
-         };
+         CORE_PROPERTY(1, 2, driverID);
+         CORE_PROPERTY(1, 2, driverName);
+         CORE_PROPERTY(1, 2, driverInfo);
+         CORE_PROPERTY(1, 2, conformanceVersion);
          break;
       }
 
@@ -1560,12 +1796,12 @@ void anv_GetPhysicalDeviceProperties2(
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES: {
-         VkPhysicalDeviceIDProperties *id_props =
+         VkPhysicalDeviceIDProperties *properties =
             (VkPhysicalDeviceIDProperties *)ext;
-         memcpy(id_props->deviceUUID, pdevice->device_uuid, VK_UUID_SIZE);
-         memcpy(id_props->driverUUID, pdevice->driver_uuid, VK_UUID_SIZE);
-         /* The LUID is for Windows. */
-         id_props->deviceLUIDValid = false;
+         CORE_PROPERTY(1, 1, deviceUUID);
+         CORE_PROPERTY(1, 1, driverUUID);
+         CORE_PROPERTY(1, 1, deviceLUID);
+         CORE_PROPERTY(1, 1, deviceLUIDValid);
          break;
       }
 
@@ -1604,21 +1840,21 @@ void anv_GetPhysicalDeviceProperties2(
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES: {
-         VkPhysicalDeviceMaintenance3Properties *props =
+         VkPhysicalDeviceMaintenance3Properties *properties =
             (VkPhysicalDeviceMaintenance3Properties *)ext;
          /* This value doesn't matter for us today as our per-stage
           * descriptors are the real limit.
           */
-         props->maxPerSetDescriptors = 1024;
-         props->maxMemoryAllocationSize = MAX_MEMORY_ALLOCATION_SIZE;
+         CORE_PROPERTY(1, 1, maxPerSetDescriptors);
+         CORE_PROPERTY(1, 1, maxMemoryAllocationSize);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES: {
          VkPhysicalDeviceMultiviewProperties *properties =
             (VkPhysicalDeviceMultiviewProperties *)ext;
-         properties->maxMultiviewViewCount = 16;
-         properties->maxMultiviewInstanceIndex = UINT32_MAX / 16;
+         CORE_PROPERTY(1, 1, maxMultiviewViewCount);
+         CORE_PROPERTY(1, 1, maxMultiviewInstanceIndex);
          break;
       }
 
@@ -1635,7 +1871,7 @@ void anv_GetPhysicalDeviceProperties2(
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES: {
          VkPhysicalDevicePointClippingProperties *properties =
             (VkPhysicalDevicePointClippingProperties *) ext;
-         properties->pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_USER_CLIP_PLANES_ONLY;
+         CORE_PROPERTY(1, 1, pointClippingBehavior);
          break;
       }
 
@@ -1650,16 +1886,15 @@ void anv_GetPhysicalDeviceProperties2(
 #pragma GCC diagnostic pop
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES: {
-         VkPhysicalDeviceProtectedMemoryProperties *props =
+         VkPhysicalDeviceProtectedMemoryProperties *properties =
             (VkPhysicalDeviceProtectedMemoryProperties *)ext;
-         props->protectedNoFault = false;
+         CORE_PROPERTY(1, 1, protectedNoFault);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR: {
          VkPhysicalDevicePushDescriptorPropertiesKHR *properties =
             (VkPhysicalDevicePushDescriptorPropertiesKHR *) ext;
-
          properties->maxPushDescriptors = MAX_PUSH_DESCRIPTORS;
          break;
       }
@@ -1667,39 +1902,20 @@ void anv_GetPhysicalDeviceProperties2(
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT: {
          VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT *properties =
             (VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT *)ext;
-         properties->filterMinmaxImageComponentMapping = pdevice->info.gen >= 9;
-         properties->filterMinmaxSingleComponentFormats = pdevice->info.gen >= 9;
+         CORE_PROPERTY(1, 2, filterMinmaxImageComponentMapping);
+         CORE_PROPERTY(1, 2, filterMinmaxSingleComponentFormats);
          break;
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES: {
          VkPhysicalDeviceSubgroupProperties *properties = (void *)ext;
-
-         properties->subgroupSize = BRW_SUBGROUP_SIZE;
-
-         VkShaderStageFlags scalar_stages = 0;
-         for (unsigned stage = 0; stage < MESA_SHADER_STAGES; stage++) {
-            if (pdevice->compiler->scalar_stage[stage])
-               scalar_stages |= mesa_to_vk_shader_stage(stage);
-         }
-         properties->supportedStages = scalar_stages;
-
-         properties->supportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
-                                           VK_SUBGROUP_FEATURE_VOTE_BIT |
-                                           VK_SUBGROUP_FEATURE_BALLOT_BIT |
-                                           VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
-                                           VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
-                                           VK_SUBGROUP_FEATURE_QUAD_BIT;
-         if (pdevice->info.gen >= 8) {
-            /* TODO: There's no technical reason why these can't be made to
-             * work on gen7 but they don't at the moment so it's best to leave
-             * the feature disabled than enabled and broken.
-             */
-            properties->supportedOperations |=
-               VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
-               VK_SUBGROUP_FEATURE_CLUSTERED_BIT;
-         }
-         properties->quadOperationsInAllStages = pdevice->info.gen >= 8;
+         CORE_PROPERTY(1, 1, subgroupSize);
+         CORE_RENAMED_PROPERTY(1, 1, supportedStages,
+                                     subgroupSupportedStages);
+         CORE_RENAMED_PROPERTY(1, 1, supportedOperations,
+                                     subgroupSupportedOperations);
+         CORE_RENAMED_PROPERTY(1, 1, quadOperationsInAllStages,
+                                     subgroupQuadOperationsInAllStages);
          break;
       }
 
@@ -1715,33 +1931,23 @@ void anv_GetPhysicalDeviceProperties2(
       }
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES_KHR : {
          VkPhysicalDeviceFloatControlsPropertiesKHR *properties = (void *)ext;
-         properties->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL_KHR;
-         properties->roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE_KHR;
-
-         /* Broadwell does not support HF denorms and there are restrictions
-          * other gens. According to Kabylake's PRM:
-          *
-          * "math - Extended Math Function
-          * [...]
-          * Restriction : Half-float denorms are always retained."
-          */
-         properties->shaderDenormFlushToZeroFloat16 = false;
-         properties->shaderDenormPreserveFloat16 = pdevice->info.gen > 8;
-         properties->shaderRoundingModeRTEFloat16 = true;
-         properties->shaderRoundingModeRTZFloat16 = true;
-         properties->shaderSignedZeroInfNanPreserveFloat16 = true;
-
-         properties->shaderDenormFlushToZeroFloat32 = true;
-         properties->shaderDenormPreserveFloat32 = true;
-         properties->shaderRoundingModeRTEFloat32 = true;
-         properties->shaderRoundingModeRTZFloat32 = true;
-         properties->shaderSignedZeroInfNanPreserveFloat32 = true;
-
-         properties->shaderDenormFlushToZeroFloat64 = true;
-         properties->shaderDenormPreserveFloat64 = true;
-         properties->shaderRoundingModeRTEFloat64 = true;
-         properties->shaderRoundingModeRTZFloat64 = true;
-         properties->shaderSignedZeroInfNanPreserveFloat64 = true;
+         CORE_PROPERTY(1, 2, denormBehaviorIndependence);
+         CORE_PROPERTY(1, 2, roundingModeIndependence);
+         CORE_PROPERTY(1, 2, shaderDenormFlushToZeroFloat16);
+         CORE_PROPERTY(1, 2, shaderDenormPreserveFloat16);
+         CORE_PROPERTY(1, 2, shaderRoundingModeRTEFloat16);
+         CORE_PROPERTY(1, 2, shaderRoundingModeRTZFloat16);
+         CORE_PROPERTY(1, 2, shaderSignedZeroInfNanPreserveFloat16);
+         CORE_PROPERTY(1, 2, shaderDenormFlushToZeroFloat32);
+         CORE_PROPERTY(1, 2, shaderDenormPreserveFloat32);
+         CORE_PROPERTY(1, 2, shaderRoundingModeRTEFloat32);
+         CORE_PROPERTY(1, 2, shaderRoundingModeRTZFloat32);
+         CORE_PROPERTY(1, 2, shaderSignedZeroInfNanPreserveFloat32);
+         CORE_PROPERTY(1, 2, shaderDenormFlushToZeroFloat64);
+         CORE_PROPERTY(1, 2, shaderDenormPreserveFloat64);
+         CORE_PROPERTY(1, 2, shaderRoundingModeRTEFloat64);
+         CORE_PROPERTY(1, 2, shaderRoundingModeRTZFloat64);
+         CORE_PROPERTY(1, 2, shaderSignedZeroInfNanPreserveFloat64);
          break;
       }
 
@@ -1776,9 +1982,9 @@ void anv_GetPhysicalDeviceProperties2(
       }
 
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES_KHR: {
-         VkPhysicalDeviceTimelineSemaphorePropertiesKHR *props =
+         VkPhysicalDeviceTimelineSemaphorePropertiesKHR *properties =
             (VkPhysicalDeviceTimelineSemaphorePropertiesKHR *) ext;
-         props->maxTimelineSemaphoreValueDifference = UINT64_MAX;
+         CORE_PROPERTY(1, 2, maxTimelineSemaphoreValueDifference);
          break;
       }
 
@@ -1807,11 +2013,22 @@ void anv_GetPhysicalDeviceProperties2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES:
+         anv_get_physical_device_properties_1_1(pdevice, (void *)ext);
+         break;
+
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES:
+         anv_get_physical_device_properties_1_2(pdevice, (void *)ext);
+         break;
+
       default:
          anv_debug_ignored_stype(ext->sType);
          break;
       }
    }
+
+#undef CORE_RENAMED_PROPERTY
+#undef CORE_PROPERTY
 }
 
 /* We support exactly one queue family. */
@@ -3186,7 +3403,7 @@ VkResult anv_AllocateMemory(
       if (result != VK_SUCCESS)
          goto fail;
 
-      const struct VkImportAndroidHardwareBufferInfoANDROID import_info = {
+      const VkImportAndroidHardwareBufferInfoANDROID import_info = {
          .buffer = mem->ahw,
       };
       result = anv_import_ahw_memory(_device, mem, &import_info);
@@ -3972,7 +4189,7 @@ void anv_DestroyBuffer(
    vk_free2(&device->alloc, pAllocator, buffer);
 }
 
-VkDeviceAddress anv_GetBufferDeviceAddressKHR(
+VkDeviceAddress anv_GetBufferDeviceAddress(
     VkDevice                                    device,
     const VkBufferDeviceAddressInfoKHR*         pInfo)
 {
@@ -3984,14 +4201,14 @@ VkDeviceAddress anv_GetBufferDeviceAddressKHR(
    return anv_address_physical(buffer->address);
 }
 
-uint64_t anv_GetBufferOpaqueCaptureAddressKHR(
+uint64_t anv_GetBufferOpaqueCaptureAddress(
     VkDevice                                    device,
     const VkBufferDeviceAddressInfoKHR*         pInfo)
 {
    return 0;
 }
 
-uint64_t anv_GetDeviceMemoryOpaqueCaptureAddressKHR(
+uint64_t anv_GetDeviceMemoryOpaqueCaptureAddress(
     VkDevice                                    device,
     const VkDeviceMemoryOpaqueCaptureAddressInfoKHR* pInfo)
 {

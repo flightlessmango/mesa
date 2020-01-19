@@ -1126,6 +1126,33 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
 }
 
 static void
+radv_emit_batch_break_on_new_ps(struct radv_cmd_buffer *cmd_buffer)
+{
+	if (!cmd_buffer->device->pbb_allowed)
+		return;
+
+        struct radv_binning_settings settings =
+                radv_get_binning_settings(cmd_buffer->device->physical_device);
+	bool break_for_new_ps =
+		(!cmd_buffer->state.emitted_pipeline ||
+		 cmd_buffer->state.emitted_pipeline->shaders[MESA_SHADER_FRAGMENT] !=
+		 cmd_buffer->state.pipeline->shaders[MESA_SHADER_FRAGMENT]) &&
+		(settings.context_states_per_bin > 1 ||
+		 settings.persistent_states_per_bin > 1);
+	bool break_for_new_cb_target_mask =
+		(!cmd_buffer->state.emitted_pipeline ||
+		 cmd_buffer->state.emitted_pipeline->graphics.cb_target_mask !=
+		 cmd_buffer->state.pipeline->graphics.cb_target_mask) &&
+		 settings.context_states_per_bin > 1;
+
+	if (!break_for_new_ps && !break_for_new_cb_target_mask)
+		return;
+
+	radeon_emit(cmd_buffer->cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
+	radeon_emit(cmd_buffer->cs, EVENT_TYPE(V_028A90_BREAK_BATCH) | EVENT_INDEX(0));
+}
+
+static void
 radv_emit_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer)
 {
 	struct radv_pipeline *pipeline = cmd_buffer->state.pipeline;
@@ -1156,6 +1183,8 @@ radv_emit_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer)
 		radeon_emit_array(cmd_buffer->cs, pipeline->ctx_cs.buf, pipeline->ctx_cs.cdw);
 		cmd_buffer->state.context_roll_without_scissor_emitted = true;
 	}
+
+	radv_emit_batch_break_on_new_ps(cmd_buffer);
 
 	for (unsigned i = 0; i < MESA_SHADER_COMPUTE; i++) {
 		if (!pipeline->shaders[i])
@@ -3123,11 +3152,11 @@ radv_cmd_state_setup_attachments(struct radv_cmd_buffer *cmd_buffer,
 				 const VkRenderPassBeginInfo *info)
 {
 	struct radv_cmd_state *state = &cmd_buffer->state;
-	const struct VkRenderPassAttachmentBeginInfoKHR *attachment_info = NULL;
+	const struct VkRenderPassAttachmentBeginInfo *attachment_info = NULL;
 
 	if (info) {
 		attachment_info = vk_find_struct_const(info->pNext,
-		                                       RENDER_PASS_ATTACHMENT_BEGIN_INFO_KHR);
+		                                       RENDER_PASS_ATTACHMENT_BEGIN_INFO);
 	}
 
 
@@ -4290,10 +4319,10 @@ void radv_CmdBeginRenderPass(
 	radv_cmd_buffer_begin_subpass(cmd_buffer, 0);
 }
 
-void radv_CmdBeginRenderPass2KHR(
+void radv_CmdBeginRenderPass2(
     VkCommandBuffer                             commandBuffer,
     const VkRenderPassBeginInfo*                pRenderPassBeginInfo,
-    const VkSubpassBeginInfoKHR*                pSubpassBeginInfo)
+    const VkSubpassBeginInfo*                   pSubpassBeginInfo)
 {
 	radv_CmdBeginRenderPass(commandBuffer, pRenderPassBeginInfo,
 				pSubpassBeginInfo->contents);
@@ -4310,10 +4339,10 @@ void radv_CmdNextSubpass(
 	radv_cmd_buffer_begin_subpass(cmd_buffer, prev_subpass + 1);
 }
 
-void radv_CmdNextSubpass2KHR(
+void radv_CmdNextSubpass2(
     VkCommandBuffer                             commandBuffer,
-    const VkSubpassBeginInfoKHR*                pSubpassBeginInfo,
-    const VkSubpassEndInfoKHR*                  pSubpassEndInfo)
+    const VkSubpassBeginInfo*                   pSubpassBeginInfo,
+    const VkSubpassEndInfo*                     pSubpassEndInfo)
 {
 	radv_CmdNextSubpass(commandBuffer, pSubpassBeginInfo->contents);
 }
@@ -4799,7 +4828,7 @@ void radv_CmdDrawIndexedIndirect(
 	radv_draw(cmd_buffer, &info);
 }
 
-void radv_CmdDrawIndirectCountKHR(
+void radv_CmdDrawIndirectCount(
 	VkCommandBuffer                             commandBuffer,
 	VkBuffer                                    _buffer,
 	VkDeviceSize                                offset,
@@ -4823,7 +4852,7 @@ void radv_CmdDrawIndirectCountKHR(
 	radv_draw(cmd_buffer, &info);
 }
 
-void radv_CmdDrawIndexedIndirectCountKHR(
+void radv_CmdDrawIndexedIndirectCount(
 	VkCommandBuffer                             commandBuffer,
 	VkBuffer                                    _buffer,
 	VkDeviceSize                                offset,
@@ -5152,9 +5181,9 @@ void radv_CmdEndRenderPass(
 	cmd_buffer->state.subpass_sample_locs = NULL;
 }
 
-void radv_CmdEndRenderPass2KHR(
+void radv_CmdEndRenderPass2(
     VkCommandBuffer                             commandBuffer,
-    const VkSubpassEndInfoKHR*                  pSubpassEndInfo)
+    const VkSubpassEndInfo*                     pSubpassEndInfo)
 {
 	radv_CmdEndRenderPass(commandBuffer);
 }

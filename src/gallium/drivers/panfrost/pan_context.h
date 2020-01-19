@@ -199,7 +199,6 @@ struct panfrost_rasterizer {
 /* Variants bundle together to form the backing CSO, bundling multiple
  * shaders with varying emulated features baked in (alpha test
  * parameters, etc) */
-#define MAX_SHADER_VARIANTS 8
 
 /* A shader state corresponds to the actual, current variant of the shader */
 struct panfrost_shader_state {
@@ -248,7 +247,9 @@ struct panfrost_shader_variants {
                 struct pipe_compute_state cbase;
         };
 
-        struct panfrost_shader_state variants[MAX_SHADER_VARIANTS];
+        struct panfrost_shader_state *variants;
+        unsigned variant_space;
+
         unsigned variant_count;
 
         /* The current active variant */
@@ -335,20 +336,6 @@ panfrost_vertex_buffer_address(struct panfrost_context *ctx, unsigned i);
 
 void
 panfrost_emit_vertex_data(struct panfrost_batch *batch);
-
-struct pan_shift_odd {
-        unsigned shift;
-        unsigned odd;
-};
-
-struct pan_shift_odd
-panfrost_padded_vertex_count(
-        unsigned vertex_count,
-        bool primitive_pot);
-
-
-unsigned
-pan_expand_shift_odd(struct pan_shift_odd o);
 
 /* Compute */
 

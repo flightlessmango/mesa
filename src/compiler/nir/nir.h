@@ -2840,6 +2840,12 @@ typedef struct nir_shader_compiler_options {
    bool lower_to_scalar;
 
    /**
+    * Should the linker unify inputs_read/outputs_written between adjacent
+    * shader stages which are linked into a single program?
+    */
+   bool unify_interfaces;
+
+   /**
     * Should nir_lower_io() create load_interpolated_input intrinsics?
     *
     * If not, it generates regular load_input intrinsics and interpolation
@@ -3627,6 +3633,8 @@ bool nir_lower_vars_to_scratch(nir_shader *shader,
                                int size_threshold,
                                glsl_type_size_align_func size_align);
 
+void nir_lower_clip_halfz(nir_shader *shader);
+
 void nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint);
 
 void nir_gather_ssa_types(nir_function_impl *impl,
@@ -3831,6 +3839,7 @@ typedef struct nir_lower_subgroups_options {
    bool lower_shuffle:1;
    bool lower_shuffle_to_32bit:1;
    bool lower_quad:1;
+   bool lower_quad_broadcast_dynamic:1;
 } nir_lower_subgroups_options;
 
 bool nir_lower_subgroups(nir_shader *shader,
@@ -4103,7 +4112,7 @@ typedef enum  {
 
 bool nir_lower_to_source_mods(nir_shader *shader, nir_lower_to_source_mods_flags options);
 
-bool nir_lower_gs_intrinsics(nir_shader *shader);
+bool nir_lower_gs_intrinsics(nir_shader *shader, bool per_stream);
 
 typedef unsigned (*nir_lower_bit_size_callback)(const nir_alu_instr *, void *);
 
@@ -4209,6 +4218,7 @@ typedef enum {
     nir_move_load_ubo    = (1 << 1),
     nir_move_load_input  = (1 << 2),
     nir_move_comparisons = (1 << 3),
+    nir_move_copies      = (1 << 4),
 } nir_move_options;
 
 bool nir_can_move_instr(nir_instr *instr, nir_move_options options);

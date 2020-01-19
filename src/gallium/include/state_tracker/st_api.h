@@ -182,6 +182,8 @@ struct st_egl_image
 
    unsigned level;
    unsigned layer;
+   /* GL internal format. */
+   unsigned internalformat;
 };
 
 /**
@@ -392,6 +394,13 @@ struct st_context_iface
                  struct pipe_fence_handle **fence,
                  void (*notify_before_flush_cb) (void*),
                  void* notify_before_flush_cb_args);
+
+   /**
+    * Flush all enqueued vertices (e.g. vbo module) and call
+    * pipe_context::flush_resource.
+    */
+   void (*flush_resource)(struct st_context_iface *stctxi,
+                          struct pipe_resource *resource);
 
    /**
     * Replace the texture image of a texture object at the specified level.

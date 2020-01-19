@@ -26,58 +26,6 @@
 #include "sid.h"
 #include "si_pipe.h"
 
-static void cik_sdma_copy_buffer(struct si_context *ctx,
-				 struct pipe_resource *dst,
-				 struct pipe_resource *src,
-				 uint64_t dst_offset,
-				 uint64_t src_offset,
-				 uint64_t size)
-{
-	struct radeon_cmdbuf *cs = ctx->dma_cs;
-	unsigned i, ncopy, csize;
-	unsigned align = ~0u;
-	struct si_resource *sdst = si_resource(dst);
-	struct si_resource *ssrc = si_resource(src);
-
-	/* Mark the buffer range of destination as valid (initialized),
-	 * so that transfer_map knows it should wait for the GPU when mapping
-	 * that range. */
-	util_range_add(dst, &sdst->valid_buffer_range, dst_offset,
-		       dst_offset + size);
-
-	dst_offset += sdst->gpu_address;
-	src_offset += ssrc->gpu_address;
-
-	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
-
-	/* Align copy size to dw if src/dst address are dw aligned */
-	if ((src_offset & 0x3) == 0 &&
-	    (dst_offset & 0x3) == 0 &&
-	    size > 4 &&
-	    (size & 3) != 0) {
-		align = ~0x3u;
-		ncopy++;
-	}
-
-	si_need_dma_space(ctx, ncopy * 7, sdst, ssrc);
-
-	for (i = 0; i < ncopy; i++) {
-		csize = size >= 4 ? MIN2(size & align, CIK_SDMA_COPY_MAX_SIZE) : size;
-		radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
-						CIK_SDMA_COPY_SUB_OPCODE_LINEAR,
-						0));
-		radeon_emit(cs, ctx->chip_class >= GFX9 ? csize - 1 : csize);
-		radeon_emit(cs, 0); /* src/dst endian swap */
-		radeon_emit(cs, src_offset);
-		radeon_emit(cs, src_offset >> 32);
-		radeon_emit(cs, dst_offset);
-		radeon_emit(cs, dst_offset >> 32);
-		dst_offset += csize;
-		src_offset += csize;
-		size -= csize;
-	}
-}
-
 static unsigned minify_as_blocks(unsigned width, unsigned level, unsigned blk_w)
 {
 	width = u_minify(width, level);
@@ -162,7 +110,7 @@ static bool si_sdma_v4_copy_texture(struct si_context *sctx,
 	/* Linear -> linear sub-window copy. */
 	if (ssrc->surface.is_linear &&
 	    sdst->surface.is_linear) {
-		struct radeon_cmdbuf *cs = sctx->dma_cs;
+		struct radeon_cmdbuf *cs = sctx->sdma_cs;
 
 		/* Check if everything fits into the bitfields */
 		if (!(src_pitch <= (1 << 19) &&
@@ -228,7 +176,7 @@ static bool si_sdma_v4_copy_texture(struct si_context *sctx,
 		unsigned linear_slice_pitch = linear == ssrc ? src_slice_pitch : dst_slice_pitch;
 		uint64_t tiled_address =  tiled  == ssrc ? src_address : dst_address;
 		uint64_t linear_address = linear == ssrc ? src_address : dst_address;
-		struct radeon_cmdbuf *cs = sctx->dma_cs;
+		struct radeon_cmdbuf *cs = sctx->sdma_cs;
 
 		linear_address += linear->surface.u.gfx9.offset[linear_level];
 
@@ -381,7 +329,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	      sctx->family != CHIP_KAVERI) ||
 	     (srcx + copy_width != (1 << 14) &&
 	      srcy + copy_height != (1 << 14)))) {
-		struct radeon_cmdbuf *cs = sctx->dma_cs;
+		struct radeon_cmdbuf *cs = sctx->sdma_cs;
 
 		si_need_dma_space(sctx, 13, &sdst->buffer, &ssrc->buffer);
 
@@ -542,7 +490,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 		    copy_width_aligned <= (1 << 14) &&
 		    copy_height <= (1 << 14) &&
 		    copy_depth <= (1 << 11)) {
-			struct radeon_cmdbuf *cs = sctx->dma_cs;
+			struct radeon_cmdbuf *cs = sctx->sdma_cs;
 			uint32_t direction = linear == sdst ? 1u << 31 : 0;
 
 			si_need_dma_space(sctx, 14, &sdst->buffer, &ssrc->buffer);
@@ -636,7 +584,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 		     (srcx + copy_width_aligned != (1 << 14) &&
 		      srcy + copy_height_aligned != (1 << 14) &&
 		      dstx + copy_width != (1 << 14)))) {
-			struct radeon_cmdbuf *cs = sctx->dma_cs;
+			struct radeon_cmdbuf *cs = sctx->sdma_cs;
 
 			si_need_dma_space(sctx, 15, &sdst->buffer, &ssrc->buffer);
 
@@ -680,16 +628,12 @@ static void cik_sdma_copy(struct pipe_context *ctx,
 {
 	struct si_context *sctx = (struct si_context *)ctx;
 
-	if (!sctx->dma_cs ||
+	assert(src->target != PIPE_BUFFER);
+
+	if (!sctx->sdma_cs ||
 	    src->flags & PIPE_RESOURCE_FLAG_SPARSE ||
 	    dst->flags & PIPE_RESOURCE_FLAG_SPARSE)
 		goto fallback;
-
-	/* If src is a buffer and dst is a texture, we are uploading metadata. */
-	if (src->target == PIPE_BUFFER) {
-		cik_sdma_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width);
-		return;
-	}
 
 	/* SDMA causes corruption. See:
 	 *   https://bugs.freedesktop.org/show_bug.cgi?id=110575
@@ -697,8 +641,9 @@ static void cik_sdma_copy(struct pipe_context *ctx,
 	 *
 	 * Keep SDMA enabled on APUs.
 	 */
-	if (sctx->screen->debug_flags & DBG(FORCE_DMA) ||
-	    !sctx->screen->info.has_dedicated_vram) {
+	if (sctx->screen->debug_flags & DBG(FORCE_SDMA) ||
+	    (!sctx->screen->info.has_dedicated_vram &&
+	     !(sctx->screen->debug_flags & DBG(NO_SDMA_COPY_IMAGE)))) {
 		if ((sctx->chip_class == GFX7 || sctx->chip_class == GFX8) &&
 		    cik_sdma_copy_texture(sctx, dst, dst_level, dstx, dsty, dstz,
 					  src, src_level, src_box))

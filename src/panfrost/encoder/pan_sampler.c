@@ -1,8 +1,5 @@
 /*
- * Copyright (C) 2005-2007  Brian Paul   All Rights Reserved.
- * Copyright (C) 2008  VMware, Inc.   All Rights Reserved.
- * Copyright © 2010 Intel Corporation
- * Copyright © 2011 Bryan Cain
+ * Copyright (C) 2019 Collabora, Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,29 +16,30 @@
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
  * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
  */
 
-#ifndef __ST_GLSL_TYPES_H__
-#define __ST_GLSL_TYPES_H__
+#include "pan_encoder.h"
 
-#include "compiler/glsl_types.h"
+/* Sampler comparison functions are flipped in OpenGL from the hardware, so we
+ * need to be able to flip accordingly */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-int st_glsl_storage_type_size(const struct glsl_type *type,
-                              bool is_bindless);
-
-int st_glsl_uniforms_type_size(const struct glsl_type *type, bool bindless);
-
-int st_glsl_type_dword_size(const struct glsl_type *type, bool bindless);
-
-#ifdef __cplusplus
+enum mali_func
+panfrost_flip_compare_func(enum mali_func f)
+{
+        switch (f) {
+        case MALI_FUNC_LESS:
+                return MALI_FUNC_GREATER;
+        case MALI_FUNC_GREATER:
+                return MALI_FUNC_LESS;
+        case MALI_FUNC_LEQUAL:
+                return MALI_FUNC_GEQUAL;
+        case MALI_FUNC_GEQUAL:
+                return MALI_FUNC_LEQUAL;
+        default:
+                return f;
+        }
 }
-#endif
-
-#endif /* __ST_GLSL_TYPES_H__ */

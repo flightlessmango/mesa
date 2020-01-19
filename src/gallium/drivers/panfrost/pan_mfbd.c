@@ -235,26 +235,23 @@ panfrost_mfbd_set_zsbuf(
         struct panfrost_resource *rsrc = pan_resource(surf->texture);
 
         unsigned level = surf->u.tex.level;
-        assert(surf->u.tex.first_layer == 0);
+        unsigned first_layer = surf->u.tex.first_layer;
+        assert(surf->u.tex.last_layer == first_layer);
 
-        unsigned offset = rsrc->slices[level].offset;
+        mali_ptr base = panfrost_get_texture_address(rsrc, level, first_layer);
 
         if (rsrc->layout == PAN_AFBC) {
                 /* The only Z/S format we can compress is Z24S8 or variants
                  * thereof (handled by the state tracker) */
                 assert(panfrost_is_z24s8_variant(surf->format));
 
-                mali_ptr base = rsrc->bo->gpu + offset;
                 unsigned header_size = rsrc->slices[level].header_size;
 
                 fb->mfbd_flags |= MALI_MFBD_EXTRA;
 
-                fbx->flags =
-                        MALI_EXTRA_PRESENT |
-                        MALI_EXTRA_AFBC |
-                        MALI_EXTRA_AFBC_ZS |
-                        MALI_EXTRA_ZS |
-                        0x1; /* unknown */
+                fbx->flags_hi |= MALI_EXTRA_PRESENT;
+                fbx->flags_lo |= MALI_EXTRA_ZS | 0x1; /* unknown */
+                fbx->zs_block = MALI_BLOCK_AFBC;
 
                 fbx->ds_afbc.depth_stencil = base + header_size;
                 fbx->ds_afbc.depth_stencil_afbc_metadata = base;
@@ -262,34 +259,43 @@ panfrost_mfbd_set_zsbuf(
 
                 fbx->ds_afbc.zero1 = 0x10009;
                 fbx->ds_afbc.padding = 0x1000;
-        } else if (rsrc->layout == PAN_LINEAR) {
+        } else if (rsrc->layout == PAN_LINEAR || rsrc->layout == PAN_TILED) {
                 /* TODO: Z32F(S8) support, which is always linear */
 
                 int stride = rsrc->slices[level].stride;
 
                 fb->mfbd_flags |= MALI_MFBD_EXTRA;
-                fbx->flags |= MALI_EXTRA_PRESENT | MALI_EXTRA_ZS;
+                fbx->flags_hi |= MALI_EXTRA_PRESENT;
+                fbx->flags_lo |= MALI_EXTRA_ZS;
 
-                fbx->ds_linear.depth = rsrc->bo->gpu + offset;
-                fbx->ds_linear.depth_stride = stride;
+                fbx->ds_linear.depth = base;
+
+                if (rsrc->layout == PAN_LINEAR) {
+                        fbx->zs_block = MALI_BLOCK_LINEAR;
+                        fbx->ds_linear.depth_stride = stride / 16;
+                } else {
+                        fbx->zs_block = MALI_BLOCK_TILED;
+                        fbx->ds_linear.depth_stride = stride;
+                }
 
                 if (panfrost_is_z24s8_variant(surf->format)) {
-                        fbx->flags |= 0x1;
+                        fbx->flags_lo |= 0x1;
                 } else if (surf->format == PIPE_FORMAT_Z32_UNORM) {
                         /* default flags (0 in bottom place) */
                 } else if (surf->format == PIPE_FORMAT_Z32_FLOAT) {
-                        fbx->flags |= 0xA;
+                        fbx->flags_lo |= 0xA;
                         fb->mfbd_flags ^= 0x100;
                         fb->mfbd_flags |= 0x200;
                 } else if (surf->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
-                        fbx->flags |= 0x1000A;
+                        fbx->flags_hi |= 0x400;
+                        fbx->flags_lo |= 0xA;
                         fb->mfbd_flags ^= 0x100;
                         fb->mfbd_flags |= 0x201;
 
                         struct panfrost_resource *stencil = rsrc->separate_stencil;
                         struct panfrost_slice stencil_slice = stencil->slices[level];
 
-                        fbx->ds_linear.stencil = stencil->bo->gpu + stencil_slice.offset;
+                        fbx->ds_linear.stencil = panfrost_get_texture_address(stencil, level, first_layer);
                         fbx->ds_linear.stencil_stride = stencil_slice.stride;
                 }
 
@@ -484,7 +490,7 @@ panfrost_mfbd_fragment(struct panfrost_batch *batch, bool has_draws)
                         struct panfrost_slice *slice = &rsrc->slices[level];
 
                         fb.mfbd_flags |= MALI_MFBD_EXTRA;
-                        fbx.flags |= MALI_EXTRA_PRESENT;
+                        fbx.flags_lo |= MALI_EXTRA_PRESENT;
                         fbx.checksum_stride = slice->checksum_stride;
                         fbx.checksum = bo->gpu + slice->checksum_offset;
                 }

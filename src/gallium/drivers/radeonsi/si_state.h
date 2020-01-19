@@ -95,6 +95,7 @@ struct si_state_rasterizer {
 	unsigned		depth_clamp_any:1;
 	unsigned		provoking_vertex_first:1;
 	unsigned		polygon_mode_enabled:1;
+	unsigned		polygon_mode_is_lines:1;
 };
 
 struct si_dsa_stencil_ref_part {
@@ -172,7 +173,7 @@ struct si_vertex_elements
 
 	uint16_t			first_vb_use_mask;
 	/* Vertex buffer descriptor list size aligned for optimal prefetch. */
-	uint16_t			desc_list_byte_size;
+	uint16_t			vb_desc_list_alloc_size;
 	uint16_t			instance_divisor_is_one; /* bitmask of inputs */
 	uint16_t			instance_divisor_is_fetched;  /* bitmask of inputs */
 };
@@ -309,6 +310,8 @@ enum si_tracked_reg {
 	SI_TRACKED_PA_SU_VTX_CNTL,
 
 	SI_TRACKED_PA_SC_CLIPRECT_RULE,
+
+	SI_TRACKED_PA_SC_LINE_STIPPLE,
 
 	SI_TRACKED_VGT_ESGS_RING_ITEMSIZE,
 
@@ -601,7 +604,7 @@ void si_schedule_initial_compile(struct si_context *sctx, unsigned processor,
 				 struct util_queue_fence *ready_fence,
 				 struct si_compiler_ctx_state *compiler_ctx_state,
 				 void *job, util_queue_execute_func execute);
-void si_get_active_slot_masks(const struct tgsi_shader_info *info,
+void si_get_active_slot_masks(const struct si_shader_info *info,
 			      uint32_t *const_and_shader_buffers,
 			      uint64_t *samplers_and_images);
 int si_shader_select_with_key(struct si_screen *sscreen,

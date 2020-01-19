@@ -304,11 +304,13 @@ update_shader_samplers(struct st_context *st,
             st_get_texture_object(st->ctx, prog, unit);
       struct pipe_sampler_state *sampler = samplers + unit;
 
-      if (!stObj)
+      /* if resource format matches then YUV wasn't lowered */
+      if (!stObj || st_get_view_format(stObj) == stObj->pt->format)
          continue;
 
       switch (st_get_view_format(stObj)) {
       case PIPE_FORMAT_NV12:
+      case PIPE_FORMAT_P010:
       case PIPE_FORMAT_P016:
       case PIPE_FORMAT_YUYV:
       case PIPE_FORMAT_UYVY:

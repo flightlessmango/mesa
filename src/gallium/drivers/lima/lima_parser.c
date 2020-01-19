@@ -24,7 +24,6 @@
 
 #include "util/u_math.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -72,8 +71,8 @@ parse_vs_draw(FILE *fp, uint32_t *value1, uint32_t *value2)
 static void
 parse_vs_shader_info(FILE *fp, uint32_t *value1, uint32_t *value2)
 {
-   fprintf(fp, "\t/* SHADER_INFO: prefetch: %s, size: %d */\n",
-           (*value1 & 0x00100000) ? "enabled" : "disabled",
+   fprintf(fp, "\t/* SHADER_INFO: prefetch: %d, size: %d */\n",
+           (*value1 & 0xfff00000) >> 20,
            (((*value1 & 0x000fffff) >> 10) + 1) << 4);
 }
 
@@ -258,22 +257,11 @@ parse_plbu_semaphore(FILE *fp, uint32_t *value1, uint32_t *value2)
 static void
 parse_plbu_primitive_setup(FILE *fp, uint32_t *value1, uint32_t *value2)
 {
-   char prim[10];
-
-   if ((*value1 & 0x0000f000) == 0x00000000)
-       strcpy(prim, "POINTS");
-   else if ((*value1 & 0x0000f000) == 0x00003000)
-       strcpy(prim, "LINES");
-   else if ((*value1 & 0x0000f000) == 0x00002000)
-       strcpy(prim, "TRIANGLES");
-   else
-       strcpy(prim, "UNKNOWN");
-
    if (*value1 == 0x00000200)
       fprintf(fp, "\t/* UNKNOWN_2 (PRIMITIVE_SETUP INIT?) */\n");
    else
-      fprintf(fp, "\t/* PRIMITIVE_SETUP: prim: %s, cull: %d (0x%x), index_size: %d */\n",
-              prim,
+      fprintf(fp, "\t/* PRIMITIVE_SETUP: %scull: %d (0x%x), index_size: %d */\n",
+              (*value1 & 0x1000) ? "force point size, " : "",
               (*value1 & 0x000f0000) >> 16, (*value1 & 0x000f0000) >> 16,
               (*value1 & 0x00000e00) >> 9);
 }
@@ -468,11 +456,12 @@ parse_rsw(FILE *fp, uint32_t *value, int i, uint32_t *helper)
               (*value & 0x00000038) >> 3); /* alpha_func */
       /* add a few tabs for alignment */
       fprintf(fp, "\t\t\t\t\t\t/* %s(2)", render_state_infos[i].info);
-      fprintf(fp, ": rgb_src_factor %d, rbg_dst_factor %d, alpha_src_factor %d",
+      fprintf(fp, ": rgb_src_factor %d, rbg_dst_factor %d */\n",
               (*value & 0x000007c0) >> 6, /* rgb_src_factor */
-              (*value & 0x0000f800) >> 11, /* rgb_dst_factor */
-              (*value & 0x000f0000) >> 16); /* alpha_src_factor */
-      fprintf(fp, ", alpha_dst_factor %d, bits 24-27 0x%02x */\n",
+              (*value & 0x0000f800) >> 11); /* rgb_dst_factor */
+      fprintf(fp, "\t\t\t\t\t\t/* %s(3)", render_state_infos[i].info);
+      fprintf(fp, ": alpha_src_factor %d, alpha_dst_factor %d, bits 24-27 0x%02x */\n",
+              (*value & 0x000f0000) >> 16, /* alpha_src_factor */
               (*value & 0x00f00000) >> 20, /* alpha_dst_factor */
               (*value & 0x0f000000) >> 24); /* bits 24-27 */
       break;
@@ -492,13 +481,39 @@ parse_rsw(FILE *fp, uint32_t *value, int i, uint32_t *helper)
               (float)(ushort_to_float(*value & 0x0000ffff)));
       break;
    case 5: /* STENCIL FRONT */
-      fprintf(fp, " (to investigate) */\n");
+      fprintf(fp, "(1): valuemask 0x%02x, ref value %d (0x%02x), stencil_func %d */\n",
+              (*value & 0xff000000) >> 24, /* valuemask */
+              (*value & 0x00ff0000) >> 16, (*value & 0x00ff0000) >> 16, /* ref value */
+              (*value & 0x00000007)); /* stencil_func */
+      /* add a few tabs for alignment */
+      fprintf(fp, "\t\t\t\t\t\t/* %s(2)", render_state_infos[i].info);
+      fprintf(fp, ": fail_op %d, zfail_op %d, zpass_op %d, unknown (12-15) 0x%02x */\n",
+              (*value & 0x00000038) >> 3, /* fail_op */
+              (*value & 0x000001c0) >> 6, /* zfail_op */
+              (*value & 0x00000e00) >> 9, /* zpass_op */
+              (*value & 0x0000f000) >> 12); /* unknown */
       break;
    case 6: /* STENCIL BACK */
-      fprintf(fp, " (to investigate) */\n");
+      fprintf(fp, "(1): valuemask 0x%02x, ref value %d (0x%02x), stencil_func %d */\n",
+              (*value & 0xff000000) >> 24, /* valuemask */
+              (*value & 0x00ff0000) >> 16, (*value & 0x00ff0000) >> 16, /* ref value */
+              (*value & 0x00000007)); /* stencil_func */
+      /* add a few tabs for alignment */
+      fprintf(fp, "\t\t\t\t\t\t/* %s(2)", render_state_infos[i].info);
+      fprintf(fp, ": fail_op %d, zfail_op %d, zpass_op %d, unknown (12-15) 0x%02x */\n",
+              (*value & 0x00000038) >> 3, /* fail_op */
+              (*value & 0x000001c0) >> 6, /* zfail_op */
+              (*value & 0x00000e00) >> 9, /* zpass_op */
+              (*value & 0x0000f000) >> 12); /* unknown */
       break;
    case 7: /* STENCIL TEST */
-      fprintf(fp, " (to investigate) */\n");
+      fprintf(fp, "(1): stencil_front writemask 0x%02x, stencil_back writemask 0x%02x */\n",
+              (*value & 0x000000ff), /* front writemask */
+              (*value & 0x0000ff00) >> 8); /* back writemask */
+      /* add a few tabs for alignment */
+      fprintf(fp, "\t\t\t\t\t\t/* %s(2)", render_state_infos[i].info);
+      fprintf(fp, ": unknown (bits 16-31) 0x%04x */\n",
+              (*value & 0xffff0000) >> 16); /* unknown, alpha ref_value? */
       break;
    case 8: /* MULTI SAMPLE */
       if ((*value & 0x00000f00) == 0x00000000)
@@ -522,7 +537,6 @@ parse_rsw(FILE *fp, uint32_t *value, int i, uint32_t *helper)
               *value & 0xffffffe0, *value & 0x0000001f);
       break;
    case 10: /* VARYING TYPES */
-      assert(*helper);
       fprintf(fp, "(1): ");
       int val, j;
       /* 0 - 5 */
@@ -617,9 +631,9 @@ parse_texture(FILE *fp, uint32_t *data, uint32_t start, uint32_t offset)
    fprintf(fp, "\t unnorm_coords: 0x%x (%d)\n", desc->unnorm_coords, desc->unnorm_coords);
    fprintf(fp, "\t unknown_1_2: 0x%x (%d)\n", desc->unknown_1_2, desc->unknown_1_2);
    fprintf(fp, "\t texture_type: 0x%x (%d)\n", desc->texture_type, desc->texture_type);
-   fprintf(fp, "\t unknown_1_3: 0x%x (%d)\n", desc->unknown_1_3, desc->unknown_1_3);
-   fprintf(fp, "\t miplevels: 0x%x (%d)\n", desc->miplevels, desc->miplevels);
-   fprintf(fp, "\t min_mipfilter_1: 0x%x (%d)\n", desc->min_mipfilter_1, desc->min_mipfilter_1);
+   fprintf(fp, "\t min_lod: 0x%x (%d) (%f)\n", desc->min_lod, desc->min_lod, lima_fixed8_to_float(desc->min_lod));
+   fprintf(fp, "\t max_lod: 0x%x (%d) (%f)\n", desc->max_lod, desc->max_lod, lima_fixed8_to_float(desc->max_lod));
+   fprintf(fp, "\t lod_bias: 0x%x (%d) (%f)\n", desc->lod_bias, desc->lod_bias, lima_fixed8_to_float(desc->lod_bias));
    fprintf(fp, "\t unknown_2_1: 0x%x (%d)\n", desc->unknown_2_1, desc->unknown_2_1);
    fprintf(fp, "\t has_stride: 0x%x (%d)\n", desc->has_stride, desc->has_stride);
    fprintf(fp, "\t min_mipfilter_2: 0x%x (%d)\n", desc->min_mipfilter_2, desc->min_mipfilter_2);
@@ -653,7 +667,9 @@ parse_texture(FILE *fp, uint32_t *data, uint32_t start, uint32_t offset)
    fprintf(fp, "/* 0x%08x (0x%08x) */",
            start + i * 4, i * 4);
    fprintf(fp, "\t");
-   for (int k = 0; k < ((((desc->miplevels + 1) * 26) + 64) / 32); k++)
+
+   int miplevels = (int)lima_fixed8_to_float(desc->max_lod);
+   for (int k = 0; k < ((((miplevels + 1) * 26) + 64) / 32); k++)
       fprintf(fp, "0x%08x ", *(&data[i + offset + k]));
    fprintf(fp, "\n");
 
@@ -673,7 +689,7 @@ parse_texture(FILE *fp, uint32_t *data, uint32_t start, uint32_t offset)
    uint32_t va;
    uint32_t va_1;
    uint32_t va_2;
-   for (j = 1; j <= desc->miplevels; j++) {
+   for (j = 1; j <= miplevels; j++) {
       va = 0;
       va_1 = 0;
       va_2 = 0;

@@ -118,6 +118,19 @@ fixup_shader_state(struct fd_context *ctx, struct ir3_shader_key *key)
 	}
 }
 
+static void
+fixup_draw_state(struct fd_context *ctx, struct fd6_emit *emit)
+{
+	if (ctx->last.dirty ||
+			(ctx->last.primitive_restart != emit->primitive_restart)) {
+		/* rasterizer state is effected by primitive-restart: */
+		ctx->dirty |= FD_DIRTY_RASTERIZER;
+		ctx->last.primitive_restart = emit->primitive_restart;
+	}
+
+	ctx->last.dirty = false;
+}
+
 static bool
 fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
              unsigned index_offset)
@@ -153,6 +166,7 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 		.rasterflat = ctx->rasterizer->flatshade,
 		.sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
 		.sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
+		.primitive_restart = info->primitive_restart && info->index_size,
 	};
 
 	if (info->mode == PIPE_PRIM_PATCHES) {
@@ -259,15 +273,29 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 		}
 	}
 
+	uint32_t index_start = info->index_size ? info->index_bias : info->start;
+	if (ctx->last.dirty || (ctx->last.index_start != index_start)) {
+		OUT_PKT4(ring, REG_A6XX_VFD_INDEX_OFFSET, 1);
+		OUT_RING(ring, index_start); /* VFD_INDEX_OFFSET */
+		ctx->last.index_start = index_start;
+	}
+
+	if (ctx->last.dirty || (ctx->last.instance_start != info->start_instance)) {
+		OUT_PKT4(ring, REG_A6XX_VFD_INSTANCE_START_OFFSET, 1);
+		OUT_RING(ring, info->start_instance); /* VFD_INSTANCE_START_OFFSET */
+		ctx->last.instance_start = info->start_instance;
+	}
+
+	uint32_t restart_index = info->primitive_restart ? info->restart_index : 0xffffffff;
+	if (ctx->last.dirty || (ctx->last.restart_index != restart_index)) {
+		OUT_PKT4(ring, REG_A6XX_PC_RESTART_INDEX, 1);
+		OUT_RING(ring, restart_index); /* PC_RESTART_INDEX */
+		ctx->last.restart_index = restart_index;
+	}
+
+	fixup_draw_state(ctx, &emit);
+
 	fd6_emit_state(ring, &emit);
-
-	OUT_PKT4(ring, REG_A6XX_VFD_INDEX_OFFSET, 2);
-	OUT_RING(ring, info->index_size ? info->index_bias : info->start); /* VFD_INDEX_OFFSET */
-	OUT_RING(ring, info->start_instance);   /* VFD_INSTANCE_START_OFFSET */
-
-	OUT_PKT4(ring, REG_A6XX_PC_RESTART_INDEX, 1);
-	OUT_RING(ring, info->primitive_restart ? /* PC_RESTART_INDEX */
-			info->restart_index : 0xffffffff);
 
 	/* for debug after a lock up, write a unique counter value
 	 * to scratch7 for each draw, to make it easier to match up

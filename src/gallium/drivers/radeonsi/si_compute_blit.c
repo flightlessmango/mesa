@@ -141,6 +141,8 @@ static void si_compute_clear_12bytes_buffer(struct si_context *sctx,
 	ctx->set_constant_buffer(ctx, PIPE_SHADER_COMPUTE, 0, &saved_cb);
 
 	si_compute_internal_end(sctx);
+	pipe_resource_reference(&saved_sb.buffer, NULL);
+	pipe_resource_reference(&saved_cb.buffer, NULL);
 }
 
 static void si_compute_do_clear_or_copy(struct si_context *sctx,
@@ -171,6 +173,10 @@ static void si_compute_do_clear_or_copy(struct si_context *sctx,
 	void *saved_cs = sctx->cs_shader_state.program;
 	struct pipe_shader_buffer saved_sb[2] = {};
 	si_get_shader_buffers(sctx, PIPE_SHADER_COMPUTE, 0, src ? 2 : 1, saved_sb);
+	struct pipe_image_view saved_image = {0};
+	util_copy_image_view(&saved_image, &sctx->images[PIPE_SHADER_COMPUTE].views[0]);
+	struct pipe_image_view image = {0};
+	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 1, &image);
 
 	unsigned saved_writable_mask = 0;
 	for (unsigned i = 0; i < (src ? 2 : 1); i++) {
@@ -252,7 +258,10 @@ static void si_compute_do_clear_or_copy(struct si_context *sctx,
 	ctx->bind_compute_state(ctx, saved_cs);
 	ctx->set_shader_buffers(ctx, PIPE_SHADER_COMPUTE, 0, src ? 2 : 1, saved_sb,
 				saved_writable_mask);
+	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 1, &saved_image);
 	si_compute_internal_end(sctx);
+	for (int i = 0; i < 2; i++)
+		pipe_resource_reference(&saved_sb[i].buffer, NULL);
 }
 
 void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
@@ -316,7 +325,7 @@ void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 		    (!force_cpdma &&
 		     clear_value_size == 4 &&
 		     offset % 4 == 0 &&
-		     (size > 32*1024 || sctx->chip_class <= GFX8))) {
+		     (size > 32*1024 || sctx->chip_class <= GFX9))) {
 			si_compute_do_clear_or_copy(sctx, dst, offset, NULL, 0,
 						    aligned_size, clear_value,
 						    clear_value_size, coher);
@@ -486,6 +495,9 @@ void si_compute_copy_image(struct si_context *sctx,
 	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 2, saved_image);
 	ctx->set_constant_buffer(ctx, PIPE_SHADER_COMPUTE, 0, &saved_cb);
 	si_compute_internal_end(sctx);
+	for (int i = 0; i < 2; i++)
+		pipe_resource_reference(&saved_image[i].resource, NULL);
+	pipe_resource_reference(&saved_cb.buffer, NULL);
 }
 
 void si_retile_dcc(struct si_context *sctx, struct si_texture *tex)
@@ -564,6 +576,10 @@ void si_retile_dcc(struct si_context *sctx, struct si_texture *tex)
 	/* Restore states. */
 	ctx->bind_compute_state(ctx, saved_cs);
 	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 3, saved_img);
+
+	for (unsigned i = 0; i < 3; i++) {
+		pipe_resource_reference(&saved_img[i].resource, NULL);
+	}
 }
 
 /* Expand FMASK to make it identity, so that image stores can ignore it. */
@@ -632,6 +648,7 @@ void si_compute_expand_fmask(struct pipe_context *ctx, struct pipe_resource *tex
 	ctx->bind_compute_state(ctx, saved_cs);
 	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 1, &saved_image);
 	si_compute_internal_end(sctx);
+	pipe_resource_reference(&saved_image.resource, NULL);
 
 	/* Array of fully expanded FMASK values, arranged by [log2(fragments)][log2(samples)-1]. */
 #define INVALID 0 /* never used */
@@ -750,4 +767,6 @@ void si_compute_clear_render_target(struct pipe_context *ctx,
 	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 1, &saved_image);
 	ctx->set_constant_buffer(ctx, PIPE_SHADER_COMPUTE, 0, &saved_cb);
 	si_compute_internal_end(sctx);
+	pipe_resource_reference(&saved_image.resource, NULL);
+	pipe_resource_reference(&saved_cb.buffer, NULL);
 }

@@ -623,8 +623,6 @@ static ppir_node *ppir_node_clone_const(ppir_block *block, ppir_node *node)
    }
    new_cnode->dest.type = ppir_target_ssa;
    new_cnode->dest.ssa.num_components = cnode->dest.ssa.num_components;
-   new_cnode->dest.ssa.live_in = INT_MAX;
-   new_cnode->dest.ssa.live_out = 0;
    new_cnode->dest.write_mask = cnode->dest.write_mask;
 
    return &new_cnode->node;
@@ -667,6 +665,27 @@ ppir_node_clone_load(ppir_block *block, ppir_node *node)
    }
 
    return &new_lnode->node;
+}
+
+void
+ppir_delete_if_orphan(ppir_block *block, ppir_node *node)
+{
+   ppir_dest *dest = ppir_node_get_dest(node);
+   if (!dest)
+      return;
+
+   ppir_node_foreach_succ_safe(node, dep) {
+      ppir_node *succ = dep->succ;
+      for (int i = 0; i < ppir_node_get_src_num(succ); i++) {
+         ppir_src *src = ppir_node_get_src(succ, i);
+         if (!src)
+            continue;
+         if (ppir_node_target_equal(src, dest))
+            return;
+      }
+   }
+
+   ppir_node_delete(node);
 }
 
 ppir_node *ppir_node_clone(ppir_block *block, ppir_node *node)

@@ -1014,41 +1014,25 @@ fd6_emit_state(struct fd_ringbuffer *ring, struct fd6_emit *emit)
 		fd6_emit_add_group(emit, prog->binning_stateobj,
 				FD6_GROUP_PROG_BINNING, CP_SET_DRAW_STATE__0_BINNING);
 
-		/* emit remaining non-stateobj program state, ie. what depends
-		 * on other emit state, so cannot be pre-baked.  This could
-		 * be moved to a separate stateobj which is dynamically
-		 * created.
+		/* emit remaining streaming program state, ie. what depends on
+		 * other emit state, so cannot be pre-baked.
 		 */
-		fd6_program_emit(ring, emit);
+		struct fd_ringbuffer *streaming = fd6_program_interp_state(emit);
+
+		fd6_emit_take_group(emit, streaming, FD6_GROUP_PROG_INTERP, ENABLE_DRAW);
 	}
 
 	if (dirty & FD_DIRTY_RASTERIZER) {
-		struct fd6_rasterizer_stateobj *rasterizer =
-				fd6_rasterizer_stateobj(ctx->rasterizer);
-		fd6_emit_add_group(emit, rasterizer->stateobj,
+		struct fd_ringbuffer *stateobj =
+			fd6_rasterizer_state(ctx, emit->primitive_restart);
+		fd6_emit_add_group(emit, stateobj,
 						   FD6_GROUP_RASTERIZER, ENABLE_ALL);
 	}
 
-	/* Since the primitive restart state is not part of a tracked object, we
-	 * re-emit this register every time.
-	 */
-	if (emit->info && ctx->rasterizer) {
-		struct fd6_rasterizer_stateobj *rasterizer =
-				fd6_rasterizer_stateobj(ctx->rasterizer);
-		OUT_PKT4(ring, REG_A6XX_PC_UNKNOWN_9806, 1);
-		OUT_RING(ring, 0);
-		OUT_PKT4(ring, REG_A6XX_PC_UNKNOWN_9990, 1);
-		OUT_RING(ring, 0);
-		OUT_PKT4(ring, REG_A6XX_VFD_UNKNOWN_A008, 1);
-		OUT_RING(ring, 0);
-
-		OUT_PKT4(ring, REG_A6XX_PC_PRIMITIVE_CNTL_0, 1);
-		OUT_RING(ring, rasterizer->pc_primitive_cntl |
-				 COND(emit->info->primitive_restart && emit->info->index_size,
-					  A6XX_PC_PRIMITIVE_CNTL_0_PRIMITIVE_RESTART));
-	}
-
 	if (dirty & (FD_DIRTY_FRAMEBUFFER | FD_DIRTY_RASTERIZER | FD_DIRTY_PROG)) {
+		struct fd_ringbuffer *ring = fd_submit_new_ringbuffer(
+				emit->ctx->batch->submit, 5 * 4, FD_RINGBUFFER_STREAMING);
+
 		unsigned nr = pfb->nr_cbufs;
 
 		if (ctx->rasterizer->rasterizer_discard)
@@ -1062,6 +1046,8 @@ fd6_emit_state(struct fd_ringbuffer *ring, struct fd6_emit *emit)
 
 		OUT_PKT4(ring, REG_A6XX_SP_FS_OUTPUT_CNTL1, 1);
 		OUT_RING(ring, A6XX_SP_FS_OUTPUT_CNTL1_MRT(nr));
+
+		fd6_emit_take_group(emit, ring, FD6_GROUP_PROG_FB_RAST, ENABLE_DRAW);
 	}
 
 	fd6_emit_consts(emit, vs, PIPE_SHADER_VERTEX, FD6_GROUP_VS_CONST, ENABLE_ALL);
@@ -1347,6 +1333,7 @@ fd6_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring)
 	WRITE(REG_A6XX_VPC_SO_OVERRIDE, A6XX_VPC_SO_OVERRIDE_SO_DISABLE);
 
 	WRITE(REG_A6XX_PC_UNKNOWN_9806, 0);
+	WRITE(REG_A6XX_PC_UNKNOWN_9990, 0);
 	WRITE(REG_A6XX_PC_UNKNOWN_9980, 0);
 
 	WRITE(REG_A6XX_PC_UNKNOWN_9B07, 0);

@@ -543,29 +543,14 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
    /* XXX could minimize number of consecutive stretches here by sorting, and
     * permuting the inputs in shader or does Mesa do this already? */
 
-   /* Check that vertex element binding is compatible with hardware; thus
-    * elements[idx].vertex_buffer_index are < stream_count. If not, the binding
-    * uses more streams than is supported, and u_vbuf should have done some
-    * reorganization for compatibility. */
-
-   /* TODO: does mesa this for us? */
-   bool incompatible = false;
-   for (unsigned idx = 0; idx < num_elements; ++idx) {
-      if (elements[idx].vertex_buffer_index >= ctx->specs.stream_count || elements[idx].instance_divisor > 0)
-         incompatible = true;
-   }
-
    cs->num_elements = num_elements;
-   if (incompatible || num_elements == 0) {
-      DBG("Error: zero vertex elements, or more vertex buffers used than supported");
-      FREE(cs);
-      return NULL;
-   }
 
    unsigned start_offset = 0; /* start of current consecutive stretch */
    bool nonconsecutive = true; /* previous value of nonconsecutive */
+   uint32_t buffer_mask = 0; /* mask of buffer_idx already seen */
 
    for (unsigned idx = 0; idx < num_elements; ++idx) {
+      unsigned buffer_idx = elements[idx].vertex_buffer_index;
       unsigned element_size = util_format_get_blocksize(elements[idx].src_format);
       unsigned end_offset = elements[idx].src_offset + element_size;
       uint32_t format_type, normalize;
@@ -573,12 +558,15 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
       if (nonconsecutive)
          start_offset = elements[idx].src_offset;
 
+      /* guaranteed by PIPE_CAP_MAX_VERTEX_BUFFERS */
+      assert(buffer_idx < ctx->specs.stream_count);
+
       /* maximum vertex size is 256 bytes */
-      assert(element_size != 0 && end_offset <= 256);
+      assert(element_size != 0 && (end_offset - start_offset) < 256);
 
       /* check whether next element is consecutive to this one */
       nonconsecutive = (idx == (num_elements - 1)) ||
-                       elements[idx + 1].vertex_buffer_index != elements[idx].vertex_buffer_index ||
+                       elements[idx + 1].vertex_buffer_index != buffer_idx ||
                        end_offset != elements[idx + 1].src_offset;
 
       format_type = translate_vertex_format_type(elements[idx].src_format);
@@ -593,7 +581,7 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
             format_type |
             VIVS_FE_VERTEX_ELEMENT_CONFIG_NUM(util_format_get_nr_components(elements[idx].src_format)) |
             normalize | VIVS_FE_VERTEX_ELEMENT_CONFIG_ENDIAN(ENDIAN_MODE_NO_SWAP) |
-            VIVS_FE_VERTEX_ELEMENT_CONFIG_STREAM(elements[idx].vertex_buffer_index) |
+            VIVS_FE_VERTEX_ELEMENT_CONFIG_STREAM(buffer_idx) |
             VIVS_FE_VERTEX_ELEMENT_CONFIG_START(elements[idx].src_offset) |
             VIVS_FE_VERTEX_ELEMENT_CONFIG_END(end_offset - start_offset);
       } else { /* HALTI5 spread vertex attrib config over two registers */
@@ -601,7 +589,7 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
             format_type |
             VIVS_NFE_GENERIC_ATTRIB_CONFIG0_NUM(util_format_get_nr_components(elements[idx].src_format)) |
             normalize | VIVS_NFE_GENERIC_ATTRIB_CONFIG0_ENDIAN(ENDIAN_MODE_NO_SWAP) |
-            VIVS_NFE_GENERIC_ATTRIB_CONFIG0_STREAM(elements[idx].vertex_buffer_index) |
+            VIVS_NFE_GENERIC_ATTRIB_CONFIG0_STREAM(buffer_idx) |
             VIVS_NFE_GENERIC_ATTRIB_CONFIG0_START(elements[idx].src_offset);
          cs->NFE_GENERIC_ATTRIB_CONFIG1[idx] =
             COND(nonconsecutive, VIVS_NFE_GENERIC_ATTRIB_CONFIG1_NONCONSECUTIVE) |
@@ -612,6 +600,15 @@ etna_vertex_elements_state_create(struct pipe_context *pctx,
          cs->NFE_GENERIC_ATTRIB_SCALE[idx] = 1;
       else
          cs->NFE_GENERIC_ATTRIB_SCALE[idx] = fui(1.0f);
+
+      /* instance_divisor is part of elements state but should be the same for all buffers */
+      if (buffer_mask & 1 << buffer_idx)
+         assert(cs->NFE_VERTEX_STREAMS_VERTEX_DIVISOR[buffer_idx] == elements[idx].instance_divisor);
+      else
+         cs->NFE_VERTEX_STREAMS_VERTEX_DIVISOR[buffer_idx] = elements[idx].instance_divisor;
+
+      buffer_mask |= 1 << buffer_idx;
+      cs->num_buffers = MAX2(cs->num_buffers, buffer_idx + 1);
    }
 
    return cs;

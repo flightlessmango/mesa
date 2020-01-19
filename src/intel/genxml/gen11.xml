@@ -735,7 +735,6 @@
       <value name="180DEG" value="2"/>
       <value name="270DEG" value="3"/>
     </field>
-    <field name="Force Non-Comparison Reduction Type" start="159" end="159" type="bool"/>
     <field name="MIP Count / LOD" start="160" end="163" type="uint"/>
     <field name="Surface Min LOD" start="164" end="167" type="uint"/>
     <field name="Mip Tail Start LOD" start="168" end="171" type="uint"/>
@@ -6238,6 +6237,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="2"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="HDC Pipeline Flush Enable" start="9" end="9" type="bool"/>
     <field name="Depth Cache Flush Enable" start="32" end="32" type="bool"/>
     <field name="Stall At Pixel Scoreboard" start="33" end="33" type="bool"/>
     <field name="State Cache Invalidation Enable" start="34" end="34" type="bool"/>

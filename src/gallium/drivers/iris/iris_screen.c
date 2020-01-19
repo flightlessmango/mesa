@@ -80,19 +80,12 @@ iris_get_name(struct pipe_screen *pscreen)
 {
    struct iris_screen *screen = (struct iris_screen *)pscreen;
    static char buf[128];
-   const char *chipset;
+   const char *name = gen_get_device_name(screen->pci_id);
 
-   switch (screen->pci_id) {
-#undef CHIPSET
-#define CHIPSET(id, symbol, str) case id: chipset = str; break;
-#include "pci_ids/i965_pci_ids.h"
-#include "pci_ids/iris_pci_ids.h"
-   default:
-      chipset = "Unknown Intel Chipset";
-      break;
-   }
+   if (!name)
+      name = "Intel Unknown";
 
-   snprintf(buf, sizeof(buf), "Mesa %s", chipset);
+   snprintf(buf, sizeof(buf), "Mesa %s", name);
    return buf;
 }
 
@@ -204,6 +197,7 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_GL_SPIRV:
    case PIPE_CAP_GL_SPIRV_VARIABLE_POINTERS:
    case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
+   case PIPE_CAP_NATIVE_FENCE_FD:
       return true;
    case PIPE_CAP_FBFETCH:
       return BRW_MAX_DRAW_BUFFERS;

@@ -273,8 +273,6 @@ iris_blorp_surf_for_resource(struct iris_vtable *vtbl,
          .mocs = vtbl->mocs(res->aux.clear_color_bo, isl_dev),
       };
    }
-
-   // XXX: ASTC
 }
 
 static bool
@@ -354,7 +352,7 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
       iris_format_for_usage(devinfo, info->src.format,
                             ISL_SURF_USAGE_TEXTURE_BIT);
    enum isl_aux_usage src_aux_usage =
-      iris_resource_texture_aux_usage(ice, src_res, src_fmt.fmt, 0);
+      iris_resource_texture_aux_usage(ice, src_res, src_fmt.fmt);
 
    if (iris_resource_level_has_hiz(src_res, info->src.level))
       src_aux_usage = ISL_AUX_USAGE_NONE;
@@ -496,7 +494,7 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
          iris_format_for_usage(devinfo, src_res->base.format,
                                ISL_SURF_USAGE_TEXTURE_BIT);
       stc_src_aux_usage =
-         iris_resource_texture_aux_usage(ice, src_res, src_fmt.fmt, 0);
+         iris_resource_texture_aux_usage(ice, src_res, src_fmt.fmt);
 
       struct iris_format_info dst_fmt =
          iris_format_for_usage(devinfo, stc_dst->base.format,
@@ -575,6 +573,15 @@ get_copy_region_aux_settings(const struct gen_device_info *devinfo,
                              bool is_render_target)
 {
    switch (res->aux.usage) {
+   case ISL_AUX_USAGE_HIZ:
+      if (!is_render_target && iris_sample_with_depth_aux(devinfo, res)) {
+         *out_aux_usage = ISL_AUX_USAGE_HIZ;
+         *out_clear_supported = true;
+      } else {
+         *out_aux_usage = ISL_AUX_USAGE_NONE;
+         *out_clear_supported = false;
+      }
+      break;
    case ISL_AUX_USAGE_MCS:
    case ISL_AUX_USAGE_MCS_CCS:
    case ISL_AUX_USAGE_CCS_E:

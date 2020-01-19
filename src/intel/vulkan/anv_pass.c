@@ -291,9 +291,10 @@ VkResult anv_CreateRenderPass(
 
          for (uint32_t j = 0; j < desc->inputAttachmentCount; j++) {
             subpass->input_attachments[j] = (struct anv_subpass_attachment) {
-               .usage =       VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-               .attachment =  desc->pInputAttachments[j].attachment,
-               .layout =      desc->pInputAttachments[j].layout,
+               .usage =          VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+               .attachment =     desc->pInputAttachments[j].attachment,
+               .layout =         desc->pInputAttachments[j].layout,
+               .stencil_layout = desc->pInputAttachments[j].layout,
             };
          }
       }
@@ -338,7 +339,7 @@ VkResult anv_CreateRenderPass(
 
    for (uint32_t i = 0; i < pCreateInfo->dependencyCount; i++) {
       /* Convert to a Dependency2KHR */
-      struct VkSubpassDependency2KHR dep2 = {
+      VkSubpassDependency2 dep2 = {
          .srcSubpass       = pCreateInfo->pDependencies[i].srcSubpass,
          .dstSubpass       = pCreateInfo->pDependencies[i].dstSubpass,
          .srcStageMask     = pCreateInfo->pDependencies[i].srcStageMask,
@@ -391,7 +392,7 @@ num_subpass_attachments2(const VkSubpassDescription2KHR *desc)
           (ds_resolve && ds_resolve->pDepthStencilResolveAttachment);
 }
 
-VkResult anv_CreateRenderPass2KHR(
+VkResult anv_CreateRenderPass2(
     VkDevice                                    _device,
     const VkRenderPassCreateInfo2KHR*           pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -471,10 +472,17 @@ VkResult anv_CreateRenderPass2KHR(
          subpass_attachments += desc->inputAttachmentCount;
 
          for (uint32_t j = 0; j < desc->inputAttachmentCount; j++) {
+            const VkAttachmentReferenceStencilLayoutKHR *stencil_layout =
+               vk_find_struct_const(desc->pInputAttachments[j].pNext,
+                                    ATTACHMENT_REFERENCE_STENCIL_LAYOUT_KHR);
+
             subpass->input_attachments[j] = (struct anv_subpass_attachment) {
-               .usage =       VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-               .attachment =  desc->pInputAttachments[j].attachment,
-               .layout =      desc->pInputAttachments[j].layout,
+               .usage =          VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+               .attachment =     desc->pInputAttachments[j].attachment,
+               .layout =         desc->pInputAttachments[j].layout,
+               .stencil_layout = (stencil_layout ?
+                                  stencil_layout->stencilLayout :
+                                  desc->pInputAttachments[j].layout),
             };
          }
       }

@@ -45,6 +45,10 @@ struct lp_build_nir_context
    struct lp_build_context base;
    struct lp_build_context uint_bld;
    struct lp_build_context int_bld;
+   struct lp_build_context uint8_bld;
+   struct lp_build_context int8_bld;
+   struct lp_build_context uint16_bld;
+   struct lp_build_context int16_bld;
    struct lp_build_context dbl_bld;
    struct lp_build_context uint64_bld;
    struct lp_build_context int64_bld;
@@ -59,12 +63,37 @@ struct lp_build_nir_context
                     unsigned nc,
                     unsigned bit_size,
                     bool offset_is_uniform,
-                    LLVMValueRef index, LLVMValueRef offset, LLVMValueRef result[4]);
+                    LLVMValueRef index, LLVMValueRef offset, LLVMValueRef result[NIR_MAX_VEC_COMPONENTS]);
+
+   void (*load_kernel_arg)(struct lp_build_nir_context *bld_base,
+                           unsigned nc,
+                           unsigned bit_size,
+                           unsigned offset_bit_size,
+                           bool offset_is_uniform,
+                           LLVMValueRef offset, LLVMValueRef result[NIR_MAX_VEC_COMPONENTS]);
+
+   void (*load_global)(struct lp_build_nir_context *bld_base,
+                       unsigned nc, unsigned bit_size,
+                       unsigned offset_bit_size,
+                       LLVMValueRef offset, LLVMValueRef result[NIR_MAX_VEC_COMPONENTS]);
+
+   void (*store_global)(struct lp_build_nir_context *bld_base,
+                        unsigned writemask,
+                        unsigned nc, unsigned bit_size,
+                        unsigned addr_bit_size,
+                        LLVMValueRef addr, LLVMValueRef dst);
+
+   void (*atomic_global)(struct lp_build_nir_context *bld_base,
+                         nir_intrinsic_op op,
+                         unsigned addr_bit_size,
+                         LLVMValueRef addr,
+                         LLVMValueRef val, LLVMValueRef val2,
+                         LLVMValueRef *result);
 
    /* for SSBO and shared memory */
    void (*load_mem)(struct lp_build_nir_context *bld_base,
                     unsigned nc, unsigned bit_size,
-                    LLVMValueRef index, LLVMValueRef offset, LLVMValueRef result[4]);
+                    LLVMValueRef index, LLVMValueRef offset, LLVMValueRef result[NIR_MAX_VEC_COMPONENTS]);
    void (*store_mem)(struct lp_build_nir_context *bld_base,
                      unsigned writemask, unsigned nc, unsigned bit_size,
                      LLVMValueRef index, LLVMValueRef offset, LLVMValueRef dst);
@@ -92,7 +121,7 @@ struct lp_build_nir_context
                     unsigned vertex_index,
                     unsigned const_index,
                     LLVMValueRef indir_index,
-                    LLVMValueRef result[4]);
+                    LLVMValueRef result[NIR_MAX_VEC_COMPONENTS]);
    void (*store_var)(struct lp_build_nir_context *bld_base,
                      nir_variable_mode deref_mode,
                      unsigned bit_size,
@@ -112,7 +141,7 @@ struct lp_build_nir_context
                      unsigned writemask,
                      LLVMValueRef indir_src,
                      LLVMValueRef reg_storage,
-                     LLVMValueRef dst[4]);
+                     LLVMValueRef dst[NIR_MAX_VEC_COMPONENTS]);
 
    void (*emit_var_decl)(struct lp_build_nir_context *bld_base,
                          nir_variable *var);
@@ -125,7 +154,7 @@ struct lp_build_nir_context
 
    void (*sysval_intrin)(struct lp_build_nir_context *bld_base,
                          nir_intrinsic_instr *instr,
-                         LLVMValueRef result[4]);
+                         LLVMValueRef result[NIR_MAX_VEC_COMPONENTS]);
    void (*discard)(struct lp_build_nir_context *bld_base,
                    LLVMValueRef cond);
 
@@ -139,6 +168,8 @@ struct lp_build_nir_context
 
    void (*emit_vertex)(struct lp_build_nir_context *bld_base, uint32_t stream_id);
    void (*end_primitive)(struct lp_build_nir_context *bld_base, uint32_t stream_id);
+
+   void (*vote)(struct lp_build_nir_context *bld_base, LLVMValueRef src, nir_intrinsic_instr *instr, LLVMValueRef dst[4]);
 //   LLVMValueRef main_function
 };
 
@@ -186,6 +217,8 @@ struct lp_build_nir_soa_context
     * set. The inputs[] array above is unused then.
     */
    LLVMValueRef inputs_array;
+
+   LLVMValueRef kernel_args_ptr;
 };
 
 bool
@@ -207,6 +240,38 @@ lp_nir_array_build_gather_values(LLVMBuilderRef builder,
       arr = LLVMBuildInsertValue(builder, arr, values[i], i, "");
    }
    return arr;
+}
+
+
+static inline struct lp_build_context *get_int_bld(struct lp_build_nir_context *bld_base,
+                                                   bool is_unsigned,
+                                                   unsigned op_bit_size)
+{
+   if (is_unsigned) {
+      switch (op_bit_size) {
+      case 64:
+         return &bld_base->uint64_bld;
+      case 32:
+      default:
+         return &bld_base->uint_bld;
+      case 16:
+         return &bld_base->uint16_bld;
+      case 8:
+         return &bld_base->uint8_bld;
+      }
+   } else {
+      switch (op_bit_size) {
+      case 64:
+         return &bld_base->int64_bld;
+      default:
+      case 32:
+         return &bld_base->int_bld;
+      case 16:
+         return &bld_base->int16_bld;
+      case 8:
+         return &bld_base->int8_bld;
+      }
+   }
 }
 
 #endif

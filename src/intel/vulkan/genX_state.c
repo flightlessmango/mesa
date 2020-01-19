@@ -446,9 +446,9 @@ VkResult genX(CreateSampler)(
          break;
       }
 #if GEN_GEN >= 9
-      case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT: {
-         struct VkSamplerReductionModeCreateInfoEXT *sampler_reduction =
-            (struct VkSamplerReductionModeCreateInfoEXT *) ext;
+      case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO: {
+         VkSamplerReductionModeCreateInfo *sampler_reduction =
+            (VkSamplerReductionModeCreateInfo *) ext;
          sampler_reduction_mode =
             vk_to_gen_sampler_reduction_mode[sampler_reduction->reductionMode];
          enable_sampler_reduction = true;
@@ -506,13 +506,16 @@ VkResult genX(CreateSampler)(
          .MagModeFilter = vk_to_gen_tex_filter(mag_filter, pCreateInfo->anisotropyEnable),
          .MinModeFilter = vk_to_gen_tex_filter(min_filter, pCreateInfo->anisotropyEnable),
          .TextureLODBias = anv_clamp_f(pCreateInfo->mipLodBias, -16, 15.996),
-         .AnisotropicAlgorithm = EWAApproximation,
+         .AnisotropicAlgorithm =
+            pCreateInfo->anisotropyEnable ? EWAApproximation : LEGACY,
          .MinLOD = anv_clamp_f(pCreateInfo->minLod, 0, 14),
          .MaxLOD = anv_clamp_f(pCreateInfo->maxLod, 0, 14),
          .ChromaKeyEnable = 0,
          .ChromaKeyIndex = 0,
          .ChromaKeyMode = 0,
-         .ShadowFunction = vk_to_gen_shadow_compare_op[pCreateInfo->compareOp],
+         .ShadowFunction =
+            vk_to_gen_shadow_compare_op[pCreateInfo->compareEnable ?
+                                        pCreateInfo->compareOp : VK_COMPARE_OP_NEVER],
          .CubeSurfaceControlMode = OVERRIDE,
 
          .BorderColorPointer = border_color_offset,

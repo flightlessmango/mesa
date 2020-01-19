@@ -111,6 +111,8 @@ choose_isl_tiling_flags(const struct anv_image_create_info *anv_info,
    case VK_IMAGE_TILING_LINEAR:
       flags = ISL_TILING_LINEAR_BIT;
       break;
+   case VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT:
+      flags = 1 << isl_mod_info->tiling;
    }
 
    if (anv_info->isl_tiling_flags)
@@ -118,9 +120,6 @@ choose_isl_tiling_flags(const struct anv_image_create_info *anv_info,
 
    if (legacy_scanout)
       flags &= ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT;
-
-   if (isl_mod_info)
-      flags &= 1 << isl_mod_info->tiling;
 
    assert(flags);
 
@@ -159,19 +158,21 @@ add_surface(struct anv_image *image, struct anv_surface *surf, uint32_t plane)
 }
 
 
-static bool
-all_formats_ccs_e_compatible(const struct gen_device_info *devinfo,
-                             const VkImageFormatListCreateInfoKHR *fmt_list,
-                             struct anv_image *image)
+bool
+anv_formats_ccs_e_compatible(const struct gen_device_info *devinfo,
+                             VkImageCreateFlags create_flags,
+                             VkFormat vk_format,
+                             VkImageTiling vk_tiling,
+                             const VkImageFormatListCreateInfoKHR *fmt_list)
 {
    enum isl_format format =
-      anv_get_isl_format(devinfo, image->vk_format,
-                         VK_IMAGE_ASPECT_COLOR_BIT, image->tiling);
+      anv_get_isl_format(devinfo, vk_format,
+                         VK_IMAGE_ASPECT_COLOR_BIT, vk_tiling);
 
    if (!isl_format_supports_ccs_e(devinfo, format))
       return false;
 
-   if (!(image->create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT))
+   if (!(create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT))
       return true;
 
    if (!fmt_list || fmt_list->viewFormatCount == 0)
@@ -180,7 +181,7 @@ all_formats_ccs_e_compatible(const struct gen_device_info *devinfo,
    for (uint32_t i = 0; i < fmt_list->viewFormatCount; i++) {
       enum isl_format view_format =
          anv_get_isl_format(devinfo, fmt_list->pViewFormats[i],
-                            VK_IMAGE_ASPECT_COLOR_BIT, image->tiling);
+                            VK_IMAGE_ASPECT_COLOR_BIT, vk_tiling);
 
       if (!isl_formats_are_ccs_e_compatible(devinfo, format, view_format))
          return false;
@@ -587,10 +588,14 @@ anv_image_create(VkDevice _device,
 
    const struct wsi_image_create_info *wsi_info =
       vk_find_struct_const(pCreateInfo->pNext, WSI_IMAGE_CREATE_INFO_MESA);
-   if (wsi_info && wsi_info->modifier_count > 0) {
+
+   if (pCreateInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      const VkImageDrmFormatModifierListCreateInfoEXT *mod_info =
+         vk_find_struct_const(pCreateInfo->pNext,
+                              IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT);
       isl_mod_info = choose_drm_format_mod(&device->instance->physicalDevice,
-                                           wsi_info->modifier_count,
-                                           wsi_info->modifiers);
+                                           mod_info->drmFormatModifierCount,
+                                           mod_info->pDrmFormatModifiers);
       assert(isl_mod_info);
    }
 
@@ -654,7 +659,8 @@ anv_image_create(VkDevice _device,
                            IMAGE_FORMAT_LIST_CREATE_INFO_KHR);
 
    image->ccs_e_compatible =
-      all_formats_ccs_e_compatible(&device->info, fmt_list, image);
+      anv_formats_ccs_e_compatible(&device->info, image->create_flags,
+                                   image->vk_format, image->tiling, fmt_list);
 
    uint32_t b;
    for_each_bit(b, image->aspects) {
@@ -722,13 +728,13 @@ anv_image_from_swapchain(VkDevice device,
    local_create_info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
    /* If the image has a particular modifier, specify that modifier. */
-   struct wsi_image_create_info local_wsi_info = {
-      .sType = VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA,
-      .modifier_count = 1,
-      .modifiers = &swapchain_image->drm_format_mod,
+   VkImageDrmFormatModifierListCreateInfoEXT local_modifier_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
+      .drmFormatModifierCount = 1,
+      .pDrmFormatModifiers = &swapchain_image->drm_format_mod,
    };
    if (swapchain_image->drm_format_mod != DRM_FORMAT_MOD_INVALID)
-      __vk_append_struct(&local_create_info, &local_wsi_info);
+      __vk_append_struct(&local_create_info, &local_modifier_info);
 
    return anv_image_create(device,
       &(struct anv_image_create_info) {
@@ -745,7 +751,7 @@ anv_CreateImage(VkDevice device,
                 const VkAllocationCallbacks *pAllocator,
                 VkImage *pImage)
 {
-   const struct VkExternalMemoryImageCreateInfo *create_info =
+   const VkExternalMemoryImageCreateInfo *create_info =
       vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_MEMORY_IMAGE_CREATE_INFO);
 
    if (create_info && (create_info->handleTypes &
@@ -754,7 +760,7 @@ anv_CreateImage(VkDevice device,
                                      pAllocator, pImage);
 
    bool use_external_format = false;
-   const struct VkExternalFormatANDROID *ext_format =
+   const VkExternalFormatANDROID *ext_format =
       vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_FORMAT_ANDROID);
 
    /* "If externalFormat is zero, the effect is as if the
@@ -1063,6 +1069,21 @@ void anv_GetImageSubresourceLayout(
    }
 }
 
+VkResult anv_GetImageDrmFormatModifierPropertiesEXT(
+    VkDevice                                    device,
+    VkImage                                     _image,
+    VkImageDrmFormatModifierPropertiesEXT*      pProperties)
+{
+   ANV_FROM_HANDLE(anv_image, image, _image);
+
+   assert(pProperties->sType =
+          VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT);
+
+   pProperties->drmFormatModifier = image->drm_format_mod;
+
+   return VK_SUCCESS;
+}
+
 /**
  * This function determines the optimal buffer to use for a given
  * VkImageLayout and other pieces of information needed to make that
@@ -1104,7 +1125,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
       return ISL_AUX_USAGE_NONE;
 
    /* All images that use an auxiliary surface are required to be tiled. */
-   assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+   assert(image->planes[plane].surface.isl.tiling != ISL_TILING_LINEAR);
 
    /* Stencil has no aux */
    assert(aspect != VK_IMAGE_ASPECT_STENCIL_BIT);
@@ -1131,7 +1152,6 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
     */
    case VK_IMAGE_LAYOUT_GENERAL:
    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-   case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
       if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
          /* This buffer could be a depth buffer used in a transfer operation.
           * BLORP currently doesn't use HiZ for transfer operations so we must
@@ -1151,6 +1171,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
    case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
       assert((image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
       /* Fall-through */
+   case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
       if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT) {
          if (anv_can_sample_with_hiz(devinfo, image))
@@ -1244,7 +1265,7 @@ anv_layout_to_fast_clear_type(const struct gen_device_info * const devinfo,
       return ANV_FAST_CLEAR_NONE;
 
    /* All images that use an auxiliary surface are required to be tiled. */
-   assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+   assert(image->planes[plane].surface.isl.tiling != ISL_TILING_LINEAR);
 
    /* Stencil has no aux */
    assert(aspect != VK_IMAGE_ASPECT_STENCIL_BIT);
@@ -1590,7 +1611,7 @@ anv_CreateImageView(VkDevice _device,
 
    /* Check if a conversion info was passed. */
    const struct anv_format *conv_format = NULL;
-   const struct VkSamplerYcbcrConversionInfo *conv_info =
+   const VkSamplerYcbcrConversionInfo *conv_info =
       vk_find_struct_const(pCreateInfo->pNext, SAMPLER_YCBCR_CONVERSION_INFO);
 
    /* If image has an external format, the pNext chain must contain an instance of

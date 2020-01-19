@@ -143,6 +143,12 @@ lima_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return 0;
 
+   case PIPE_CAP_ALPHA_TEST:
+   case PIPE_CAP_FLATSHADE:
+   case PIPE_CAP_TWO_SIDED_COLOR:
+   case PIPE_CAP_CLIP_PLANES:
+      return 0;
+
    default:
       return u_pipe_screen_get_param_defaults(pscreen, param);
    }
@@ -160,7 +166,7 @@ lima_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
    case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
       return 16.0f;
    case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
-      return 16.0f;
+      return 15.0f;
 
    default:
       return 0.0f;
@@ -447,6 +453,8 @@ static const struct debug_named_value debug_options[] = {
           "disable BO cache" },
         { "bocache", LIMA_DEBUG_BO_CACHE,
           "print debug info for BO cache" },
+        { "notiling", LIMA_DEBUG_NO_TILING,
+          "don't use tiled buffers" },
         { NULL }
 };
 

@@ -154,15 +154,17 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
          encoding |= opcode << 22;
          encoding |= instr->definitions.size() ? instr->definitions[0].physReg() << 15 : 0;
          encoding |= instr->operands.size() ? (instr->operands[0].physReg() >> 1) << 9 : 0;
-         if (!instr->operands[1].isConstant() || instr->operands[1].constantValue() >= 1024) {
-            encoding |= instr->operands[1].physReg().reg;
-         } else {
-            encoding |= instr->operands[1].constantValue() >> 2;
-            encoding |= 1 << 8;
+         if (instr->operands.size() >= 2) {
+            if (!instr->operands[1].isConstant() || instr->operands[1].constantValue() >= 1024) {
+               encoding |= instr->operands[1].physReg().reg;
+            } else {
+               encoding |= instr->operands[1].constantValue() >> 2;
+               encoding |= 1 << 8;
+            }
          }
          out.push_back(encoding);
          /* SMRD instructions can take a literal on GFX6 & GFX7 */
-         if (instr->operands[1].isConstant() && instr->operands[1].constantValue() >= 1024)
+         if (instr->operands.size() >= 2 && instr->operands[1].isConstant() && instr->operands[1].constantValue() >= 1024)
             out.push_back(instr->operands[1].constantValue() >> 2);
          return;
       }
@@ -319,7 +321,7 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       encoding |= 0x0FFF & mubuf->offset;
       out.push_back(encoding);
       encoding = 0;
-      if (ctx.chip_class >= GFX10) {
+      if (ctx.chip_class <= GFX7 || ctx.chip_class >= GFX10) {
          encoding |= (mubuf->slc ? 1 : 0) << 22;
       }
       encoding |= instr->operands[2].physReg() << 24;
@@ -516,10 +518,9 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
             encoding |= opcode << 16;
             encoding |= (vop3->clamp ? 1 : 0) << 15;
          }
+         encoding |= vop3->opsel << 11;
          for (unsigned i = 0; i < 3; i++)
             encoding |= vop3->abs[i] << (8+i);
-         for (unsigned i = 0; i < 4; i++)
-            encoding |= vop3->opsel[i] << (11+i);
          if (instr->definitions.size() == 2)
             encoding |= instr->definitions[1].physReg() << 8;
          encoding |= (0xFF & instr->definitions[0].physReg());
@@ -628,7 +629,7 @@ void fix_exports(asm_context& ctx, std::vector<uint32_t>& out, Program* program)
       exp->enabled_mask = 0;
       exp->compressed = false;
       exp->done = true;
-      exp->valid_mask = program->stage & hw_fs;
+      exp->valid_mask = (program->stage & hw_fs) || program->chip_class >= GFX10;
       if (program->stage & hw_fs)
          exp->dest = 9; /* NULL */
       else

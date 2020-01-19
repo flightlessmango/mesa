@@ -119,9 +119,13 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_TEXTURE_SWIZZLE:
                 return 1;
 
+        case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
+        case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
+                return 1;
+
         case PIPE_CAP_TGSI_INSTANCEID:
         case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
-                return is_deqp ? 1 : 0;
+                return 1;
 
         case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
                 return is_deqp ? 4 : 0;
@@ -132,7 +136,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
                 return 1;
 
         case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
-                return is_deqp ? 256 : 0; /* for GL3 */
+                return 256;
 
         case PIPE_CAP_GLSL_FEATURE_LEVEL:
         case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
@@ -141,7 +145,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
                 return is_deqp ? 300 : 120;
 
         case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
-                return is_deqp ? 16 : 0;
+                return 16;
 
         case PIPE_CAP_CUBE_MAP_ARRAY:
                 return is_deqp;
@@ -248,6 +252,9 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
                 return 16;
 
         case PIPE_CAP_ALPHA_TEST:
+        case PIPE_CAP_FLATSHADE:
+        case PIPE_CAP_TWO_SIDED_COLOR:
+        case PIPE_CAP_CLIP_PLANES:
                 return 0;
 
         default:
@@ -282,7 +289,7 @@ panfrost_get_shader_param(struct pipe_screen *screen,
                 return 16;
 
         case PIPE_SHADER_CAP_MAX_OUTPUTS:
-                return shader == PIPE_SHADER_FRAGMENT ? 4 : 8;
+                return shader == PIPE_SHADER_FRAGMENT ? 4 : 16;
 
         case PIPE_SHADER_CAP_MAX_TEMPS:
                 return 256; /* GL_MAX_PROGRAM_TEMPORARIES_ARB */
@@ -420,7 +427,16 @@ panfrost_is_format_supported( struct pipe_screen *screen,
         if (!format_desc)
                 return false;
 
-        if (sample_count > 1)
+        /* MSAA 4x supported, but no more. Technically some revisions of the
+         * hardware can go up to 16x but we don't support higher modes yet. */
+
+        if (sample_count > 1 && !(pan_debug & PAN_DBG_DEQP))
+                return false;
+
+        if (sample_count > 4)
+                return false;
+
+        if (MAX2(sample_count, 1) != MAX2(storage_sample_count, 1))
                 return false;
 
         /* Format wishlist */

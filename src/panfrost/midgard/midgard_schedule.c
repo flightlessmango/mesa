@@ -23,6 +23,7 @@
 
 #include "compiler.h"
 #include "midgard_ops.h"
+#include "midgard_quirks.h"
 #include "util/u_memory.h"
 
 /* Scheduling for Midgard is complicated, to say the least. ALU instructions
@@ -415,7 +416,7 @@ mir_adjust_constants(midgard_instruction *ins,
 
                         /* If the constant is new, check ourselves */
                         for (unsigned j = 0; j < i; ++j) {
-                                if (constants[j] == constants[i]) {
+                                if (constants[j] == constants[i] && (mask & (1 << j))) {
                                         ok = true;
                                         break;
                                 }
@@ -551,7 +552,7 @@ mir_choose_instruction(
                         continue;
 
                 bool conditional = alu && !branch && OP_IS_CSEL(instructions[i]->alu.op);
-                conditional |= (branch && !instructions[i]->prepacked_branch && instructions[i]->branch.conditional);
+                conditional |= (branch && instructions[i]->branch.conditional);
 
                 if (conditional && no_cond)
                         continue;
@@ -666,6 +667,10 @@ mir_comparison_mobile(
 
                 /* Must fit in an ALU bundle */
                 if (instructions[i]->type != TAG_ALU_4)
+                        return ~0;
+
+                /* If it would itself require a condition, that's recursive */
+                if (OP_IS_CSEL(instructions[i]->alu.op))
                         return ~0;
 
                 /* We'll need to rewrite to .w but that doesn't work for vector
@@ -873,7 +878,7 @@ mir_schedule_alu(
         mir_update_worklist(worklist, len, instructions, branch);
         bool writeout = branch && branch->writeout;
 
-        if (branch && !branch->prepacked_branch && branch->branch.conditional) {
+        if (branch && branch->branch.conditional) {
                 midgard_instruction *cond = mir_schedule_condition(ctx, &predicate, worklist, len, instructions, branch);
 
                 if (cond->unit == UNIT_VADD)
@@ -890,6 +895,9 @@ mir_schedule_alu(
                 mir_choose_alu(&vlut, instructions, worklist, len, &predicate, UNIT_VLUT);
 
         if (writeout) {
+                /* Propagate up */
+                bundle.last_writeout = branch->last_writeout;
+
                 midgard_instruction add = v_mov(~0, make_compiler_temp(ctx));
 
                 if (!ctx->is_blend) {
@@ -938,7 +946,7 @@ mir_schedule_alu(
 
         /* If we have a render target reference, schedule a move for it */
 
-        if (branch && branch->writeout && branch->constants[0]) {
+        if (branch && branch->writeout && (branch->constants[0] || ctx->is_blend)) {
                 midgard_instruction mov = v_mov(~0, make_compiler_temp(ctx));
                 sadd = mem_dup(&mov, sizeof(midgard_instruction));
                 sadd->unit = UNIT_SADD;
@@ -1048,6 +1056,11 @@ mir_schedule_alu(
 
         /* Size ALU instruction for tag */
         bundle.tag = (TAG_ALU_4) + (bytes_emitted / 16) - 1;
+
+        /* MRT capable GPUs use a special writeout procedure */
+        if (writeout && !(ctx->quirks & MIDGARD_NO_UPPER_ALU))
+                bundle.tag += 4;
+
         bundle.padding = padding;
         bundle.control |= bundle.tag;
 
@@ -1101,7 +1114,7 @@ schedule_block(compiler_context *ctx, midgard_block *block)
                 if (bundle.has_blend_constant)
                         blend_offset = block->quadword_count;
 
-                block->quadword_count += quadword_size(bundle.tag);
+                block->quadword_count += midgard_word_size[bundle.tag];
         }
 
         /* We emitted bundles backwards; copy into the block in reverse-order */
@@ -1139,7 +1152,7 @@ schedule_block(compiler_context *ctx, midgard_block *block)
 }
 
 void
-schedule_program(compiler_context *ctx)
+midgard_schedule_program(compiler_context *ctx)
 {
         midgard_promote_uniforms(ctx);
 

@@ -270,7 +270,7 @@ void radv_logi_v(const char *format, va_list va);
 				fprintf(stderr, "%s:%d ASSERT: %s\n", __FILE__, __LINE__, #x); \
 		})
 #else
-#define radv_assert(x)
+#define radv_assert(x) do {} while(0)
 #endif
 
 #define stub_return(v)					\
@@ -1422,11 +1422,11 @@ void radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer);
 void radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer);
 void radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 					   VkImageAspectFlags aspects,
-					   VkResolveModeFlagBitsKHR resolve_mode);
+					   VkResolveModeFlagBits resolve_mode);
 void radv_cmd_buffer_resolve_subpass_fs(struct radv_cmd_buffer *cmd_buffer);
 void radv_depth_stencil_resolve_subpass_fs(struct radv_cmd_buffer *cmd_buffer,
 					   VkImageAspectFlags aspects,
-					   VkResolveModeFlagBitsKHR resolve_mode);
+					   VkResolveModeFlagBits resolve_mode);
 void radv_emit_default_sample_locations(struct radeon_cmdbuf *cs, int nr_samples);
 unsigned radv_get_default_max_sample_dist(int log_samples);
 void radv_device_init_msaa(struct radv_device *device);
@@ -1656,6 +1656,8 @@ static inline bool radv_pipeline_has_tess(const struct radv_pipeline *pipeline)
 
 bool radv_pipeline_has_ngg(const struct radv_pipeline *pipeline);
 
+bool radv_pipeline_has_ngg_passthrough(const struct radv_pipeline *pipeline);
+
 bool radv_pipeline_has_gs_copy_shader(const struct radv_pipeline *pipeline);
 
 struct radv_userdata_info *radv_lookup_user_sgpr(struct radv_pipeline *pipeline,
@@ -1684,6 +1686,15 @@ radv_graphics_pipeline_create(VkDevice device,
 			      const struct radv_graphics_pipeline_create_info *extra,
 			      const VkAllocationCallbacks *alloc,
 			      VkPipeline *pPipeline);
+
+struct radv_binning_settings {
+	unsigned context_states_per_bin; /* allowed range: [1, 6] */
+	unsigned persistent_states_per_bin; /* allowed range: [1, 32] */
+	unsigned fpovs_per_batch; /* allowed range: [0, 255], 0 = unlimited */
+};
+
+struct radv_binning_settings
+radv_get_binning_settings(const struct radv_physical_device *pdev);
 
 struct vk_format_description;
 uint32_t radv_translate_buffer_dataformat(const struct vk_format_description *desc,
@@ -2144,8 +2155,8 @@ struct radv_subpass {
 	struct radv_subpass_attachment *             resolve_attachments;
 	struct radv_subpass_attachment *             depth_stencil_attachment;
 	struct radv_subpass_attachment *             ds_resolve_attachment;
-	VkResolveModeFlagBitsKHR                     depth_resolve_mode;
-	VkResolveModeFlagBitsKHR                     stencil_resolve_mode;
+	VkResolveModeFlagBits                        depth_resolve_mode;
+	VkResolveModeFlagBits                        stencil_resolve_mode;
 
 	/** Subpass has at least one color resolve attachment */
 	bool                                         has_color_resolve;
@@ -2156,6 +2167,9 @@ struct radv_subpass {
 	struct radv_subpass_barrier                  start_barrier;
 
 	uint32_t                                     view_mask;
+
+	VkSampleCountFlagBits                        color_sample_count;
+	VkSampleCountFlagBits                        depth_sample_count;
 	VkSampleCountFlagBits                        max_sample_count;
 };
 

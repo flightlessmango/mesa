@@ -131,7 +131,7 @@ public:
    bool opt_algebraic();
    bool opt_redundant_discard_jumps();
    bool opt_cse();
-   bool opt_cse_local(bblock_t *block);
+   bool opt_cse_local(bblock_t *block, int &ip);
    bool opt_copy_propagation();
    bool try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry);
    bool try_constant_propagate(fs_inst *inst, acp_entry *entry);
@@ -167,6 +167,7 @@ public:
    bool lower_integer_multiplication();
    bool lower_minmax();
    bool lower_simd_width();
+   bool lower_barycentrics();
    bool lower_scoreboard();
    bool opt_combine_constants();
 
@@ -301,8 +302,6 @@ public:
    fs_reg get_timestamp(const brw::fs_builder &bld);
 
    fs_reg interp_reg(int location, int channel);
-
-   int implied_mrf_writes(const fs_inst *inst) const;
 
    virtual void dump_instructions();
    virtual void dump_instructions(const char *name);
@@ -541,25 +540,21 @@ private:
 namespace brw {
    inline fs_reg
    fetch_payload_reg(const brw::fs_builder &bld, uint8_t regs[2],
-                     brw_reg_type type = BRW_REGISTER_TYPE_F, unsigned n = 1)
+                     brw_reg_type type = BRW_REGISTER_TYPE_F)
    {
       if (!regs[0])
          return fs_reg();
 
       if (bld.dispatch_width() > 16) {
-         const fs_reg tmp = bld.vgrf(type, n);
+         const fs_reg tmp = bld.vgrf(type);
          const brw::fs_builder hbld = bld.exec_all().group(16, 0);
          const unsigned m = bld.dispatch_width() / hbld.dispatch_width();
-         fs_reg *const components = new fs_reg[n * m];
+         fs_reg *const components = new fs_reg[m];
 
-         for (unsigned c = 0; c < n; c++) {
-            for (unsigned g = 0; g < m; g++) {
-               components[c * m + g] =
-                  offset(retype(brw_vec8_grf(regs[g], 0), type), hbld, c);
-            }
-         }
+         for (unsigned g = 0; g < m; g++)
+               components[g] = retype(brw_vec8_grf(regs[g], 0), type);
 
-         hbld.LOAD_PAYLOAD(tmp, components, n * m, 0);
+         hbld.LOAD_PAYLOAD(tmp, components, m, 0);
 
          delete[] components;
          return tmp;
@@ -567,6 +562,29 @@ namespace brw {
       } else {
          return fs_reg(retype(brw_vec8_grf(regs[0], 0), type));
       }
+   }
+
+   inline fs_reg
+   fetch_barycentric_reg(const brw::fs_builder &bld, uint8_t regs[2])
+   {
+      if (!regs[0])
+         return fs_reg();
+
+      const fs_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_F, 2);
+      const brw::fs_builder hbld = bld.exec_all().group(8, 0);
+      const unsigned m = bld.dispatch_width() / hbld.dispatch_width();
+      fs_reg *const components = new fs_reg[2 * m];
+
+      for (unsigned c = 0; c < 2; c++) {
+         for (unsigned g = 0; g < m; g++)
+            components[c * m + g] = offset(brw_vec8_grf(regs[g / 2], 0),
+                                           hbld, c + 2 * (g % 2));
+      }
+
+      hbld.LOAD_PAYLOAD(tmp, components, 2 * m, 0);
+
+      delete[] components;
+      return tmp;
    }
 
    bool

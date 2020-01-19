@@ -1373,13 +1373,18 @@ nir_visitor::visit(ir_call *ir)
             instr->src[3] =
                nir_src_for_ssa(evaluate_rvalue((ir_dereference *)param));
             param = param->get_next();
+         } else if (op == nir_intrinsic_image_deref_load) {
+            instr->src[3] = nir_src_for_ssa(nir_imm_int(&b, 0)); /* LOD */
          }
 
          if (!param->is_tail_sentinel()) {
             instr->src[4] =
                nir_src_for_ssa(evaluate_rvalue((ir_dereference *)param));
             param = param->get_next();
+         } else if (op == nir_intrinsic_image_deref_store) {
+            instr->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0)); /* LOD */
          }
+
          nir_builder_instr_insert(&b, &instr->instr);
          break;
       }
@@ -2696,8 +2701,20 @@ nir_visitor::visit(ir_dereference_array *ir)
 void
 nir_visitor::visit(ir_barrier *)
 {
+   if (shader->info.stage == MESA_SHADER_COMPUTE) {
+      nir_intrinsic_instr *shared_barrier =
+         nir_intrinsic_instr_create(this->shader,
+                                    nir_intrinsic_memory_barrier_shared);
+      nir_builder_instr_insert(&b, &shared_barrier->instr);
+   } else if (shader->info.stage == MESA_SHADER_TESS_CTRL) {
+      nir_intrinsic_instr *patch_barrier =
+         nir_intrinsic_instr_create(this->shader,
+                                    nir_intrinsic_memory_barrier_tcs_patch);
+      nir_builder_instr_insert(&b, &patch_barrier->instr);
+   }
+
    nir_intrinsic_instr *instr =
-      nir_intrinsic_instr_create(this->shader, nir_intrinsic_barrier);
+      nir_intrinsic_instr_create(this->shader, nir_intrinsic_control_barrier);
    nir_builder_instr_insert(&b, &instr->instr);
 }
 

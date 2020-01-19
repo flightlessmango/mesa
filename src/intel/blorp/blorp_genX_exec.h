@@ -772,13 +772,6 @@ blorp_emit_ps_config(struct blorp_batch *batch,
          ps.BindingTableEntryCount = 1;
       }
 
-     /* Gen 11 workarounds table #2056 WABTPPrefetchDisable suggests to
-      * disable prefetching of binding tables on A0 and B0 steppings.
-      * TODO: Revisit this WA on C0 stepping.
-      */
-      if (GEN_GEN == 11)
-         ps.BindingTableEntryCount = 0;
-
       /* SAMPLER_STATE prefetching is broken on Gen11 - WA_1606682166 */
       if (GEN_GEN == 11)
          ps.SamplerCount = 0;
@@ -1363,8 +1356,12 @@ blorp_emit_surface_state(struct blorp_batch *batch,
       surf.dim = ISL_SURF_DIM_2D;
    }
 
-   /* Blorp doesn't support HiZ in any of the blit or slow-clear paths */
-   assert(!isl_aux_usage_has_hiz(surface->aux_usage));
+   if (isl_aux_usage_has_hiz(surface->aux_usage)) {
+      /* BLORP doesn't render with depth so we can't use HiZ */
+      assert(!is_render_target);
+      /* We can't reinterpret HiZ */
+      assert(surface->surf.format == surface->view.format);
+   }
    enum isl_aux_usage aux_usage = surface->aux_usage;
 
    isl_channel_mask_t write_disable_mask = 0;
@@ -1795,7 +1792,9 @@ blorp_update_clear_color(struct blorp_batch *batch,
                                  .MemoryAddress = clear_addr);
       /* dw starts at dword 1, but we need to fill dwords 3 and 5 */
       dw[2] = info->clear_color.u32[0];
+      dw[3] = 0;
       dw[4] = info->clear_color.u32[1];
+      dw[5] = 0;
 
       clear_addr.offset += 8;
       dw = blorp_emitn(batch, GENX(MI_ATOMIC), num_dwords,
@@ -1807,7 +1806,9 @@ blorp_update_clear_color(struct blorp_batch *batch,
                                  .MemoryAddress = clear_addr);
       /* dw starts at dword 1, but we need to fill dwords 3 and 5 */
       dw[2] = info->clear_color.u32[2];
+      dw[3] = 0;
       dw[4] = info->clear_color.u32[3];
+      dw[5] = 0;
 
       blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
          pipe.StateCacheInvalidationEnable = true;

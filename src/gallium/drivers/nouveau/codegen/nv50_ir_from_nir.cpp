@@ -652,7 +652,6 @@ Converter::getSubOp(nir_intrinsic_op op)
 
    case nir_intrinsic_group_memory_barrier:
    case nir_intrinsic_memory_barrier:
-   case nir_intrinsic_memory_barrier_atomic_counter:
    case nir_intrinsic_memory_barrier_buffer:
    case nir_intrinsic_memory_barrier_image:
       return NV50_IR_SUBOP_MEMBAR(M, GL);
@@ -2644,7 +2643,7 @@ Converter::visit(nir_intrinsic_instr *insn)
 
       break;
    }
-   case nir_intrinsic_barrier: {
+   case nir_intrinsic_control_barrier: {
       // TODO: add flag to shader_info
       info->numBarriers = 1;
       Instruction *bar = mkOp2(OP_BAR, TYPE_U32, NULL, mkImm(0), mkImm(0));
@@ -2654,7 +2653,6 @@ Converter::visit(nir_intrinsic_instr *insn)
    }
    case nir_intrinsic_group_memory_barrier:
    case nir_intrinsic_memory_barrier:
-   case nir_intrinsic_memory_barrier_atomic_counter:
    case nir_intrinsic_memory_barrier_buffer:
    case nir_intrinsic_memory_barrier_image:
    case nir_intrinsic_memory_barrier_shared: {
@@ -2663,6 +2661,8 @@ Converter::visit(nir_intrinsic_instr *insn)
       bar->subOp = getSubOp(op);
       break;
    }
+   case nir_intrinsic_memory_barrier_tcs_patch:
+      break;
    case nir_intrinsic_shader_clock: {
       const DataType dType = getDType(insn);
       LValues &newDefs = convert(&insn->dest);

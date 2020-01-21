@@ -1,0 +1,82 @@
+#!/bin/bash          
+MANGO_DIR=$HOME/.local/share/MangoHud
+LIB64=$HOME/.local/share/MangoHud/libMangoHud64.so
+
+ubuntu-dep () {
+    sudo apt-get update
+    sudo apt-get install -y python3 python3-pip python3-setuptools \
+                        python3-wheel ninja-build pkg-config \
+                        libdrm-dev llvm libx11-xcb-dev zlib1g-dev \
+                        libxcb-dri2-0-dev libxcb-dri3-dev libxcb-present-dev\
+                        libxshmfence-dev gettext wget unzip git bison flex
+
+    sudo pip3 install meson mako
+
+    wget https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-linux-Release.zip
+    unzip glslang-master-linux-Release.zip bin/glslangValidator
+    sudo install -m755 bin/glslangValidator /usr/local/bin/
+    rm bin/glslangValidator glslang-master-linux-Release.zip
+}
+
+configure () {
+rm -r MangoHud-build
+meson MangoHud-build --libdir lib64 --prefix $PWD/build -D b_lto=false \
+    -D b_ndebug=true \
+    -D platforms=x11 \
+    -D dri-drivers=[] \
+    -D gallium-drivers=[] \
+    -D vulkan-drivers=intel \
+    -D swr-arches=avx,avx2 \
+    -D dri3=true \
+    -D egl=false \
+    -D gallium-extra-hud=false \
+    -D gallium-nine=false \
+    -D gallium-omx=disabled \
+    -D gallium-opencl=disabled \
+    -D gallium-va=false \
+    -D gallium-vdpau=false \
+    -D gallium-xa=false \
+    -D gallium-xvmc=false \
+    -D gbm=false \
+    -D gles1=false \
+    -D gles2=false \
+    -D glvnd=false \
+    -D glx=disabled \
+    -D libunwind=false \
+    -D llvm=true \
+    -D lmsensors=false \
+    -D osmesa=none \
+    -D opengl=false \
+    -D shader-cache=true \
+    -D shared-glapi=true \
+    -D valgrind=false \
+    -D vulkan-overlay-layer=true
+    
+}
+
+install-mango () {
+    mkdir -p $MANGO_DIR
+    mkdir -p $HOME/.local/share/vulkan/implicit_layer.d 
+    cp build/lib64/libMangoHud.so build/libMangoHud64.so
+    sed "s|libMangoHud.so|$LIB64|g" build/share/vulkan/implicit_layer.d/mangohud.json > build/mangohud.json
+    install build/libMangoHud64.so $HOME/.local/share/MangoHud/
+    install build/mangohud.json $HOME/.local/share/vulkan/implicit_layer.d/
+}
+
+case $1 in
+    "ubuntu-dep")
+        ubuntu-dep
+    ;;
+    "build")
+        ninja -C MangoHud-build install
+    ;;
+    "configure")
+        configure
+    ;;
+    "install-mango")
+        install-mango
+    ;;
+    *)
+    echo "Uncregonized command"
+    ;;
+esac

@@ -12,6 +12,7 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <regex>
 using namespace std;
 
 int gpuLoad, gpuTemp, cpuTemp;
@@ -160,15 +161,20 @@ void PrintStats(const std::vector<CPUData> & entries1, const std::vector<CPUData
 }
 
 void *cpuInfo(void *){
-	for (size_t i = 0; i < numCpuCores; i++)
-	{
-		char buff[8];
-		std::string cpuFreqPath = "/sys/devices/system/cpu/cpu" + to_string(i) + "/cpufreq/scaling_cur_freq";
-		FILE *cpuFreq = fopen(cpuFreqPath.c_str(), "r");
-		fscanf(cpuFreq, "%s", buff);
-		cpuArray[i + 1].freq = stoi(buff) / 1000;
-		fclose(cpuFreq);
-	}
+	FILE *cpuInfo = fopen("/proc/cpuinfo", "r");
+    char line[256];
+	int i = 0;
+    while (fgets(line, sizeof(line), cpuInfo)) {
+		std::string row;
+		row = line;
+		if (row.find("MHz") != std::string::npos){
+			row = std::regex_replace(row, std::regex(R"([^0-9.])"), "");
+			cpuArray[i + 1].freq = stoi(row);
+			i++;
+		}
+    }
+
+    fclose(cpuInfo);
 
 	char buff[6];
 	rewind(cpuTempFile);

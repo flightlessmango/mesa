@@ -1096,7 +1096,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
          {
             int cpuCoreLoadLength = to_string(cpuArray[i + 1].value).length();
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f), "CPU");
-            ImGui::SameLine();
+            ImGui::SameLine(0, 1.0f);
             ImGui::PushFont(font1);
             ImGui::TextColored(ImVec4(0.0, 0.502, 0.753, 1.00f),"%i", i);
             ImGui::PopFont();
@@ -1104,7 +1104,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
             ImGui::Text("%i%%", cpuArray[i + 1].value);
             ImGui::SameLine(hudSecondRow);
             ImGui::Text("%i", cpuArray[i + 1].freq);
-            ImGui::SameLine();
+            ImGui::SameLine(0, 1.0f);
             ImGui::PushFont(font1);
             ImGui::Text("MHz");
             ImGui::PopFont();
@@ -1116,13 +1116,13 @@ static void compute_swapchain_display(struct swapchain_data *data)
          ImGui::TextColored(ImVec4(0.753, 0.502, 0.502, 1.00f), "%s", engineName.c_str());
          ImGui::SameLine(hudFirstRow);
          ImGui::Text("%.0f", data->fps);
-         ImGui::SameLine();
+         ImGui::SameLine(0, 1.0f);
          ImGui::PushFont(font1);
          ImGui::Text("FPS");
          ImGui::PopFont();
          ImGui::SameLine(hudSecondRow);
          ImGui::Text("%.1f", 1000 / data->fps);
-         ImGui::SameLine();
+         ImGui::SameLine(0, 1.0f);
          ImGui::PushFont(font1);
          ImGui::Text("ms");
          ImGui::PopFont();

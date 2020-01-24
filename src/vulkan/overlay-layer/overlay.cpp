@@ -1219,6 +1219,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
       ImGui::Text("Elapsed: %isec", int((elapsedLog) / 1000000));
       ImGui::End();
    }  
+   ImGui::PopStyleVar();
    ImGui::EndFrame();
    ImGui::Render();
 

@@ -1022,7 +1022,7 @@ static void position_layer(struct swapchain_data *data)
 
 
    ImGui::SetNextWindowBgAlpha(0.5);
-   ImGui::SetNextWindowSize(data->window_size, ImGuiCond_Always);
+   ImGui::SetNextWindowSize(ImVec2(instance_data->params.width, instance_data->params.height), ImGuiCond_Always);
 
    if (!offset_x_env == NULL)
      offset_x = std::stof(offset_x_env);
@@ -1062,10 +1062,12 @@ static void compute_swapchain_display(struct swapchain_data *data)
       instance_data->params.width = hudFirstRow + hudSecondRow;
 
    if(displayHud)
-	   ImGui::Begin("Main", &open, ImVec2(instance_data->params.width, instance_data->params.height), 0.5f, ImGuiWindowFlags_NoDecoration);
+	   ImGui::Begin("Main", &open, ImGuiWindowFlags_NoDecoration);
 
-   if(!displayHud)
-      ImGui::Begin("Main", &open, ImVec2(280, 160), 0.01f, ImGuiWindowFlags_NoDecoration);
+   if(!displayHud){
+      ImGui::SetNextWindowBgAlpha(0.01);
+      ImGui::Begin("Main", &open, ImGuiWindowFlags_NoDecoration);
+   }
    
    if (displayHud){
       if (deviceName.find("GeForce") != std::string::npos || deviceName.find("Radeon") != std::string::npos || deviceName.find("AMD") != std::string::npos){
@@ -1205,18 +1207,21 @@ static void compute_swapchain_display(struct swapchain_data *data)
       data->window_size = ImVec2(data->window_size.x, ImGui::GetCursorPosY() + 10.0f);
    }
    ImGui::End();
-   ImGui::EndFrame();
-   ImGui::Render();
    if(loggingOn){
+      ImGui::SetNextWindowBgAlpha(0.01);
+      ImGui::SetNextWindowSize(ImVec2(200, 100), ImGuiCond_Always);
       ImGui::SetNextWindowPos(ImVec2(data->width - 200,
                                     0),
                                     ImGuiCond_Always);
-     ImGui::Begin("Logging", &open, ImVec2(200, 100), 0.0f, ImGuiWindowFlags_NoDecoration);
-     ImGui::Text("Logging...");
-     ImGui::Text("Elapsed: %isec", int((elapsedLog) / 1000000));
-     ImGui::End();
-     ImGui::Render();
-   }
+      ImGui::Begin("Logging", &open, ImGuiWindowFlags_NoDecoration);
+      ImGui::Text("Logging...");
+      ImGui::Text("Elapsed: %isec", int((elapsedLog) / 1000000));
+      ImGui::End();
+      ImGui::Render();
+   }  
+   ImGui::EndFrame();
+   ImGui::Render();
+
 }
 
 static uint32_t vk_memory_type(struct device_data *data,

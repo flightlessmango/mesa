@@ -1023,6 +1023,7 @@ static void position_layer(struct swapchain_data *data)
 
    ImGui::SetNextWindowBgAlpha(0.5);
    ImGui::SetNextWindowSize(ImVec2(instance_data->params.width, instance_data->params.height), ImGuiCond_Always);
+   ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 
    if (!offset_x_env == NULL)
      offset_x = std::stof(offset_x_env);

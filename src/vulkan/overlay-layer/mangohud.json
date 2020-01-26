@@ -1,7 +1,7 @@
 {
     "file_format_version" : "1.0.0",
     "layer" : {
-      "name": "MangoHud",
+      "name": "MangoHud 64bit",
       "type": "GLOBAL",
       "api_version": "1.1.125",
       "library_path": "libMangoHud.so",

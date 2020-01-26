@@ -33,7 +33,7 @@ Note: Width and Height are set automatically based on the font_size, but can be 
 Example: `MANGOHUD_CONFIG=cpu_temp,gpu_temp,position=top-right,height=500,font_size=32`
 
 ## Environment Variables
-- `MANGO_OUTPUT` : Define name and location of the output file (Required for logging)
+- `MANGOHUD_OUTPUT` : Define name and location of the output file (Required for logging)
 - `MANGOHUD_FONT`: Change default font (set location to .TTF/.OTF file )
 
 ## Keybindings
@@ -42,7 +42,7 @@ Example: `MANGOHUD_CONFIG=cpu_temp,gpu_temp,position=top-right,height=500,font_s
 
 ## MangoHud fps logging
 
-When you toggle logging (using the keybind `F2`), a file is created with your chosen name + date/time stamp (using `MANGO_OUTPUT`).
+When you toggle logging (using the keybind `F2`), a file is created with your chosen name (using `MANGOHUD_OUTPUT`) plus a date & timestamp.
 
 This file can be uploaded to [Flightlessmango.com](https://flightlessmango.com/games/user_benchmarks) to create graphs automatically.
 you can share the created page with others, just link it.

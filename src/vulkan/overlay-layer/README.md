@@ -1,34 +1,36 @@
 # MangoHud
 
-A modification of the Mesa vulkan overlay. mostly just stuff to make my life easier.
-![](gifs/overlay_example.gif)
+A modification of the Mesa vulkan overlay. Personal improvements including temperature reporting and logging capabilities.
+
+#### Comparison (outdated)
+![](assets/overlay_comparison.gif)
 
 # Installation
 - Arch linux: [PKGBUILD](https://github.com/flightlessmango/PKGBUILDS/blob/master/mangohud/PKGBUILD)
 
 # Normal usage
-A Vulkan layer to display information about the running application
-using an overlay.
 
-To turn on the layer run :
+To enable the MangoHud vulkan overlay layer, run :
 
-MANGOHUD=1 /path/to/my_vulkan_app
+`MANGOHUD=1 /path/to/my_vulkan_app`
 
-Position the layer :
+Or alternatively, add `MANGOHUD=1` to your shell profile.
 
-MANGOHUD=1 MANGOHUD_CONFIG=position=top-right /path/to/my_vulkan_app
+## MANGOHUD_CONFIG parameters
 
-## MANGOHUD_CONFIG params
-- `cpu_temp` :  Displays current CPU temperature
-- `gpu_temp` :  Displays current GPU temperature
-- `core_load`:  Displays current CPU load per core
-- `font_size`:  Changes the default font size (default is 24)
-- `width`    :  Set custom hud width
-- `height`   :  Set custom hud height
+You can customize the hud by using the MANGOHUD_CONFIG environment variable while separating different options with a comma.
 
-Width and Height is set automatically based on the font_size
+- `cpu_temp`  :  Displays current CPU temperature
+- `gpu_temp`  :  Displays current GPU temperature
+- `core_load` :  Displays current CPU load per core
+- `font_size` :  Changes the default font size (default is 24)
+- `width`     :  Set custom hud width
+- `height`    :  Set custom hud height
+- `position=x`:  Available values for `x` include `top-left`, `top-right`, `bottom-left`, and `bottom-right`
 
-example: `MANGOHUD_CONFIG=cpu_temp,gpu_temp,height=500,font_size=32`
+Note: Width and Height are set automatically based on the font_size, but can be overridden.
+
+Example: `MANGOHUD_CONFIG=cpu_temp,gpu_temp,position=top-right,height=500,font_size=32`
 
 ## Environment Variables
 - `MANGO_OUTPUT` : Define name and location of the output file (Required for logging)
@@ -38,17 +40,21 @@ example: `MANGOHUD_CONFIG=cpu_temp,gpu_temp,height=500,font_size=32`
 - `F2` : Toggle Logging
 - `F12`: Toggle Hud
 
-## MangoLog file
+## MangoHud fps logging
 
-When you toggle logging on (using the keybind `F2`), a file is created with your chosen name + date/time stamp (`MANGO_OUTPUT`). this file can be uploaded to [Flightlessmango.com](https://flightlessmango.com/games/user_benchmarks) to create graphs automatically.
+When you toggle logging (using the keybind `F2`), a file is created with your chosen name + date/time stamp (using `MANGO_OUTPUT`).
+
+This file can be uploaded to [Flightlessmango.com](https://flightlessmango.com/games/user_benchmarks) to create graphs automatically.
 you can share the created page with others, just link it.
 
 #### Multiple log files
 
-It's possible to upload multiple files. You can rename them to your preferred names and upload them in a batch.
-These names will be used in the graphs.
+It's possible to upload multiple files when using [Flightlessmango.com](https://flightlessmango.com/games/user_benchmarks). You can rename them to your preferred names and upload them in a batch.
+These filenames will be used as the legend in the graph.
 
-![](gifs/uploading.gif)
+#### Log uploading walkthrough
+
+![](assets/log_upload_example.gif)
 
 # Notable changes
 - Removed hud decoration [90a2212](https://github.com/flightlessmango/mesa/commit/90a2212055a8047d46d0220d5fdc30a76900aaed)

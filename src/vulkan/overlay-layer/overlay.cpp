@@ -28,13 +28,13 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
 
-#include "git_sha1.h"
+// #include "git_sha1.h"
 
 #include "imgui.h"
 
 #include "overlay_params.h"
 
-#include "util/debug.h"
+// #include "util/debug.h"
 #include "util/hash_table.h"
 #include "util/list.h"
 #include "util/ralloc.h"
@@ -706,7 +706,7 @@ static void control_send_connection_string(struct device_data *device_data)
                 deviceName, strlen(deviceName));
 
    const char *mesaVersionCmd = "MesaVersion";
-   const char *mesaVersionString = "Mesa " PACKAGE_VERSION MESA_GIT_SHA1;
+   const char *mesaVersionString = "Mesa " PACKAGE_VERSION;
 
    control_send(instance_data, mesaVersionCmd, strlen(mesaVersionCmd),
                 mesaVersionString, strlen(mesaVersionString));
